@@ -102,6 +102,25 @@ source $ZSH/oh-my-zsh.sh
 # Example aliases
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
+# Update tmux pane title with directory and git branch
+_update_tmux_pane_title() {
+  if [[ -n "$TMUX" ]]; then
+    local manual=$(tmux show-option -pqv @pane_manual)
+    if [[ -n "$manual" ]]; then
+      tmux set-option -p @pane_label "$manual"
+    else
+      local branch=$(git branch --show-current 2>/dev/null)
+      local dir=$(basename "$PWD")
+      if [[ -n "$branch" ]]; then
+        tmux set-option -p @pane_label "$dir [$branch]"
+      else
+        tmux set-option -p @pane_label "$dir"
+      fi
+    fi
+  fi
+}
+add-zsh-hook precmd _update_tmux_pane_title
+
 alias config="vim ~/.zshrc"
 alias reload="source ~/.zshrc"
 
