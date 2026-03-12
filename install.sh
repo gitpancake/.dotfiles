@@ -15,10 +15,14 @@ echo "  Linked zsh config and theme"
 mkdir -p ~/.claude
 ln -sf "$DOTFILES_DIR/claude/statusline-command.sh" ~/.claude/statusline-command.sh
 ln -sf "$DOTFILES_DIR/claude/settings.json" ~/.claude/settings.json
+mkdir -p ~/.claude/hooks
+ln -sf "$DOTFILES_DIR/claude/hooks/tmux-bell.sh" ~/.claude/hooks/tmux-bell.sh
 echo "  Linked Claude Code config"
 
 # tmux
 ln -sf "$DOTFILES_DIR/tmux/.tmux.conf" ~/.tmux.conf
+mkdir -p ~/.tmux
+ln -sf "$DOTFILES_DIR/tmux/tmux-status.sh" ~/.tmux/tmux-status.sh
 echo "  Linked tmux config"
 
 echo "Done! Run 'source ~/.zshrc' to reload."
