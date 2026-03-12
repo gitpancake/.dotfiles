@@ -10,6 +10,7 @@ Personal dotfiles repository for a WSL2 (Ubuntu) development environment. Manage
 - `zsh/robbyrussell-bar.zsh-theme` - Custom Oh My Zsh theme with battery/time status bar
 - `claude/settings.json` - Claude Code settings and enabled plugins
 - `claude/statusline-command.sh` - Script powering Claude Code's bottom status line
+- `tmux/.tmux.conf` - tmux config with intuitive pane/window keybindings
 - `install.sh` - Symlink installer that links files to their expected locations
 
 ## Key Details

@@ -17,4 +17,8 @@ ln -sf "$DOTFILES_DIR/claude/statusline-command.sh" ~/.claude/statusline-command
 ln -sf "$DOTFILES_DIR/claude/settings.json" ~/.claude/settings.json
 echo "  Linked Claude Code config"
 
+# tmux
+ln -sf "$DOTFILES_DIR/tmux/.tmux.conf" ~/.tmux.conf
+echo "  Linked tmux config"
+
 echo "Done! Run 'source ~/.zshrc' to reload."
