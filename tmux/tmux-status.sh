@@ -25,9 +25,9 @@ MEM=$(awk '/MemTotal/{t=$2} /MemAvailable/{a=$2} END{printf "%.0f", (1-a/t)*100}
 DSK=$(df / | awk 'NR==2{print $5}')
 
 # Assemble
-SEP=" #[fg=colour241]|#[fg=colour246] "
+SEP=" #[fg=colour241]|#[default] "
 OUT=""
-[ -n "$BAT" ] && OUT+="BAT ${BAT}${SEP}"
-OUT+="CPU ${CPU}%${SEP}MEM ${MEM}%${SEP}DSK ${DSK}"
+[ -n "$BAT" ] && OUT+="#[fg=colour114]BAT ${BAT}${SEP}"
+OUT+="#[fg=colour208]CPU ${CPU}%${SEP}#[fg=colour228]MEM ${MEM}%${SEP}#[fg=colour246]DSK ${DSK}"
 
 printf '%s' "$OUT"
