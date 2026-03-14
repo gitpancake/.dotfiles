@@ -10,7 +10,8 @@ Personal dotfiles repository for a WSL2 (Ubuntu) development environment. Manage
 - `zsh/robbyrussell-bar.zsh-theme` - Custom Oh My Zsh theme with battery/time status bar
 - `claude/settings.json` - Claude Code settings and enabled plugins
 - `claude/statusline-command.sh` - Script powering Claude Code's bottom status line
-- `tmux/.tmux.conf` - tmux config with intuitive pane/window keybindings
+- `tmux/.tmux.conf` - tmux config with intuitive pane/window keybindings and gruvbox dark theme
+- `tmux/tmux-status.sh` - tmux status bar script showing battery, CPU, memory, disk with dynamic color-coded thresholds (green → yellow → orange → red)
 - `install.sh` - Symlink installer that links files to their expected locations
 
 ## Key Details
@@ -24,4 +25,6 @@ Personal dotfiles repository for a WSL2 (Ubuntu) development environment. Manage
 
 - After changing zsh files, test with `zsh -n <file>` for syntax errors
 - Keep the status line script fast — it runs on every Claude Code refresh
+- The tmux status script also needs to stay fast — it runs every 5 seconds (`status-interval 5`)
+- tmux color thresholds: 0-25% green, 26-50% yellow, 51-75% orange, 76-100% red (battery inverted)
 - The `.zshrc` has a duplicate `brew shellenv` line (line 116-118) — this is harmless but could be cleaned up
