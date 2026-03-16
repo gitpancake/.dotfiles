@@ -2,16 +2,25 @@
 # robbyrussell theme + a status bar showing battery % and time
 
 function _status_bar_precmd() {
-  # Read battery percentage
+  # Read battery percentage (cross-platform)
   local bat_pct=""
-  if [[ -r /sys/class/power_supply/BAT1/capacity ]]; then
-    bat_pct=$(</sys/class/power_supply/BAT1/capacity)
-  fi
-
-  # Read AC status
   local ac_online=""
-  if [[ -r /sys/class/power_supply/AC1/online ]]; then
-    ac_online=$(</sys/class/power_supply/AC1/online)
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    local batt_info
+    batt_info=$(pmset -g batt 2>/dev/null)
+    bat_pct=$(echo "$batt_info" | grep -oE '[0-9]+%' | head -1 | tr -d '%')
+    if echo "$batt_info" | grep -q "AC Power"; then
+      ac_online="1"
+    else
+      ac_online="0"
+    fi
+  else
+    if [[ -r /sys/class/power_supply/BAT1/capacity ]]; then
+      bat_pct=$(</sys/class/power_supply/BAT1/capacity)
+    fi
+    if [[ -r /sys/class/power_supply/AC1/online ]]; then
+      ac_online=$(</sys/class/power_supply/AC1/online)
+    fi
   fi
 
   # Color-code battery level
