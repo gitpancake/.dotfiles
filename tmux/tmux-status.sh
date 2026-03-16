@@ -1,28 +1,62 @@
 #!/usr/bin/env bash
 
+OS="$(uname -s)"
+
 # Battery
 BAT=""
-BAT_PATH="/sys/class/power_supply/BAT1/capacity"
-AC_PATH="/sys/class/power_supply/AC1/online"
-if [ -f "$BAT_PATH" ]; then
-  PCT=$(cat "$BAT_PATH")
-  if [ -f "$AC_PATH" ] && [ "$(cat "$AC_PATH")" = "1" ]; then
-    BAT="${PCT}%+"
-  else
-    BAT="${PCT}%"
+if [ "$OS" = "Darwin" ]; then
+  BAT_INFO=$(pmset -g batt 2>/dev/null)
+  PCT=$(echo "$BAT_INFO" | grep -oE '[0-9]+%' | head -1 | tr -d '%')
+  if [ -n "$PCT" ]; then
+    if echo "$BAT_INFO" | grep -q "AC Power"; then
+      BAT="${PCT}%+"
+    else
+      BAT="${PCT}%"
+    fi
+  fi
+else
+  BAT_PATH="/sys/class/power_supply/BAT1/capacity"
+  AC_PATH="/sys/class/power_supply/AC1/online"
+  if [ -f "$BAT_PATH" ]; then
+    PCT=$(cat "$BAT_PATH")
+    if [ -f "$AC_PATH" ] && [ "$(cat "$AC_PATH")" = "1" ]; then
+      BAT="${PCT}%+"
+    else
+      BAT="${PCT}%"
+    fi
   fi
 fi
 
 # CPU (load average as % of cores)
-CORES=$(nproc)
-LOAD=$(awk '{print $1}' /proc/loadavg)
+if [ "$OS" = "Darwin" ]; then
+  CORES=$(sysctl -n hw.ncpu)
+  LOAD=$(sysctl -n vm.loadavg | awk '{print $2}')
+else
+  CORES=$(nproc)
+  LOAD=$(awk '{print $1}' /proc/loadavg)
+fi
 CPU=$(awk "BEGIN {printf \"%.0f\", ($LOAD / $CORES) * 100}")
 
 # Memory
-MEM=$(awk '/MemTotal/{t=$2} /MemAvailable/{a=$2} END{printf "%.0f", (1-a/t)*100}' /proc/meminfo)
+if [ "$OS" = "Darwin" ]; then
+  PAGE_SIZE=$(sysctl -n hw.pagesize)
+  TOTAL_MEM=$(sysctl -n hw.memsize)
+  # Get pages from vm_stat
+  PAGES_FREE=$(vm_stat | awk '/Pages free:/{gsub(/\./,"",$3); print $3}')
+  PAGES_INACTIVE=$(vm_stat | awk '/Pages inactive:/{gsub(/\./,"",$3); print $3}')
+  PAGES_SPECULATIVE=$(vm_stat | awk '/Pages speculative:/{gsub(/\./,"",$3); print $3}')
+  AVAILABLE=$(( (PAGES_FREE + PAGES_INACTIVE + PAGES_SPECULATIVE) * PAGE_SIZE ))
+  MEM=$(awk "BEGIN {printf \"%.0f\", (1 - $AVAILABLE / $TOTAL_MEM) * 100}")
+else
+  MEM=$(awk '/MemTotal/{t=$2} /MemAvailable/{a=$2} END{printf "%.0f", (1-a/t)*100}' /proc/meminfo)
+fi
 
 # Disk
-DSK=$(df / | awk 'NR==2{print $5}')
+if [ "$OS" = "Darwin" ]; then
+  DSK=$(df /System/Volumes/Data | awk 'NR==2{print $5}')
+else
+  DSK=$(df / | awk 'NR==2{print $5}')
+fi
 
 # Dynamic color: green → yellow → orange → red based on severity
 # For "higher is worse" metrics (CPU, MEM, DSK): low=green, high=red
