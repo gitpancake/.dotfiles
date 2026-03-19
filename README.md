@@ -1,6 +1,6 @@
 # Dotfiles
 
-Personal dotfiles for WSL2 (Ubuntu) development environment.
+Personal dotfiles for macOS and WSL2 (Ubuntu) development environments.
 
 ## What's Included
 
@@ -17,15 +17,26 @@ dotfiles/
 │   ├── settings.json                # Claude Code settings and plugins
 │   └── statusline-command.sh        # Status line showing battery, CPU, memory,
 │                                    #   disk, git branch, node version, session time
-├── install.sh                       # Symlink installer
+├── install.sh                       # Symlink installer (Linux/WSL2)
+├── install-mac.sh                   # Symlink installer (macOS)
 ├── CLAUDE.md                        # Instructions for Claude Code AI assistant
 └── README.md
 ```
 
 ## Setup
 
+### macOS
 ```bash
-git clone git@gitlab.com:gitpancake/dotfiles.git ~/dotfiles
+git clone git@github.com:gitpancake/.dotfiles.git ~/dotfiles
+cd ~/dotfiles
+chmod +x install-mac.sh
+./install-mac.sh
+source ~/.zshrc
+```
+
+### Linux/WSL2
+```bash
+git clone git@github.com:gitpancake/.dotfiles.git ~/dotfiles
 cd ~/dotfiles
 chmod +x install.sh
 ./install.sh
