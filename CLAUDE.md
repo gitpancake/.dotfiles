@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Personal dotfiles repository for a WSL2 (Ubuntu) development environment. Managed with symlinks via `install.sh`.
+Personal dotfiles repository for macOS and WSL2 (Ubuntu) development environments. Managed with symlinks via `install.sh` (Linux/WSL2) or `install-mac.sh` (macOS).
 
 ## Structure
 
@@ -12,14 +12,15 @@ Personal dotfiles repository for a WSL2 (Ubuntu) development environment. Manage
 - `claude/statusline-command.sh` - Script powering Claude Code's bottom status line
 - `tmux/.tmux.conf` - tmux config with intuitive pane/window keybindings and gruvbox dark theme
 - `tmux/tmux-status.sh` - tmux status bar script showing battery, CPU, memory, disk with dynamic color-coded thresholds (green → yellow → orange → red)
-- `install.sh` - Symlink installer that links files to their expected locations
+- `install.sh` - Symlink installer for Linux/WSL2 systems
+- `install-mac.sh` - Symlink installer for macOS systems
 
 ## Key Details
 
-- Target system: WSL2 on Windows, battery info at `/sys/class/power_supply/BAT1/capacity`
+- Target systems: macOS (uses `pmset` for battery info) and WSL2/Linux (uses `/sys/class/power_supply/BAT1/capacity`)
 - Zsh theme uses `add-zsh-hook precmd` to print the status bar (not PROMPT, to avoid cursor issues)
 - Claude status line script caches slow operations and keys session timers by `$PPID`
-- `install.sh` uses `ln -sf` to create symlinks — editing files in this repo updates the live config
+- Install scripts use `ln -sf` to create symlinks — editing files in this repo updates the live config
 
 ## Editing Guidelines
 
