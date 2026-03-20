@@ -52,6 +52,7 @@ echo "  Linked zsh config and theme"
 mkdir -p ~/.claude
 ln -sf "$DOTFILES_DIR/claude/statusline-command.sh" ~/.claude/statusline-command.sh
 ln -sf "$DOTFILES_DIR/claude/settings.json" ~/.claude/settings.json
+ln -sf "$DOTFILES_DIR/claude/CLAUDE.md" ~/.claude/CLAUDE.md
 mkdir -p ~/.claude/hooks
 ln -sf "$DOTFILES_DIR/claude/hooks/tmux-bell.sh" ~/.claude/hooks/tmux-bell.sh
 echo "  Linked Claude Code config"

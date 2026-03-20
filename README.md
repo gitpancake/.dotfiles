@@ -15,8 +15,9 @@ dotfiles/
 │                                    #   with dynamic color-coded thresholds
 ├── claude/
 │   ├── settings.json                # Claude Code settings and plugins
-│   └── statusline-command.sh        # Status line showing battery, CPU, memory,
-│                                    #   disk, git branch, node version, session time
+│   ├── statusline-command.sh        # Status line showing battery, CPU, memory,
+│   │                                #   disk, git branch, node version, session time
+│   └── CLAUDE.md                    # Global instructions for Claude Code AI
 ├── install.sh                       # Symlink installer (Linux/WSL2)
 ├── install-mac.sh                   # Symlink installer (macOS)
 ├── CLAUDE.md                        # Instructions for Claude Code AI assistant

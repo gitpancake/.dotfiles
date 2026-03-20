@@ -10,6 +10,7 @@ Personal dotfiles repository for macOS and WSL2 (Ubuntu) development environment
 - `zsh/robbyrussell-bar.zsh-theme` - Custom Oh My Zsh theme with battery/time status bar
 - `claude/settings.json` - Claude Code settings and enabled plugins
 - `claude/statusline-command.sh` - Script powering Claude Code's bottom status line
+- `claude/CLAUDE.md` - Global instructions for Claude Code AI assistant
 - `tmux/.tmux.conf` - tmux config with intuitive pane/window keybindings and gruvbox dark theme
 - `tmux/tmux-status.sh` - tmux status bar script showing battery, CPU, memory, disk with dynamic color-coded thresholds (green → yellow → orange → red)
 - `install.sh` - Symlink installer for Linux/WSL2 systems
