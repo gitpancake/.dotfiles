@@ -89,7 +89,7 @@ if [ -n "$BAT" ]; then
   BAT_PCT=${BAT%%%*}
   OUT+="#[fg=$(bat_color "$BAT_PCT")]BAT ${BAT}${SEP}"
 fi
-OUT+="#[fg=$(severity_color "$CPU_PCT")]CPU ${CPU_LABEL}${SEP}"
+OUT+="#[fg=$(severity_color "$CPU_PCT")]CPU ${CPU_LABEL} (${CPU_PCT}%)${SEP}"
 OUT+="#[fg=$(severity_color "$MEM")]MEM ${MEM}%${SEP}"
 DSK_NUM=${DSK%%%}
 OUT+="#[fg=$(severity_color "$DSK_NUM")]DSK ${DSK}"
