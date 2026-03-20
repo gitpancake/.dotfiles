@@ -27,7 +27,7 @@ else
   fi
 fi
 
-# CPU (load average as % of cores)
+# CPU (load average shown as load/cores)
 if [ "$OS" = "Darwin" ]; then
   CORES=$(sysctl -n hw.ncpu)
   LOAD=$(sysctl -n vm.loadavg | awk '{print $2}')
@@ -35,16 +35,19 @@ else
   CORES=$(nproc)
   LOAD=$(awk '{print $1}' /proc/loadavg)
 fi
-CPU=$(awk "BEGIN {printf \"%.0f\", ($LOAD / $CORES) * 100}")
+CPU_PCT=$(awk "BEGIN {printf \"%.0f\", ($LOAD / $CORES) * 100}")
+CPU_LABEL=$(awk "BEGIN {printf \"%.1f/%d\", $LOAD, $CORES}")
 
 # Memory
 if [ "$OS" = "Darwin" ]; then
   PAGE_SIZE=$(sysctl -n hw.pagesize)
   TOTAL_MEM=$(sysctl -n hw.memsize)
-  # Get pages from vm_stat
-  PAGES_FREE=$(vm_stat | awk '/Pages free:/{gsub(/\./,"",$3); print $3}')
-  PAGES_INACTIVE=$(vm_stat | awk '/Pages inactive:/{gsub(/\./,"",$3); print $3}')
-  PAGES_SPECULATIVE=$(vm_stat | awk '/Pages speculative:/{gsub(/\./,"",$3); print $3}')
+  # Single vm_stat call, parse all three page counts at once
+  eval "$(vm_stat | awk '
+    /Pages free:/        {gsub(/\./,"",$3); printf "PAGES_FREE=%s\n",$3}
+    /Pages inactive:/    {gsub(/\./,"",$3); printf "PAGES_INACTIVE=%s\n",$3}
+    /Pages speculative:/ {gsub(/\./,"",$3); printf "PAGES_SPECULATIVE=%s\n",$3}
+  ')"
   AVAILABLE=$(( (PAGES_FREE + PAGES_INACTIVE + PAGES_SPECULATIVE) * PAGE_SIZE ))
   MEM=$(awk "BEGIN {printf \"%.0f\", (1 - $AVAILABLE / $TOTAL_MEM) * 100}")
 else
@@ -86,7 +89,7 @@ if [ -n "$BAT" ]; then
   BAT_PCT=${BAT%%%*}
   OUT+="#[fg=$(bat_color "$BAT_PCT")]BAT ${BAT}${SEP}"
 fi
-OUT+="#[fg=$(severity_color "$CPU")]CPU ${CPU}%${SEP}"
+OUT+="#[fg=$(severity_color "$CPU_PCT")]CPU ${CPU_LABEL}${SEP}"
 OUT+="#[fg=$(severity_color "$MEM")]MEM ${MEM}%${SEP}"
 DSK_NUM=${DSK%%%}
 OUT+="#[fg=$(severity_color "$DSK_NUM")]DSK ${DSK}"
