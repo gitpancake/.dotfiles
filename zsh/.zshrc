@@ -33,6 +33,7 @@ add-zsh-hook precmd _update_tmux_pane_title
 alias config="vim ~/.zshrc"
 alias reload="source ~/.zshrc"
 alias ll="ls -la"
+unalias art 2>/dev/null
 art() {
   local name="${1:-hologram}"
   local script="$HOME/.local/share/art/${name}.py"
