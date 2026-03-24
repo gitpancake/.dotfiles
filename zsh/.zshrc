@@ -33,7 +33,16 @@ add-zsh-hook precmd _update_tmux_pane_title
 alias config="vim ~/.zshrc"
 alias reload="source ~/.zshrc"
 alias ll="ls -la"
-alias art='python3 ~/.local/share/art/hologram.py'
+art() {
+  local name="${1:-hologram}"
+  local script="$HOME/.local/share/art/${name}.py"
+  if [[ -f "$script" ]]; then
+    python3 "$script"
+  else
+    echo "Unknown art: $name"
+    echo "Available: $(ls ~/.local/share/art/*.py 2>/dev/null | xargs -n1 basename | sed 's/\.py$//' | tr '\n' ' ')"
+  fi
+}
 
 # Homebrew configuration (load first)
 if [[ -x /home/linuxbrew/.linuxbrew/bin/brew ]]; then
