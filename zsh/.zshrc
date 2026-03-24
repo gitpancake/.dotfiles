@@ -33,6 +33,7 @@ add-zsh-hook precmd _update_tmux_pane_title
 alias config="vim ~/.zshrc"
 alias reload="source ~/.zshrc"
 alias ll="ls -la"
+alias art='python3 ~/.local/share/art/hologram.py'
 
 # Homebrew configuration (load first)
 if [[ -x /home/linuxbrew/.linuxbrew/bin/brew ]]; then
