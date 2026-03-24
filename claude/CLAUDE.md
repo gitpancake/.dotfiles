@@ -9,6 +9,26 @@ When working on coding projects:
 
 This allows for incremental progress tracking without premature upstream changes.
 
+## Project Documentation Maintenance
+
+When working in a git repository or code project, keep the project's documentation in sync with changes:
+
+### After each chunk of work
+- **Update the project-level `CLAUDE.md`** (create one if it doesn't exist) with any new conventions, architecture decisions, setup steps, gotchas, or non-obvious context discovered during the work. This is the primary place for preserving session-to-session project knowledge.
+- **Update `README.md`** if the changes affect user-facing behavior, setup instructions, API surface, or project structure. Skip this for purely internal refactors or minor fixes.
+
+### What to capture in project CLAUDE.md
+- Build/test/lint commands and workflows
+- Architecture decisions and rationale
+- Code conventions and patterns specific to the project
+- Known gotchas, workarounds, or non-obvious behaviors
+- Dependency or environment requirements
+
+### Guidelines
+- Keep updates concise and incremental — add what's new, don't rewrite the whole file each time.
+- Only update docs for the project you're actively working in, not unrelated repos.
+- Treat this the same as committing code — it's part of completing a chunk of work, not a separate task.
+
 ## OpenViking — shared context database
 
 You have access to OpenViking, a persistent vector-indexed knowledge base accessible via MCP tools. Use it as your long-term memory across all sessions and projects.
