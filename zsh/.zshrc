@@ -66,3 +66,9 @@ fi
 
 # PATH configuration (add local bin)
 export PATH="$HOME/.local/bin:$PATH"
+# bun completions
+[ -s "/Users/henrypye/.bun/_bun" ] && source "/Users/henrypye/.bun/_bun"
+
+# bun
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"

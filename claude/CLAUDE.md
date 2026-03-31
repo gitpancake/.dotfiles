@@ -29,29 +29,42 @@ When working in a git repository or code project, keep the project's documentati
 - Only update docs for the project you're actively working in, not unrelated repos.
 - Treat this the same as committing code — it's part of completing a chunk of work, not a separate task.
 
-## OpenViking — shared context database
+## OpenViking — cross-project knowledge base
 
-You have access to OpenViking, a persistent vector-indexed knowledge base accessible via MCP tools. Use it as your long-term memory across all sessions and projects.
+OpenViking is a persistent vector-indexed knowledge base (MCP). Its purpose is storing knowledge that **spans projects or lives outside any single repo** — external API docs, cross-project architecture decisions, research findings, and reference material.
 
-### When starting a session
-- **Always `search` OpenViking** at the start of a task for relevant prior context — past decisions, architecture notes, useful references, lessons learned. Do this before diving into code.
+**OpenViking is NOT for:** per-project context (use project CLAUDE.md), work summaries (use git), user preferences (use auto-memory), or anything derivable from the current codebase.
 
-### While working
-- When you look up external documentation, reference material, or API docs, **`add_resource` them to OpenViking** so they're available in future sessions.
-- When you discover important architecture decisions, patterns, or non-obvious project context that would be useful later, store it with `add_resource`.
+### When to READ from OpenViking
 
-### When finishing work
-- After completing a significant task, **store a brief summary** of what was done, key decisions made, and any gotchas encountered. Use `add_resource` with a text summary.
+Search or browse OV when:
+- **Referencing an external API or service** that may have been previously indexed (e.g., OpenSea, Gondi, Art Blocks, GCP Pub/Sub)
+- **Starting work on a project with known OV entries** — check `resources/<project-name>` for stored architecture context
+- **The user asks about cross-project patterns** or prior decisions that aren't in the current repo
+- **Before fetching external documentation** — check OV first to avoid re-fetching what's already stored
 
-### Tool usage
-- `search` — semantic search, use for broad or natural language queries
-- `find` — fast vector lookup, use when you know roughly what you're looking for
-- `add_resource` — ingest URLs, docs, or text into the knowledge base
-- `read_content` / `overview` / `abstract` — read stored content at different detail levels
-- `ls` / `tree` — browse what's stored
-- `rm` — clean up outdated or incorrect entries
+Do NOT search OV for routine coding tasks, UI changes, or work scoped entirely to the current repo.
 
-### Guidelines
-- Prefer searching OpenViking before re-reading large codebases or re-fetching documentation you may have already indexed.
-- Don't over-index — store things that have lasting value, not ephemeral debugging output.
-- Use descriptive `reason` fields when adding resources so future searches surface them well.
+### When to WRITE to OpenViking
+
+Store content in OV when:
+- **You fetch external API docs or reference material** that would be useful in future sessions — store the doc with `add_resource`
+- **A cross-project architectural decision is made** that affects multiple repos (e.g., shared auth strategy, deployment patterns)
+- **The user explicitly asks** to store something for later reference
+
+Do NOT store: work summaries (git log does this), per-project conventions (CLAUDE.md does this), or ephemeral debugging context.
+
+### Tool quick reference
+| Tool | Use when |
+|------|----------|
+| `search` | Broad/natural language queries ("OpenSea NFT endpoints") |
+| `find` | You know roughly what you're looking for ("gondi sdk") |
+| `read_content` / `overview` / `abstract` | Reading stored content at different detail levels |
+| `add_resource` | Ingesting URLs, docs, or text — use descriptive `reason` fields |
+| `ls` / `tree` | Browsing what's stored |
+| `rm` | Cleaning up outdated or incorrect entries |
+
+### Hygiene
+- When reading an OV entry that's outdated, update or remove it
+- Organize resources under descriptive directory names (e.g., `resources/opensea-api/`, not `resources/Document_1/`)
+- Prefer fewer, higher-quality entries over many low-value ones
