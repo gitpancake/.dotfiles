@@ -34,5 +34,6 @@
     "skill-creator@claude-plugins-official": true,
     "atlassian@claude-plugins-official": false
   },
-  "effortLevel": "medium"
+  "effortLevel": "high",
+  "skipDangerousModePermissionPrompt": true
 }
