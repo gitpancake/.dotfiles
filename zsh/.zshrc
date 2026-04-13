@@ -13,6 +13,15 @@ plugins=(git zsh-nvm zsh-autosuggestions zsh-syntax-highlighting)
 
 source $ZSH/oh-my-zsh.sh
 
+# Security: only allow known-safe node binaries to have nvm lazy-load wrappers.
+# Without this, ANY `npm install -g` package gets a shell function that shadows
+# system commands — a malicious package named "curl" or "git" would hijack them.
+_nvm_allowed=(node npm npx corepack nvm pnpm pnpx yarn yarnpkg tsc tsserver vercel vc)
+for cmd in $(_zsh_nvm_global_binaries 2>/dev/null); do
+  (( ${_nvm_allowed[(Ie)$cmd]} )) || unset -f $cmd 2>/dev/null
+done
+unset _nvm_allowed
+
 # Tmux pane title configuration
 _update_tmux_pane_title() {
   if [[ -n "$TMUX" ]]; then
