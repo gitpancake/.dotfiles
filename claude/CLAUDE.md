@@ -35,13 +35,43 @@ OpenViking is a persistent vector-indexed knowledge base (MCP). Its purpose is s
 
 **OpenViking is NOT for:** per-project context (use project CLAUDE.md), work summaries (use git), user preferences (use auto-memory), or anything derivable from the current codebase.
 
+### MANDATORY: Check OV before fetching external docs
+
+**Before using `WebFetch`, `WebSearch`, or `context7` to look up API documentation, ALWAYS `find` or `search` OpenViking first.** Henry has indexed key API docs there — re-fetching wastes time and context. If OV has it, use it. If OV doesn't have it and you fetch it externally, store it in OV with `add_resource` for next time.
+
+This applies to any external API, SDK, or service documentation — not just the ones listed below.
+
+### Known resource index
+
+These are currently stored in OV. Check here first — don't re-fetch:
+
+| Topic | OV path |
+|-------|---------|
+| Gmail API | `resources/life-os/external-apis/gmail-api` |
+| Google Calendar API | `resources/life-os/external-apis/google-calendar-api` |
+| GCP Pub/Sub | `resources/life-os/external-apis/gcp-pubsub` |
+| Open-Meteo | `resources/life-os/external-apis/open-meteo` |
+| Anthropic Claude API | `resources/life-os/external-apis/anthropic-claude-api` |
+| Anthropic Models | `resources/life-os/external-apis/anthropic-models` |
+| football-data.org v4 | `resources/life-os/external-apis/football-data-v4` |
+| Neynar / Farcaster API | `resources/life-os/external-apis/farcaster-neynar-api` |
+| Farcaster Hub (direct) | `resources/farcaster-hub-direct-casting` |
+| RS3 Hiscores / CML | `resources/rs3-hiscores-api` |
+| GCP Pub/Sub infra | `resources/life-os/gcp-pubsub` |
+| UI design system | `resources/life-os/ui-design-system` |
+| OpenSea API | `resources/opensea-api` |
+| Art Blocks API | `resources/art-blocks-api` |
+| Gondi SDK / docs | `resources/gondi` |
+| Raster.art | `resources/raster-art-research` |
+
+This table may become stale. When in doubt, run `ls` on the relevant `resources/` path.
+
 ### When to READ from OpenViking
 
-Search or browse OV when:
-- **Referencing an external API or service** that may have been previously indexed (e.g., OpenSea, Gondi, Art Blocks, GCP Pub/Sub)
-- **Starting work on a project with known OV entries** — check `resources/<project-name>` for stored architecture context
+Beyond the mandatory doc-check above, also search OV when:
 - **The user asks about cross-project patterns** or prior decisions that aren't in the current repo
-- **Before fetching external documentation** — check OV first to avoid re-fetching what's already stored
+- **Starting work that touches multiple projects** — check for stored architecture decisions
+- **The user references a service, API, or concept by name** — quick `find` costs nothing
 
 Do NOT search OV for routine coding tasks, UI changes, or work scoped entirely to the current repo.
 
