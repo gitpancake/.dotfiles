@@ -4,8 +4,12 @@ export ZSH="$HOME/.oh-my-zsh"
 # Set name of the theme to load
 ZSH_THEME="robbyrussell-bar"
 
+# NVM lazy loading (must be set before oh-my-zsh loads zsh-nvm)
+export NVM_LAZY_LOAD=true
+export NVM_COMPLETION=true
+
 # Which plugins would you like to load?
-plugins=(git)
+plugins=(git zsh-nvm zsh-autosuggestions zsh-syntax-highlighting)
 
 source $ZSH/oh-my-zsh.sh
 
@@ -55,18 +59,17 @@ elif [[ -x /usr/local/bin/brew ]]; then
   eval "$(/usr/local/bin/brew shellenv zsh)"
 fi
 
-# NVM configuration (prioritizes NVM Node over Homebrew Node)
+# NVM directory (lazy-loaded by zsh-nvm plugin)
 export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
-
-# Auto-use NVM's default Node version
-if command -v nvm >/dev/null 2>&1; then
-  nvm use default >/dev/null 2>&1
-fi
 
 # PATH configuration (add local bin)
 export PATH="$HOME/.local/bin:$PATH"
+
+# Zoxide (smart cd)
+eval "$(zoxide init zsh)"
+
+# fzf (fuzzy finder: Ctrl+R for history, Ctrl+T for files)
+source <(fzf --zsh)
 # bun completions
 [ -s "/Users/henrypye/.bun/_bun" ] && source "/Users/henrypye/.bun/_bun"
 
