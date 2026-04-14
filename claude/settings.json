@@ -32,7 +32,16 @@
     "greptile@claude-plugins-official": false,
     "learning-output-style@claude-plugins-official": true,
     "skill-creator@claude-plugins-official": true,
-    "atlassian@claude-plugins-official": false
+    "atlassian@claude-plugins-official": false,
+    "notion-workspace-plugin@notion-plugin-marketplace": true
+  },
+  "extraKnownMarketplaces": {
+    "notion-plugin-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "makenotion/claude-code-notion-plugin"
+      }
+    }
   },
   "effortLevel": "high",
   "skipDangerousModePermissionPrompt": true

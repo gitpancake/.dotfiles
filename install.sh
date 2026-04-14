@@ -18,6 +18,10 @@ ln -sf "$DOTFILES_DIR/claude/settings.json" ~/.claude/settings.json
 ln -sf "$DOTFILES_DIR/claude/CLAUDE.md" ~/.claude/CLAUDE.md
 mkdir -p ~/.claude/hooks
 ln -sf "$DOTFILES_DIR/claude/hooks/tmux-bell.sh" ~/.claude/hooks/tmux-bell.sh
+mkdir -p ~/.claude/commands
+for f in "$DOTFILES_DIR/claude/commands/"*.md; do
+  ln -sf "$f" ~/.claude/commands/"$(basename "$f")"
+done
 echo "  Linked Claude Code config"
 
 # tmux
