@@ -1,44 +1,19 @@
 # Global Instructions
 
-## Programming Practices
+## Tone
+- Direct, concise, opinionated. Match the user's energy.
+- No disclaimers, hedging, or unnecessary preamble.
 
-Apply these when writing, reviewing, or refactoring code. These complement (not replace) the built-in coding guidelines — focus here is on principles the defaults don't cover.
+## Agent Commands
 
-### Readability
-- Minimize time-to-understanding. A stranger should follow the logic without verbal explanation.
-- Specific names, not generic (`delayMs` not `delay`, `isValid` not `flag`). Attach units. For ranges: `first`/`last` (inclusive) or `begin`/`end` (exclusive).
-- Guard clauses and early returns. Edge cases at the top, happy path at shallowest indentation — max 2 levels deep.
-- Explaining variables for complex conditions: `const isOwner = req.user.id === doc.ownerId;` then `if (isOwner || isAdmin)`.
-- When boolean logic tangles, consider the negation — "when does this NOT hold?" often has fewer cases.
-- Comment the "why" (tradeoffs, non-obvious decisions), never the "what."
+Specialized agents available as slash commands. Use the right agent for the job:
 
-### Design
-- Composition over inheritance. Inherit only when is-a genuinely holds (Liskov).
-- High cohesion + low coupling. Avoid control coupling (passing flags that dictate behavior — use polymorphism).
-- Layer architecture: higher layers call lower layers, never the reverse.
-- Apply patterns (Observer, Factory, Facade, Adapter) where they simplify — never force one where a plain function works.
-
-### Algorithms & Data Structures
-- Model before coding. Many problems are graph problems in disguise.
-- Map to known patterns: BFS (min steps), Dijkstra (weighted paths), DP (optimal-over-sequence), greedy (intervals), binary search (monotonic boundaries), union-find (grouping).
-- Choose structures by access pattern: hash map (O(1) lookup), heap (min/max), sorted structure (range queries), stack (nesting), queue (levels).
-- Brute force first for correctness, then optimize. State complexity explicitly.
-
-### Systems & Concurrency
-- Consistent lock ordering to prevent deadlocks. Prefer immutability to eliminate races entirely.
-- Pool expensive resources (threads, connections). Apply backpressure when overloaded — reject or slow intake rather than thrashing.
-- Exploit locality (temporal and spatial) in data access — this underlies caches, pools, indexes, and buffer strategies.
-
-### Networking
-- Choose protocols by latency/loss/ordering needs, not "TCP for everything."
-- Minimize connection overhead: persistent connections, pooling, multiplexing (HTTP/2, gRPC).
-- Exponential backoff with jitter for retries. Aggressive retries cause congestion collapse.
-
-### Error Handling
-- Fail fast at system boundaries (user input, external APIs, config). Let invalid state crash early with clear messages.
-- Inside trusted internal code, trust the types and framework guarantees — don't defensively check for impossible states.
-- When crossing engine/service boundaries, wrap in try/catch for graceful degradation — one failing dependency shouldn't take down the caller.
-- Errors should be actionable: include what failed, why, and what to do about it. No silent swallowing.
+- `/backend` — TypeScript services, event-driven, APIs, RabbitMQ, life-os engines
+- `/frontend` — Next.js, React, Tailwind, PWA, design systems
+- `/database` — PostgreSQL, Drizzle ORM, schema design, migrations, queries
+- `/platform` — Docker, Railway, CI/CD, monitoring, Grafana
+- `/fullstack` — End-to-end features spanning backend, DB, API, and frontend
+Domain-specific coding practices live in OpenViking at `resources/agents/coding-practices` — agents search this on-demand.
 
 ## Git Workflow
 
@@ -53,9 +28,14 @@ After each chunk of work:
 
 Keep updates concise and incremental. Only update docs for the project you're actively working in.
 
+### Scope: Global vs Project CLAUDE.md
+- **Global** (this file): workflow rules, agent coordination, tool usage — applies to all projects.
+- **Project**: architecture, gotchas, key patterns, commands, deployment — specific to that repo.
+- Project CLAUDE.md files must **never exceed 150 lines**. If approaching the limit, cut content that is derivable from reading the code. Keep only: orientation, gotchas that waste hours, patterns you must follow, checklists for adding new things.
+
 ## OpenViking — cross-project knowledge base
 
-Persistent vector-indexed knowledge base (MCP) for knowledge that **spans projects or lives outside any single repo** — external API docs, cross-project decisions, research, reference material.
+Persistent vector-indexed knowledge base (MCP) for knowledge that **spans projects or lives outside any single repo** — external API docs, cross-project decisions, research, reference material, agent domain knowledge.
 
 **Not for:** per-project context (CLAUDE.md), work summaries (git), user preferences (auto-memory), anything derivable from code.
 
@@ -67,6 +47,7 @@ Persistent vector-indexed knowledge base (MCP) for knowledge that **spans projec
 
 | Topic | OV path |
 |-------|---------|
+| Coding practices | `resources/agents/coding-practices` |
 | Gmail API | `resources/life-os/external-apis/gmail-api` |
 | Google Calendar API | `resources/life-os/external-apis/google-calendar-api` |
 | GCP Pub/Sub | `resources/life-os/external-apis/gcp-pubsub` |
