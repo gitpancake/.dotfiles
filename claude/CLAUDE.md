@@ -13,6 +13,12 @@ Specialized agents available as slash commands. Use the right agent for the job:
 - `/database` — PostgreSQL, Drizzle ORM, schema design, migrations, queries
 - `/platform` — Docker, Railway, CI/CD, monitoring, Grafana
 - `/fullstack` — End-to-end features spanning backend, DB, API, and frontend
+- `/code-structure` — Structural code quality: naming, guard clauses, helpers, SOLID
+- `/frontend-architecture` — Component design, state architecture, composition patterns
+- `/project-bootstrap` — Starting work in a project: read context, check OV, branch setup
+- `/deploy` — Pre-deploy checklist: tests, build, branch verify, ship
+- `/pr-workflow` — Feature branch strategy, commit discipline, PR creation, merging
+
 Domain-specific coding practices live in OpenViking at `resources/agents/coding-practices` — agents search this on-demand.
 
 ## Git Workflow
@@ -48,6 +54,8 @@ Persistent vector-indexed knowledge base (MCP) for knowledge that **spans projec
 | Topic | OV path |
 |-------|---------|
 | Coding practices | `resources/agents/coding-practices` |
+| Code structure reference | `resources/agents/code-structure-reference` |
+| Frontend architecture reference | `resources/agents/frontend-architecture-reference` |
 | Gmail API | `resources/life-os/external-apis/gmail-api` |
 | Google Calendar API | `resources/life-os/external-apis/google-calendar-api` |
 | GCP Pub/Sub | `resources/life-os/external-apis/gcp-pubsub` |
