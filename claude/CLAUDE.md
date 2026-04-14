@@ -13,31 +13,51 @@ Specialized agents available as slash commands. Use the right agent for the job:
 - `/database` — PostgreSQL, Drizzle ORM, schema design, migrations, queries
 - `/platform` — Docker, Railway, CI/CD, monitoring, Grafana
 - `/fullstack` — End-to-end features spanning backend, DB, API, and frontend
-- `/code-structure` — Structural code quality: naming, guard clauses, helpers, SOLID
-- `/frontend-architecture` — Component design, state architecture, composition patterns
-- `/project-bootstrap` — Starting work in a project: read context, check OV, branch setup
 - `/deploy` — Pre-deploy checklist: tests, build, branch verify, ship
-- `/pr-workflow` — Feature branch strategy, commit discipline, PR creation, merging
 
-Domain-specific coding practices live in OpenViking at `resources/agents/coding-practices` — agents search this on-demand.
+## Session Start
+
+When beginning work in any project:
+1. Read the project CLAUDE.md before writing code. If none exists, scan the repo and create one.
+2. Check OV for relevant context (project name, APIs in use).
+3. Check `git status` and branch state. For established projects, create a feature branch if starting new work.
+
+## Code Quality
+
+Apply always when writing, refactoring, or reviewing code:
+
+- Guard clauses at the top, early return. Happy path at shallowest indentation. Max 2 levels deep.
+- One task per function. If it parses AND computes AND formats, split it.
+- Extract unrelated subproblems into helpers. Main function reads like a plan.
+- Specific names: `fetchUserProfile` not `getData`, `delayMs` not `delay`. No `tmp`, `data`, `result`.
+- Booleans as assertions: `isValid`, `hasChildren`. Ranges: `first`/`last` or `begin`/`end`.
+- Complex conditions become named booleans: `const isOwner = req.user.id === doc.ownerId`.
+- `const` by default. Declare close to first use.
+- Comment the "why" (tradeoffs, edge cases), never the "what."
+- Composition over inheritance. Narrow interfaces — don't pass full objects when 2 fields suffice.
+- Patterns (Factory, Facade, Adapter) only where they simplify. A plain function is fine.
+
+Search OV `resources/agents/code-structure-reference` for detailed principles with examples.
 
 ## Git Workflow
 
-- **Auto-commit** after completing an isolated chunk of work (feature, bugfix, refactor)
-- **Never push** unless explicitly asked ("push", "push to upstream", "deploy")
+- **Feature branches**: all work on `feature/`, `fix/`, or `refactor/` branches. Main is always deployable.
+- **Auto-commit** after each isolated chunk (feature, bugfix, refactor). Separate commits for schema, backend, frontend.
+- **Never push** unless explicitly asked ("push", "push to upstream", "deploy").
+- **PR creation**: short title (<70 chars), summary + test plan in body. One PR per feature.
+- **Merging**: squash merge for clean main history. Delete feature branch after merge.
+- **Small projects exception**: solo projects < 1 week old can commit to main directly. Switch to branches once a bad commit would cost >10 minutes to fix.
 
 ## Project Documentation Maintenance
 
 After each chunk of work:
-- **Update project `CLAUDE.md`** with new conventions, architecture decisions, setup steps, gotchas, or non-obvious context. This is the primary session-to-session knowledge store.
+- **Update project `CLAUDE.md`** with new conventions, architecture decisions, setup steps, gotchas, or non-obvious context.
 - **Update `README.md`** if changes affect user-facing behavior, setup, API surface, or structure. Skip for internal refactors.
 
-Keep updates concise and incremental. Only update docs for the project you're actively working in.
-
 ### Scope: Global vs Project CLAUDE.md
-- **Global** (this file): workflow rules, agent coordination, tool usage — applies to all projects.
+- **Global** (this file): workflow rules, code quality, tool usage — applies to all projects.
 - **Project**: architecture, gotchas, key patterns, commands, deployment — specific to that repo.
-- Project CLAUDE.md files must **never exceed 150 lines**. If approaching the limit, cut content that is derivable from reading the code. Keep only: orientation, gotchas that waste hours, patterns you must follow, checklists for adding new things.
+- Project CLAUDE.md files must **never exceed 150 lines**. If approaching the limit, cut content derivable from code.
 
 ## OpenViking — cross-project knowledge base
 
