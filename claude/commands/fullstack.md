@@ -32,7 +32,8 @@ Use when a feature touches multiple layers and switching between `/backend`, `/f
 - Type safety end-to-end: shared types between backend and frontend via `@life-os/shared`.
 - Commit in logical chunks: schema first, then backend, then API, then frontend. Not one monolithic commit.
 - Read the project CLAUDE.md before starting — it has the full architecture and gotchas.
-- Check OV for all relevant domain knowledge: `resources/agents/coding-practices`, `resources/life-os/external-apis/`, `resources/life-os/ui-design-system`.
+- Component architecture on the frontend: one component = one concern, compound components, colocated state, hooks as facades.
+- Check OV for all relevant domain knowledge: `resources/agents/coding-practices`, `resources/life-os/external-apis/`, `resources/life-os/ui-design-system`, `resources/agents/frontend-architecture-reference`.
 
 ## Anti-patterns
 - Don't skip steps in the feature flow — missing routing keys or payload types will break at runtime.
