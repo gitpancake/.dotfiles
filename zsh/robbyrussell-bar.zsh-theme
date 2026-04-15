@@ -1,55 +1,7 @@
 # robbyrussell-bar.zsh-theme
-# robbyrussell theme + a status bar showing battery % and time
+# robbyrussell theme + a status bar showing time
 
 function _status_bar_precmd() {
-  # Read battery percentage (cross-platform)
-  local bat_pct=""
-  local ac_online=""
-  if [[ "$(uname -s)" == "Darwin" ]]; then
-    local batt_info
-    batt_info=$(pmset -g batt 2>/dev/null)
-    bat_pct=$(echo "$batt_info" | grep -oE '[0-9]+%' | head -1 | tr -d '%')
-    if echo "$batt_info" | grep -q "AC Power"; then
-      ac_online="1"
-    else
-      ac_online="0"
-    fi
-  else
-    if [[ -r /sys/class/power_supply/BAT1/capacity ]]; then
-      bat_pct=$(</sys/class/power_supply/BAT1/capacity)
-    fi
-    if [[ -r /sys/class/power_supply/AC1/online ]]; then
-      ac_online=$(</sys/class/power_supply/AC1/online)
-    fi
-  fi
-
-  # Color-code battery level
-  local bat_color
-  if [[ -n "$bat_pct" ]]; then
-    if (( bat_pct > 50 )); then
-      bat_color="%F{green}"
-    elif (( bat_pct > 20 )); then
-      bat_color="%F{yellow}"
-    else
-      bat_color="%F{red}"
-    fi
-  fi
-
-  # Build left side: battery info
-  local left_text=""
-  local left_visible_len=0
-  if [[ -n "$bat_pct" ]]; then
-    local charge_state=""
-    if [[ "$ac_online" == "1" ]]; then
-      charge_state=" (Plugged in)"
-    else
-      charge_state=" (Battery)"
-    fi
-    left_text="${bat_color}🔋 ${bat_pct}%%${charge_state}%f"
-    # Visible length: "🔋 " (3) + digits + "%" + charge_state
-    left_visible_len=$(( 3 + ${#bat_pct} + 1 + ${#charge_state} ))
-  fi
-
   # Build right side: time
   local time_str
   time_str=$(date +%H:%M:%S)
@@ -57,17 +9,9 @@ function _status_bar_precmd() {
   local right_visible_len=${#time_str}
 
   # Calculate fill width
-  # Format: "── <left> ───...─── <right> ──"
-  # Bookend dashes: 3 left ("── ") + 3 right (" ──")
-  local padding_overhead=$(( 3 + 3 ))
-  if [[ -n "$left_text" ]]; then
-    padding_overhead=$(( padding_overhead + 1 )) # space after left
-  fi
-  if [[ -n "$right_text" ]]; then
-    padding_overhead=$(( padding_overhead + 1 )) # space before right
-  fi
-
-  local content_len=$(( left_visible_len + right_visible_len + padding_overhead ))
+  # Format: "── ───...─── <right> ──"
+  # Bookend dashes: 3 left ("── ") + 3 right (" ──") + 1 space before right
+  local content_len=$(( right_visible_len + 7 ))
   local fill_len=$(( COLUMNS - content_len ))
   if (( fill_len < 1 )); then
     fill_len=1
@@ -81,7 +25,7 @@ function _status_bar_precmd() {
   done
 
   # Print the status bar
-  print -P "%F{240}── ${left_text} %F{240}${fill} ${right_text} %F{240}──%f"
+  print -P "%F{240}── ${fill} ${right_text} %F{240}──%f"
 }
 
 # Register precmd hook (safe for multiple sources)
