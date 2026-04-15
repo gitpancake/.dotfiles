@@ -8,19 +8,21 @@ Personal dotfiles for macOS and WSL2 (Ubuntu) development environments.
 dotfiles/
 ├── zsh/
 │   ├── .zshrc                       # Zsh config (Oh My Zsh, nvm, brew, aliases)
-│   └── robbyrussell-bar.zsh-theme   # Custom theme with battery/time status bar
+│   └── robbyrussell-bar.zsh-theme   # Custom theme with time separator bar
 ├── tmux/
 │   ├── .tmux.conf                   # tmux config (keybindings, gruvbox dark theme)
 │   └── tmux-status.sh               # Status bar: battery, CPU, memory, disk
 │                                    #   with dynamic color-coded thresholds
 ├── claude/
 │   ├── settings.json                # Claude Code settings and plugins
-│   ├── statusline-command.sh        # Status line showing battery, CPU, memory,
-│   │                                #   disk, git branch, node version, session time
-│   └── CLAUDE.md                    # Global instructions for Claude Code AI
+│   ├── CLAUDE.md                    # Global instructions for Claude Code AI
+│   ├── commands/                    # Specialized agent profiles (/backend, /frontend, etc.)
+│   └── hooks/                       # Event hooks (e.g. tmux bell on task completion)
+├── scripts/
+│   ├── city.py                      # Animated ASCII night city skyline
+│   └── hologram.py                  # Animated 3D wireframe cube
 ├── install.sh                       # Symlink installer (Linux/WSL2)
 ├── install-mac.sh                   # Symlink installer (macOS)
-├── CLAUDE.md                        # Instructions for Claude Code AI assistant
 └── README.md
 ```
 
@@ -46,21 +48,11 @@ source ~/.zshrc
 
 ## Zsh Theme
 
-The `robbyrussell-bar` theme extends the default robbyrussell prompt with a full-width status bar:
+The `robbyrussell-bar` theme extends the default robbyrussell prompt with a full-width time separator:
 
 ```
-── 🔋 99% (Plugged in) ───────────────────────────────────────────── 14:30:25 ──
+── ──────────────────────────────────────────────────────────────── 14:30:25 ──
 ➜ my-project git:(main) ✗
-```
-
-Battery is color-coded: green (>50%), yellow (20-50%), red (<20%).
-
-## Claude Code Status Line
-
-Shows system info at the bottom of Claude Code sessions:
-
-```
-🔋99%⚡ │ CPU 5% │ MEM 14% │ DSK 2% │ ⎇ main │ ⬢ v24.14.0 │ ⏱ 23m │ 11:54:09
 ```
 
 ## Tmux

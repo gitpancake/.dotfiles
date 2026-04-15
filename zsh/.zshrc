@@ -80,7 +80,7 @@ eval "$(zoxide init zsh)"
 # fzf (fuzzy finder: Ctrl+R for history, Ctrl+T for files)
 source <(fzf --zsh)
 # bun completions
-[ -s "/Users/henrypye/.bun/_bun" ] && source "/Users/henrypye/.bun/_bun"
+[ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
 
 # bun
 export BUN_INSTALL="$HOME/.bun"
