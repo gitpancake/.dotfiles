@@ -13,6 +13,17 @@ plugins=(git zsh-nvm zsh-autosuggestions zsh-syntax-highlighting)
 
 source $ZSH/oh-my-zsh.sh
 
+# Tab accepts autosuggestion if one exists, otherwise normal completion
+_autosuggest_or_complete() {
+  if [[ -n "$POSTDISPLAY" ]]; then
+    zle autosuggest-accept
+  else
+    zle expand-or-complete
+  fi
+}
+zle -N _autosuggest_or_complete
+bindkey '\t' _autosuggest_or_complete
+
 # Security: only allow known-safe node binaries to have nvm lazy-load wrappers.
 # Without this, ANY `npm install -g` package gets a shell function that shadows
 # system commands — a malicious package named "curl" or "git" would hijack them.
