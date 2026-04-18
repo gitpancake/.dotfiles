@@ -35,6 +35,7 @@ When converting Paper designs to React (e.g. life-os PWA artboards):
 
 - **Model**: Use Sonnet, not Opus. Paper→React is mechanical token-matching — Opus is overkill.
 - **Paper MCP payloads are large.** Use `get_basic_info` + `get_tree_summary` to orient, then fetch `get_jsx` / `get_computed_styles` per-group, not per-artboard. One visual group at a time.
+- **Never use `get_screenshot`.** Image payloads are token-expensive and don't help with code conversion — all the info you need lives in `get_jsx` + `get_computed_styles` + `get_fill_image` (for actual image fills). Screenshots are only acceptable for reviewing your own output after writing code, not for understanding the design.
 - **Read files surgically.** Life-OS PWA components are long. Use `Read` with `offset`/`limit` once you've grepped the target location. Don't re-read full files between edits.
 - **Recon via Explore subagent.** For pattern searches ("how are other paper cards structured?"), dispatch an Explore agent — it returns a summary, not raw files, keeping main context lean.
 - **`/clear` between artboards.** Each artboard is independent. Clear and reload only the Linear ticket + target file.
