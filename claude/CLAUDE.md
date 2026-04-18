@@ -48,6 +48,15 @@ Search OV `resources/agents/code-structure-reference` for detailed principles wi
 - **Merging**: squash merge for clean main history. Delete feature branch after merge.
 - **Small projects exception**: solo projects < 1 week old can commit to main directly. Switch to branches once a bad commit would cost >10 minutes to fix.
 
+## Parallel Work (Worktree Agents)
+
+For independent tasks, spawn agents with `isolation: "worktree"` so each runs on its own branch in an isolated checkout. When done, each returns a branch + path; review and merge the ones worth keeping.
+
+- **Good fits**: A/B implementations of the same feature, exploratory refactors, independent bug fixes across unrelated modules, risky experiments.
+- **Not fits**: anything touching shared runtime state. Worktrees share everything outside `.git` — same DB, same ports, same `node_modules`, same running dev server. Two agents both running `npm install` or hitting port 3000 will collide.
+- **Independence check before spawning**: if two agents would edit the same file, it's not parallel work — it's a merge conflict waiting to happen. Split tasks by module/file boundary.
+- **Branch naming**: worktree agents branch from current HEAD as `agent/<short-task>`. Squash-merge the winner, discard the rest.
+
 ## Project Documentation Maintenance
 
 After each chunk of work:
