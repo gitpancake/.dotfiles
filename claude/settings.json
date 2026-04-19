@@ -1,4 +1,7 @@
 {
+  "permissions": {
+    "defaultMode": "auto"
+  },
   "hooks": {
     "Notification": [
       {
@@ -23,7 +26,6 @@
     "code-review@claude-plugins-official": true,
     "feature-dev@claude-plugins-official": true,
     "code-simplifier@claude-plugins-official": true,
-    "playwright@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true,
     "commit-commands@claude-plugins-official": true,
     "security-guidance@claude-plugins-official": false,
@@ -51,5 +53,6 @@
     }
   },
   "effortLevel": "medium",
-  "skipDangerousModePermissionPrompt": true
+  "skipDangerousModePermissionPrompt": true,
+  "skipAutoPermissionPrompt": true
 }

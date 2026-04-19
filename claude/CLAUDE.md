@@ -4,16 +4,30 @@
 - Direct, concise, opinionated. Match the user's energy.
 - No disclaimers, hedging, or unnecessary preamble.
 
-## Agent Commands
+## Specialist Subagents
 
-Specialized agents available as slash commands. Use the right agent for the job:
+Dispatch these via the Agent tool (`subagent_type: "<name>"`) for focused, context-isolated work. Each is Notion-aware: it will try to fetch ticket context from the Notion MCP, and warn once if Notion is unavailable.
 
-- `/backend` — TypeScript services, event-driven, APIs, RabbitMQ, life-os engines
-- `/frontend` — Next.js, React, Tailwind, PWA, design systems
-- `/database` — PostgreSQL, Drizzle ORM, schema design, migrations, queries
-- `/platform` — Docker, Railway, CI/CD, monitoring, Grafana
-- `/fullstack` — End-to-end features spanning backend, DB, API, and frontend
-- `/deploy` — Pre-deploy checklist: tests, build, branch verify, ship
+- `backend` — services, APIs, event-driven code, workers, background jobs
+- `frontend` — UI, components, design systems, Paper-to-code (JSX-only)
+- `database` — schema design, migrations, query optimization, indexing
+- `fullstack` — end-to-end features spanning DB → service → API → UI in one PR
+- `platform` — Docker, observability (Prometheus/Loki/Tempo), build tooling
+- `infra` — Railway provisioning, deploy troubleshooting, env/domain config
+- `deploy` — pre-ship verification: tests, build, lint, diff review, push
+
+Every subagent ends its workflow by invoking the `/simplify` slash command to review its own diff before declaring done.
+
+## Global Slash Commands
+
+- `/simplify` — scoped review of the current diff for reuse, clarity, efficiency, over-abstraction, dead code. Fixes issues in place.
+
+## Planning — Notion First
+
+Assume the user plans work in Notion. When a task is non-trivial:
+1. Ask for (or resolve from context) the Notion page/ticket URL.
+2. Fetch it via the Notion MCP for full scope + acceptance criteria.
+3. If the Notion MCP isn't connected, warn once and proceed on user confirmation — don't silently skip planning context.
 
 ## Session Start
 
@@ -52,7 +66,7 @@ Search OV `resources/agents/code-structure-reference` for detailed principles wi
 
 For independent tasks, spawn agents with `isolation: "worktree"` so each runs on its own branch in an isolated checkout. When done, each returns a branch + path; review and merge the ones worth keeping.
 
-- **Good fits**: A/B implementations of the same feature, exploratory refactors, independent bug fixes across unrelated modules, risky experiments.
+- **Good fits**: one feature split into independent chunks (agent per module/file), or a batch of unrelated small tasks (bug list, cleanups) fanned out at once.
 - **Not fits**: anything touching shared runtime state. Worktrees share everything outside `.git` — same DB, same ports, same `node_modules`, same running dev server. Two agents both running `npm install` or hitting port 3000 will collide.
 - **Independence check before spawning**: if two agents would edit the same file, it's not parallel work — it's a merge conflict waiting to happen. Split tasks by module/file boundary.
 - **Branch naming**: worktree agents branch from current HEAD as `agent/<short-task>`. Squash-merge the winner, discard the rest.
@@ -78,31 +92,14 @@ Persistent vector-indexed knowledge base (MCP) for knowledge that **spans projec
 
 **Before `WebFetch`, `WebSearch`, or `context7` for API docs, ALWAYS `find`/`search` OpenViking first.** Re-fetching wastes time and context. If OV has it, use it. If not and you fetch externally, store it with `add_resource` for next time.
 
-### Known resource index
+### Discovering what's in OV
 
-| Topic | OV path |
-|-------|---------|
-| Coding practices | `resources/agents/coding-practices` |
-| Code structure reference | `resources/agents/code-structure-reference` |
-| Frontend architecture reference | `resources/agents/frontend-architecture-reference` |
-| Gmail API | `resources/life-os/external-apis/gmail-api` |
-| Google Calendar API | `resources/life-os/external-apis/google-calendar-api` |
-| GCP Pub/Sub | `resources/life-os/external-apis/gcp-pubsub` |
-| Open-Meteo | `resources/life-os/external-apis/open-meteo` |
-| Anthropic Claude API | `resources/life-os/external-apis/anthropic-claude-api` |
-| Anthropic Models | `resources/life-os/external-apis/anthropic-models` |
-| football-data.org v4 | `resources/life-os/external-apis/football-data-v4` |
-| Neynar / Farcaster API | `resources/life-os/external-apis/farcaster-neynar-api` |
-| Farcaster Hub (direct) | `resources/farcaster-hub-direct-casting` |
-| RS3 Hiscores / CML | `resources/rs3-hiscores-api` |
-| GCP Pub/Sub infra | `resources/life-os/gcp-pubsub` |
-| UI design system | `resources/life-os/ui-design-system` |
-| OpenSea API | `resources/opensea-api` |
-| Art Blocks API | `resources/art-blocks-api` |
-| Gondi SDK / docs | `resources/gondi` |
-| Raster.art | `resources/raster-art-research` |
+Use `mcp__openviking__ls` at `resources/` to list top-level topics, then drill down. Use `mcp__openviking__find` or `search` for keyword queries across content. Don't assume a path exists — list first.
 
-Table may be stale — run `ls` on the relevant `resources/` path when in doubt.
+Common top-level namespaces:
+- `resources/agents/` — coding principles, architecture references, cross-project agent knowledge
+- `resources/<project>/` — project-scoped external API docs and architecture notes
+- `resources/<api-name>/` — standalone external API references
 
 ### When to READ
 
@@ -114,6 +111,6 @@ Store: external API docs fetched during a session, cross-project architectural d
 Don't store: work summaries, per-project conventions, ephemeral debugging context.
 
 ### Hygiene
-- Remove or update outdated entries when you encounter them
-- Descriptive directory names (`resources/opensea-api/`, not `resources/Document_1/`)
-- Fewer high-quality entries over many low-value ones
+- Remove or update outdated entries when you encounter them.
+- Descriptive directory names (`resources/<service>-api/`, not `resources/Document_1/`).
+- Fewer high-quality entries over many low-value ones.
