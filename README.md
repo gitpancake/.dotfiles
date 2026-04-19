@@ -16,7 +16,9 @@ dotfiles/
 ├── claude/
 │   ├── settings.json                # Claude Code settings and plugins
 │   ├── CLAUDE.md                    # Global instructions for Claude Code AI
-│   ├── commands/                    # Specialized agent profiles (/backend, /frontend, etc.)
+│   ├── agents/                      # Specialist subagents (backend, frontend,
+│   │                                #   database, fullstack, platform, infra, deploy)
+│   ├── commands/                    # Global slash commands (/simplify)
 │   └── hooks/                       # Event hooks (e.g. tmux bell on task completion)
 ├── scripts/
 │   ├── city.py                      # Animated ASCII night city skyline

@@ -22,6 +22,10 @@ mkdir -p ~/.claude/commands
 for f in "$DOTFILES_DIR/claude/commands/"*.md; do
   ln -sf "$f" ~/.claude/commands/"$(basename "$f")"
 done
+mkdir -p ~/.claude/agents
+for f in "$DOTFILES_DIR/claude/agents/"*.md; do
+  ln -sf "$f" ~/.claude/agents/"$(basename "$f")"
+done
 echo "  Linked Claude Code config"
 
 # tmux
