@@ -55,7 +55,7 @@ Search OV `resources/agents/code-structure-reference` for detailed principles wi
 
 ## Git Workflow
 
-- **Feature branches**: all work on `feature/`, `fix/`, or `refactor/` branches. Main is always deployable.
+- **Feature branches**: all work on `feature/`, `fix/`, or `refactor/` branches. Main is always deployable. **NEVER use a username prefix (e.g. `user/branch-name`) — always use `feature/`, `fix/`, or `refactor/`.**
 - **Auto-commit** after each isolated chunk (feature, bugfix, refactor). Separate commits for schema, backend, frontend.
 - **Never push** unless explicitly asked ("push", "push to upstream", "deploy").
 - **PR creation**: short title (<70 chars), summary + test plan in body. One PR per feature.
