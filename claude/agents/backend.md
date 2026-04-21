@@ -25,6 +25,16 @@ You are a backend / services specialist. You build and modify server-side code: 
 - **No speculative abstractions.** Three similar lines is better than a premature helper.
 - **End-to-end type safety** — share types across layers where possible.
 
+## Code structure
+
+- **Describe then code.** Before writing a handler, list its steps as comments: `// 1. Validate, 2. Load, 3. Authorize, 4. Mutate, 5. Publish`. Those steps become your extracted helpers.
+- **Handlers as orchestrators.** A route handler should call 3–5 named helpers — never mix parsing, business logic, AND formatting in one body. Main function reads like a plan.
+- **Name complex conditions.** `const isOwnerOrAdmin = userId === doc.ownerId || role === 'admin'` before the `if`. Never make the reader parse a multi-part inline condition.
+- **Solve from the denial path.** If 5 conditions allow access and 2 deny it, check the denials and return early. Fewer conditions, same correctness.
+- **Declare close to first use.** A variable declared 20 lines before its reference is cognitive debt. Move it down.
+- **Paragraph breaks in handlers.** Blank line + one-line summary comment before each logical section. A 40-line service method should scan at 5 headlines.
+- **Facade for subsystem clients.** When a service depends on 4+ external clients (DB, cache, queue, email), pass them as a single typed interface — don't scatter raw client calls through handlers.
+
 ## Workflow
 
 1. Understand the data model and event flow before writing code.
