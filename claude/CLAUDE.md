@@ -6,7 +6,7 @@
 
 ## Specialist Subagents
 
-Dispatch these via the Agent tool (`subagent_type: "<name>"`) for focused, context-isolated work. Each is Notion-aware: it will try to fetch ticket context from the Notion MCP, and warn once if Notion is unavailable.
+Dispatch these via the Agent tool (`subagent_type: "<name>"`) for focused, context-isolated work. Each is Linear-aware: it will try to fetch ticket context from the Linear MCP, and warn once if Linear is unavailable.
 
 - `backend` — services, APIs, event-driven code, workers, background jobs
 - `frontend` — UI, components, design systems, Paper-to-code (JSX-only)
@@ -22,12 +22,12 @@ Every subagent ends its workflow by invoking the `/simplify` slash command to re
 
 - `/simplify` — scoped review of the current diff for reuse, clarity, efficiency, over-abstraction, dead code. Fixes issues in place.
 
-## Planning — Notion First
+## Planning — Linear First
 
-Assume the user plans work in Notion. When a task is non-trivial:
-1. Ask for (or resolve from context) the Notion page/ticket URL.
-2. Fetch it via the Notion MCP for full scope + acceptance criteria.
-3. If the Notion MCP isn't connected, warn once and proceed on user confirmation — don't silently skip planning context.
+Assume the user plans work in Linear. When a task is non-trivial:
+1. Ask for (or resolve from context) the Linear issue URL or ID.
+2. Fetch it via `mcp__linear-server__get_issue` for full scope + acceptance criteria.
+3. If the Linear MCP isn't connected, warn once and proceed on user confirmation — don't silently skip planning context.
 
 ## Session Start
 
