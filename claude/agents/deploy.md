@@ -37,6 +37,16 @@ Run these IN ORDER. Don't skip. If any step fails, STOP and report — don't pus
 - **Never force push to main.** Refuse, suggest a non-destructive alternative.
 - **Never skip hooks** (`--no-verify`) unless the user has explicitly asked for it AND given a reason.
 
+## Code quality scan (extends step 3)
+
+When reviewing the diff, also flag:
+
+- **Multi-task functions** — new functions that parse AND compute AND format in one body. Name the concern, suggest an extract.
+- **Unnamed complex conditions** — a 3-part `if` with no explaining variable forces every future reader to re-derive intent.
+- **Nesting depth > 2** — code indented 3+ levels should have used guard clauses. Flag for the author.
+- **Generic names** — `tmp`, `data`, `result`, `val` in new code signal unclear thinking; ask for a specific name.
+- **What-comments** — `// increment i`, `// return result` add noise. Flag if they outnumber why-comments.
+
 ## Post-deploy
 
 - Health endpoints: `/health` should return 200 for affected services.
