@@ -94,5 +94,56 @@ launchctl load -w "$PLAN_PLIST"
 
 echo "  Loaded Claude transcript + plan auto-prune launchd jobs"
 
+# Focus Guard (requires sudo for /usr/local/bin and /Library/LaunchDaemons)
+if command -v sudo &>/dev/null; then
+  # Dependencies
+  for pkg in mkcert nss nginx; do
+    if ! brew list "$pkg" &>/dev/null; then
+      echo "  Installing $pkg..."
+      brew install "$pkg"
+    fi
+  done
+  mkcert -install
+
+  # Runtime dirs
+  sudo mkdir -p /usr/local/var/focus/certs /usr/local/var/log
+
+  # Scripts + commands
+  for f in focus-guard.sh cert-gen.sh block unblock; do
+    sudo cp "$DOTFILES_DIR/focus-guard/$f" "/usr/local/bin/$f"
+    sudo chmod +x "/usr/local/bin/$f"
+  done
+
+  # nginx config
+  sudo cp "$DOTFILES_DIR/focus-guard/focus.conf" /opt/homebrew/etc/nginx/focus.conf
+  if ! grep -q "focus.conf" /opt/homebrew/etc/nginx/nginx.conf; then
+    sudo sed -i '' 's|include servers/\*;|include servers/*;\n    include /opt/homebrew/etc/nginx/focus.conf;|' \
+      /opt/homebrew/etc/nginx/nginx.conf
+  fi
+
+  # hosts.blocked — skip if already exists (contains private domain list)
+  if [ ! -f /etc/hosts.blocked ]; then
+    sudo cp "$DOTFILES_DIR/focus-guard/hosts.blocked.example" /etc/hosts.blocked
+    echo "  Created /etc/hosts.blocked from example — add your domains before running focus-guard"
+  fi
+
+  # Generate initial certs + state before starting daemons
+  sudo mkdir -p /opt/homebrew/var/run
+  sudo /usr/local/bin/cert-gen.sh
+  sudo /opt/homebrew/bin/nginx -t
+  sudo /usr/local/bin/focus-guard.sh
+
+  # LaunchDaemons
+  for plist in com.henrypye.focus-guard.plist com.henrypye.focus-nginx.plist; do
+    sudo cp "$DOTFILES_DIR/focus-guard/$plist" "/Library/LaunchDaemons/$plist"
+    sudo launchctl unload "/Library/LaunchDaemons/$plist" 2>/dev/null || true
+    sudo launchctl load "/Library/LaunchDaemons/$plist"
+  done
+
+  echo "  Focus Guard installed and running"
+else
+  echo "  Skipping Focus Guard (sudo not available)"
+fi
+
 echo ""
 echo "Done! Run 'source ~/.zshrc' to reload."

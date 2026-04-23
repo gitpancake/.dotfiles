@@ -1,0 +1,2 @@
+#!/bin/bash
+sudo switch-hosts.sh block && sudo /usr/local/bin/focus-guard.sh
