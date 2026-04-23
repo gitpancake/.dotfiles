@@ -96,3 +96,6 @@ source <(fzf --zsh)
 # bun
 export BUN_INSTALL="$HOME/.bun"
 export PATH="$BUN_INSTALL/bin:$PATH"
+
+# Prefix any command with a space to keep it out of history
+setopt HIST_IGNORE_SPACE

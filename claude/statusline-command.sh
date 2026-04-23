@@ -88,6 +88,14 @@ renderUsageBucket() {
     "$dim" "$(humanDuration "$remaining")" "$reset"
 }
 
-renderContextBar
-renderUsageBucket "5h" "$fiveHrPct"    "$fiveHrReset"
-renderUsageBucket "7d" "$sevenDayPct"  "$sevenDayReset"
+# Guard: skip rendering if values look like uninitialized garbage (timestamps, tiny sizes)
+isValidPct() { [[ "$1" =~ ^[0-9]+$ ]] && (( $1 >= 0 && $1 <= 100 )); }
+isValidSize() { [[ "$1" =~ ^[0-9]+$ ]] && (( $1 > 1000 )); }
+
+if isValidPct "$ctxPct" && isValidSize "$ctxSize"; then
+  renderContextBar
+  isValidPct "$fiveHrPct"   && renderUsageBucket "5h" "$fiveHrPct"   "$fiveHrReset"
+  isValidPct "$sevenDayPct" && renderUsageBucket "7d" "$sevenDayPct" "$sevenDayReset"
+else
+  printf '…'
+fi
