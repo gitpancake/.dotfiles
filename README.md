@@ -7,24 +7,32 @@ Personal dotfiles for macOS and WSL2 (Ubuntu) development environments.
 ```
 dotfiles/
 ├── zsh/
-│   ├── .zshrc                       # Zsh config (Oh My Zsh, nvm, brew, aliases)
-│   └── robbyrussell-bar.zsh-theme   # Custom theme with time separator bar
+│   ├── .zshenv                       # Loaded by every zsh session (interactive or not)
+│   ├── .zshrc                        # Zsh config (Oh My Zsh, nvm, brew, aliases)
+│   └── robbyrussell-bar.zsh-theme    # Custom theme with time separator bar
 ├── tmux/
-│   ├── .tmux.conf                   # tmux config (keybindings, gruvbox dark theme)
-│   └── tmux-status.sh               # Status bar: battery, CPU, memory, disk
-│                                    #   with dynamic color-coded thresholds
+│   ├── .tmux.conf                    # tmux config (keybindings, gruvbox dark theme)
+│   └── tmux-status.sh                # Status bar: battery, CPU, memory, disk
+│                                     #   with dynamic color-coded thresholds
 ├── claude/
-│   ├── settings.json                # Claude Code settings and plugins
-│   ├── CLAUDE.md                    # Global instructions for Claude Code AI
-│   ├── agents/                      # Specialist subagents (backend, frontend,
-│   │                                #   database, fullstack, platform, infra, deploy)
-│   ├── commands/                    # Global slash commands (/simplify)
-│   └── hooks/                       # Event hooks (e.g. tmux bell on task completion)
+│   ├── settings.json                 # Claude Code settings and plugins
+│   ├── CLAUDE.md                     # Global instructions (workflow, code quality,
+│   │                                 #   cost discipline, OpenViking protocol)
+│   ├── statusline-command.sh         # Bottom-bar renderer: context window + 5h/7d
+│   │                                 #   usage alerts, color-coded by severity
+│   ├── transcript-costs.sh           # Post-mortem: rank recent sessions by $ cost
+│   ├── agents/                       # Specialist subagents (backend, frontend,
+│   │                                 #   database, fullstack, platform, infra, deploy)
+│   ├── commands/                     # Global slash commands (/simplify)
+│   └── hooks/
+│       ├── tmux-bell.sh              # tmux bell on Notification events
+│       └── tool-loop-warn.sh         # PostToolUse warning at 30× same-tool
+│                                     #   or 100 total calls per session
 ├── scripts/
-│   ├── city.py                      # Animated ASCII night city skyline
-│   └── hologram.py                  # Animated 3D wireframe cube
-├── install.sh                       # Symlink installer (Linux/WSL2)
-├── install-mac.sh                   # Symlink installer (macOS)
+│   ├── city.py                       # Animated ASCII night city skyline
+│   └── hologram.py                   # Animated 3D wireframe cube
+├── install.sh                        # Symlink installer (Linux/WSL2)
+├── install-mac.sh                    # Symlink installer (macOS)
 └── README.md
 ```
 
@@ -73,9 +81,38 @@ Status bar shows system metrics with dynamic colors (green → yellow → orange
 
 Thresholds: 0-25% green, 26-50% yellow, 51-75% orange, 76-100% red. Battery is inverted (low = red).
 
+## Claude Code: Cost Awareness
+
+Three layers of friction keep heavy Opus usage from silently draining Max-plan usage buckets. Each catches what the others miss.
+
+### Passive — Status line
+`claude/statusline-command.sh` renders the Claude Code bottom status bar: a color-coded context-window bar, plus 5-hour and 7-day usage buckets that only appear once either crosses 50%. Consistent with the tmux status color scheme.
+
+```
+[████░░░░░░░░░░░░░░░░] 110k/1M 11%                             # quiet
+[█████████████████░░░] 850k/1M 85% │ 5h 72% 1h 20m             # loud
+```
+
+### Reactive — Post-mortem tool
+```bash
+~/.claude/transcript-costs.sh [days=7] [top=10]
+```
+Ranks sessions by estimated API-equivalent cost, using Anthropic list prices per model. Surfaces which conversations actually burned budget and the first real prompt that started them.
+
+### Preventive — CLAUDE.md rule + PostToolUse hook
+The `Cost Discipline` section in `claude/CLAUDE.md` instructs Claude to propose the **batch pattern** (one LLM call produces a plan, a script applies it) before any N-item operation — avoiding per-item LLM calls at Opus prices.
+
+Typical model selection:
+- **Opus** — project planning, architecture, ambiguous work
+- **Sonnet** — coding (default), reviews, most reasoning
+- **Haiku** — mechanical edits, renames, simple greps
+
+`claude/hooks/tool-loop-warn.sh` is a PostToolUse hook that fires a one-time warning per session when the same tool has been called ≥30× or total tool calls cross 100, suggesting the batch pattern or `/clear` between logical chunks.
+
 ## Dependencies
 
 - [Oh My Zsh](https://ohmyz.sh/)
 - [nvm](https://github.com/nvm-sh/nvm)
 - [Homebrew (Linuxbrew)](https://brew.sh/)
 - [Claude Code](https://claude.ai/code)
+- [jq](https://jqlang.org/) — required by `statusline-command.sh`, `transcript-costs.sh`, and `tool-loop-warn.sh`

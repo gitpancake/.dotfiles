@@ -15,10 +15,13 @@ echo "  Linked zsh config and theme"
 # Claude Code
 mkdir -p ~/.claude
 ln -sf "$DOTFILES_DIR/claude/statusline-command.sh" ~/.claude/statusline-command.sh
+ln -sf "$DOTFILES_DIR/claude/transcript-costs.sh" ~/.claude/transcript-costs.sh
 ln -sf "$DOTFILES_DIR/claude/settings.json" ~/.claude/settings.json
 ln -sf "$DOTFILES_DIR/claude/CLAUDE.md" ~/.claude/CLAUDE.md
 mkdir -p ~/.claude/hooks
-ln -sf "$DOTFILES_DIR/claude/hooks/tmux-bell.sh" ~/.claude/hooks/tmux-bell.sh
+for f in "$DOTFILES_DIR/claude/hooks/"*.sh; do
+  ln -sf "$f" ~/.claude/hooks/"$(basename "$f")"
+done
 mkdir -p ~/.claude/commands
 for f in "$DOTFILES_DIR/claude/commands/"*.md; do
   ln -sf "$f" ~/.claude/commands/"$(basename "$f")"
