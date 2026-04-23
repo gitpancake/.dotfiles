@@ -85,7 +85,10 @@ launchctl load -w "$TRANSCRIPT_PLIST"
 
 PLAN_PLIST="$HOME/Library/LaunchAgents/com.henrypye.claude-plan-prune.plist"
 chmod +x "$DOTFILES_DIR/claude/scripts/prune-plans.sh"
-ln -sf "$DOTFILES_DIR/claude/com.henrypye.claude-plan-prune.plist" "$PLAN_PLIST"
+# Generate (not symlink) — LaunchAgent execve() doesn't expand $HOME in ProgramArguments
+rm -f "$PLAN_PLIST"
+sed "s|DOTFILES_DIR_PLACEHOLDER|$DOTFILES_DIR|g" \
+  "$DOTFILES_DIR/claude/com.henrypye.claude-plan-prune.plist" > "$PLAN_PLIST"
 launchctl unload "$PLAN_PLIST" 2>/dev/null || true
 launchctl load -w "$PLAN_PLIST"
 

@@ -7,7 +7,7 @@ FILE_PATH=$(jq -r '.tool_input.file_path // empty' 2>/dev/null)
 # Only handle files inside ~/.claude/plans/
 [[ "$FILE_PATH" == "$HOME/.claude/plans/"* ]] || exit 0
 
-OBSIDIAN_BASE="$HOME/Documents/obsidian-vault/Henry Vault/04-PROJECTS/Claude Plans"
+OBSIDIAN_BASE="${CLAUDE_OBSIDIAN_PLANS_DIR:-$HOME/Documents/obsidian-vault/Henry Vault/04-PROJECTS/Claude Plans}"
 FNAME=$(basename "$FILE_PATH")
 
 # Read H1 title; fall back to filename stem

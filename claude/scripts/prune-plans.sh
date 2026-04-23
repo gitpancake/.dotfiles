@@ -3,7 +3,7 @@
 # and the Obsidian vault mirror.
 
 LOG="$HOME/.claude/logs/plan-prune.log"
-OBSIDIAN="$HOME/Documents/obsidian-vault/Henry Vault/04-PROJECTS/Claude Plans"
+OBSIDIAN="${CLAUDE_OBSIDIAN_PLANS_DIR:-$HOME/Documents/obsidian-vault/Henry Vault/04-PROJECTS/Claude Plans}"
 
 prune() {
   local dir="$1"

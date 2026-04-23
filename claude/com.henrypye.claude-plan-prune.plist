@@ -8,7 +8,7 @@
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
-    <string>/Users/henrypye/dotfiles/claude/scripts/prune-plans.sh</string>
+    <string>DOTFILES_DIR_PLACEHOLDER/claude/scripts/prune-plans.sh</string>
   </array>
 
   <key>StartCalendarInterval</key>
