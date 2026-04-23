@@ -52,7 +52,7 @@
       }
     }
   },
-  "effortLevel": "medium",
+  "effortLevel": "high",
   "skipDangerousModePermissionPrompt": true,
   "skipAutoPermissionPrompt": true,
   "model": "sonnet"
