@@ -28,6 +28,17 @@ dotfiles/
 │       ├── tmux-bell.sh              # tmux bell on Notification events
 │       └── tool-loop-warn.sh         # PostToolUse warning at 30× same-tool
 │                                     #   or 100 total calls per session
+├── focus-guard/
+│   ├── focus-guard.sh                # Time-aware blocker: swaps /etc/hosts on a
+│   │                                 #   10-min cron, writes status page
+│   ├── cert-gen.sh                   # Generates mkcert cert covering all blocked
+│   │                                 #   domains (regenerates only when list changes)
+│   ├── focus.conf                    # nginx server blocks for ports 80 + 443
+│   ├── block                         # Manual override: block immediately
+│   ├── unblock                       # Manual override: unblock for ~10 min
+│   ├── hosts.blocked.example         # Template for /etc/hosts.blocked (no domains)
+│   ├── com.henrypye.focus-guard.plist  # launchd: runs focus-guard.sh every 10 min
+│   └── com.henrypye.focus-nginx.plist  # launchd: keeps nginx alive on 80 + 443
 ├── scripts/
 │   ├── city.py                       # Animated ASCII night city skyline
 │   └── hologram.py                   # Animated 3D wireframe cube
@@ -108,6 +119,28 @@ Typical model selection:
 - **Haiku** — mechanical edits, renames, simple greps
 
 `claude/hooks/tool-loop-warn.sh` is a PostToolUse hook that fires a one-time warning per session when the same tool has been called ≥30× or total tool calls cross 100, suggesting the batch pattern or `/clear` between logical chunks.
+
+## Focus Guard
+
+Time-aware site blocker that swaps `/etc/hosts` and serves a status page for blocked domains on both HTTP and HTTPS.
+
+**Focus windows:** Mon–Fri 09:00–18:00, Sat–Sun 11:00–15:00. Outside those hours, sites are unblocked automatically.
+
+**How it works:** nginx runs persistently on ports 80 + 443. `/etc/hosts` redirects blocked domains to `127.0.0.1`, so every request lands on nginx and gets the status page instead of a browser error. A mkcert-issued cert (trusted via macOS Keychain) means HTTPS sites show the page cleanly with no certificate warning.
+
+**Manual overrides:**
+```bash
+unblock   # unblock immediately — auto re-blocks within 10 min
+block     # re-block immediately
+```
+
+**Private:** `/etc/hosts.blocked` (your actual domain list) lives only as a system file and is never committed. `hosts.blocked.example` is the committed template.
+
+**Adding a domain:**
+```bash
+# Edit /etc/hosts.blocked, then:
+sudo cert-gen.sh && sudo /opt/homebrew/bin/nginx -s reload
+```
 
 ## Dependencies
 
