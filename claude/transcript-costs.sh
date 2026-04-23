@@ -35,9 +35,16 @@ rows=$(
         end;
 
       [ .[] | select(.type == "assistant" and .message.usage != null) ] as $turns
-      | ([ .[] | select(.type == "user")
-                | .message.content
-                | if type == "string" then . else empty end ][0] // "(no prompt)") as $firstPrompt
+      | [ .[] | select(.type == "user")
+              | .message.content
+              | select(type == "string") ] as $prompts
+      | (
+          # Prefer first real prose prompt (skip <caveat>/<command-*> markers)
+          ([ $prompts[] | select(startswith("<") | not) ][0])
+          # Fall back to slash-command name if session was kicked off by one
+          // ([ $prompts[] | try (capture("<command-name>(?<c>[^<]+)</command-name>") | .c) catch empty ][0])
+          // "(no prompt)"
+        ) as $firstPrompt
       | ([ .[] | select(.timestamp != null) | .timestamp ][0] // "") as $startedAt
       | (reduce $turns[] as $t (
           {cost: 0, tokens: 0, turns: 0, models: {}};
