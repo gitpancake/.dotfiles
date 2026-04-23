@@ -15,12 +15,12 @@ input=$(cat)
 read -r ctxPct ctxSize fiveHrPct fiveHrReset sevenDayPct sevenDayReset < <(
   jq -r '
     [
-      .context_window.used_percentage,
-      .context_window.context_window_size,
-      .rate_limits.five_hour.used_percentage,
-      .rate_limits.five_hour.resets_at,
-      .rate_limits.seven_day.used_percentage,
-      .rate_limits.seven_day.resets_at
+      (.context_window.used_percentage         // 0 | floor),
+      (.context_window.context_window_size     // 0),
+      (.rate_limits.five_hour.used_percentage  // 0 | floor),
+      (.rate_limits.five_hour.resets_at        // 0),
+      (.rate_limits.seven_day.used_percentage  // 0 | floor),
+      (.rate_limits.seven_day.resets_at        // 0)
     ] | @tsv
   ' <<<"$input"
 )
