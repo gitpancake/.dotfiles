@@ -1,0 +1,8 @@
+# Defense-in-depth: never track Claude Code transcripts or session data.
+# Live transcripts live in ~/.claude/projects/ outside this repo, but in
+# case anyone ever symlinks or copies one in, these patterns block commits.
+*.jsonl
+projects/
+tool-results/
+# macOS noise
+.DS_Store
