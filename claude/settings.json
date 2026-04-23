@@ -2,7 +2,6 @@
   "permissions": {
     "defaultMode": "auto"
   },
-  "model": "sonnet",
   "hooks": {
     "Notification": [
       {
@@ -76,5 +75,6 @@
   },
   "effortLevel": "medium",
   "skipDangerousModePermissionPrompt": true,
-  "skipAutoPermissionPrompt": true
+  "skipAutoPermissionPrompt": true,
+  "model": "sonnet"
 }
