@@ -53,6 +53,31 @@ Apply always when writing, refactoring, or reviewing code:
 
 Search OV `resources/agents/code-structure-reference` for detailed principles with examples.
 
+## Cost Discipline
+
+Every tool call re-reads the full conversation context at the current model's price. On Opus 1M, a 500k-context turn costs ~25× a Sonnet turn at 100k. Heavy tool loops compound fast.
+
+### Batch pattern (most important)
+
+Before any operation that touches N items (tickets, files, rows, PRs), STOP and propose the batch pattern:
+1. One LLM call produces a plan — JSON map, categorization, or action list.
+2. A script or targeted API calls execute it without re-invoking the LLM per item.
+
+**If you're about to run the same tool 20+ times in a row, don't.** Propose the batch alternative, get confirmation, then execute. Reserve per-item LLM calls for cases that genuinely need *different* reasoning per item and can't be compressed into one plan.
+
+### Model selection
+
+Match model to task:
+- **Haiku** — mechanical edits, renames, simple greps.
+- **Sonnet** — default for coding, reviews, most reasoning.
+- **Opus** — hard architecture, ambiguous debugging, novel problems.
+
+For mechanical batches (label updates, ticket migrations, dep bumps), suggest Sonnet — Opus burns 5× faster with no quality gain.
+
+### Context hygiene
+
+At context >70% or tool count >50 in a session, propose `/clear` + re-brief with only essential context. A PostToolUse hook (`~/.claude/hooks/tool-loop-warn.sh`) also emits warnings at 30 same-tool calls or 100 total — treat those as prompts to reassess, not noise.
+
 ## Git Workflow
 
 - **Feature branches**: all work on `feature/`, `fix/`, or `refactor/` branches. Main is always deployable. **NEVER use a username prefix (e.g. `user/branch-name`) — always use `feature/`, `fix/`, or `refactor/`.**
