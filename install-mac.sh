@@ -43,6 +43,7 @@ fi
 # --- Link dotfiles ---
 
 # Zsh
+ln -sf "$DOTFILES_DIR/zsh/.zshenv" ~/.zshenv
 ln -sf "$DOTFILES_DIR/zsh/.zshrc" ~/.zshrc
 mkdir -p ~/.oh-my-zsh/custom/themes
 ln -sf "$DOTFILES_DIR/zsh/robbyrussell-bar.zsh-theme" ~/.oh-my-zsh/custom/themes/robbyrussell-bar.zsh-theme
