@@ -75,5 +75,13 @@ mkdir -p ~/.tmux
 ln -sf "$DOTFILES_DIR/tmux/tmux-status.sh" ~/.tmux/tmux-status.sh
 echo "  Linked tmux config"
 
+# Claude transcript auto-prune (weekly, Sun 03:30)
+mkdir -p ~/Library/LaunchAgents ~/.claude/logs
+PLIST="$HOME/Library/LaunchAgents/com.henrypye.claude-transcript-prune.plist"
+ln -sf "$DOTFILES_DIR/claude/com.henrypye.claude-transcript-prune.plist" "$PLIST"
+launchctl unload "$PLIST" 2>/dev/null || true
+launchctl load -w "$PLIST"
+echo "  Loaded Claude transcript auto-prune launchd job"
+
 echo ""
 echo "Done! Run 'source ~/.zshrc' to reload."
