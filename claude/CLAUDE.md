@@ -68,11 +68,11 @@ Before any operation that touches N items (tickets, files, rows, PRs), STOP and 
 ### Model selection
 
 Match model to task:
-- **Haiku** — mechanical edits, renames, simple greps.
-- **Sonnet** — default for coding, reviews, most reasoning.
-- **Opus** — hard architecture, ambiguous debugging, novel problems.
+- **Opus** — project planning, architecture decisions, breaking down ambiguous work.
+- **Sonnet** — coding (default once a plan exists), reviews, most reasoning.
+- **Haiku** — mechanical edits, renames, simple greps, trivial changes.
 
-For mechanical batches (label updates, ticket migrations, dep bumps), suggest Sonnet — Opus burns 5× faster with no quality gain.
+Typical flow: start in Opus to plan, switch to Sonnet once implementing, drop to Haiku for cleanup and mechanical batches. Opus burns ~5× faster than Sonnet — reserve it for when you genuinely need deeper reasoning.
 
 ### Context hygiene
 
