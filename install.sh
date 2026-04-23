@@ -13,20 +13,18 @@ ln -sf "$DOTFILES_DIR/zsh/robbyrussell-bar.zsh-theme" ~/.oh-my-zsh/custom/themes
 echo "  Linked zsh config and theme"
 
 # Claude Code
-mkdir -p ~/.claude
+mkdir -p ~/.claude ~/.claude/hooks ~/.claude/commands ~/.claude/agents ~/.claude/logs
 ln -sf "$DOTFILES_DIR/claude/statusline-command.sh" ~/.claude/statusline-command.sh
 ln -sf "$DOTFILES_DIR/claude/transcript-costs.sh" ~/.claude/transcript-costs.sh
 ln -sf "$DOTFILES_DIR/claude/settings.json" ~/.claude/settings.json
 ln -sf "$DOTFILES_DIR/claude/CLAUDE.md" ~/.claude/CLAUDE.md
-mkdir -p ~/.claude/hooks
 for f in "$DOTFILES_DIR/claude/hooks/"*.sh; do
+  chmod +x "$f"
   ln -sf "$f" ~/.claude/hooks/"$(basename "$f")"
 done
-mkdir -p ~/.claude/commands
 for f in "$DOTFILES_DIR/claude/commands/"*.md; do
   ln -sf "$f" ~/.claude/commands/"$(basename "$f")"
 done
-mkdir -p ~/.claude/agents
 for f in "$DOTFILES_DIR/claude/agents/"*.md; do
   ln -sf "$f" ~/.claude/agents/"$(basename "$f")"
 done
