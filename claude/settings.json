@@ -21,12 +21,7 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/tool-loop-warn.sh"
-          }
-        ]
-      },
-      {
-        "matcher": "Write",
-        "hooks": [
+          },
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/sync-plans-to-obsidian.sh",
