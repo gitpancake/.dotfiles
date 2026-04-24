@@ -19,8 +19,8 @@ Time-aware website blocker for macOS. Swaps `/etc/hosts` between a "blocked" and
 | `block` | Manual override — engage block immediately (until next scheduled run). |
 | `unblock` | Manual override — release block for ~10 min (until next scheduled run). |
 | `hosts.blocked.example` | Template for `/etc/hosts.blocked` — copy to your real path and add your domains. **Not committed with real domains.** |
-| `com.user.focus-guard.plist` | launchd job: runs `focus-guard.sh` every 10 minutes. |
-| `com.user.focus-nginx.plist` | launchd job: keeps nginx alive on ports 80 + 443. |
+| `local.focus-guard.plist` | launchd job: runs `focus-guard.sh` every 10 minutes. |
+| `local.focus-nginx.plist` | launchd job: keeps nginx alive on ports 80 + 443. |
 
 ## Setup
 

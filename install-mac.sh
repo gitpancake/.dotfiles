@@ -78,17 +78,17 @@ echo "  Linked tmux config"
 # Claude auto-prune launchd jobs
 mkdir -p ~/Library/LaunchAgents ~/.claude/logs
 
-TRANSCRIPT_PLIST="$HOME/Library/LaunchAgents/com.user.claude-transcript-prune.plist"
-ln -sf "$DOTFILES_DIR/claude/com.user.claude-transcript-prune.plist" "$TRANSCRIPT_PLIST"
+TRANSCRIPT_PLIST="$HOME/Library/LaunchAgents/local.claude-transcript-prune.plist"
+ln -sf "$DOTFILES_DIR/claude/local.claude-transcript-prune.plist" "$TRANSCRIPT_PLIST"
 launchctl unload "$TRANSCRIPT_PLIST" 2>/dev/null || true
 launchctl load -w "$TRANSCRIPT_PLIST"
 
-PLAN_PLIST="$HOME/Library/LaunchAgents/com.user.claude-plan-prune.plist"
+PLAN_PLIST="$HOME/Library/LaunchAgents/local.claude-plan-prune.plist"
 chmod +x "$DOTFILES_DIR/claude/scripts/prune-plans.sh"
 # Generate (not symlink) — LaunchAgent execve() doesn't expand $HOME in ProgramArguments
 rm -f "$PLAN_PLIST"
 sed "s|DOTFILES_DIR_PLACEHOLDER|$DOTFILES_DIR|g" \
-  "$DOTFILES_DIR/claude/com.user.claude-plan-prune.plist" > "$PLAN_PLIST"
+  "$DOTFILES_DIR/claude/local.claude-plan-prune.plist" > "$PLAN_PLIST"
 launchctl unload "$PLAN_PLIST" 2>/dev/null || true
 launchctl load -w "$PLAN_PLIST"
 
@@ -134,7 +134,7 @@ if command -v sudo &>/dev/null; then
   sudo /usr/local/bin/focus-guard.sh
 
   # LaunchDaemons
-  for plist in com.user.focus-guard.plist com.user.focus-nginx.plist; do
+  for plist in local.focus-guard.plist local.focus-nginx.plist; do
     sudo cp "$DOTFILES_DIR/focus-guard/$plist" "/Library/LaunchDaemons/$plist"
     sudo launchctl unload "/Library/LaunchDaemons/$plist" 2>/dev/null || true
     sudo launchctl load "/Library/LaunchDaemons/$plist"

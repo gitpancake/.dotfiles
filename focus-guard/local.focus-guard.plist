@@ -4,7 +4,7 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.user.focus-guard</string>
+    <string>local.focus-guard</string>
     <key>ProgramArguments</key>
     <array>
         <string>/usr/local/bin/focus-guard.sh</string>

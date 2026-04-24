@@ -37,8 +37,8 @@ dotfiles/
 │   ├── block                         # Manual override: block immediately
 │   ├── unblock                       # Manual override: unblock for ~10 min
 │   ├── hosts.blocked.example         # Template for /etc/hosts.blocked (no domains)
-│   ├── com.user.focus-guard.plist  # launchd: runs focus-guard.sh every 10 min
-│   └── com.user.focus-nginx.plist  # launchd: keeps nginx alive on 80 + 443
+│   ├── local.focus-guard.plist         # launchd: runs focus-guard.sh every 10 min
+│   └── local.focus-nginx.plist         # launchd: keeps nginx alive on 80 + 443
 ├── scripts/
 │   ├── city.py                       # Animated ASCII night city skyline
 │   └── hologram.py                   # Animated 3D wireframe cube

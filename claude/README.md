@@ -10,8 +10,8 @@ Configuration, hooks, agents, and tooling for [Claude Code](https://claude.com/c
 | `CLAUDE.md` | **Global instructions** loaded into every Claude session — workflow rules, code-quality principles, cost discipline, OpenViking protocol, agent routing. |
 | `statusline-command.sh` | Renders Claude Code's bottom status bar: context-window usage bar + 5h/7d rate-limit alerts, color-coded by severity. |
 | `transcript-costs.sh` | Post-mortem tool: ranks recent Claude Code sessions by cost so you can spot expensive transcripts. |
-| `com.user.claude-plan-prune.plist` | launchd job: prunes old plan files from `~/.claude/plans/`. |
-| `com.user.claude-transcript-prune.plist` | launchd job: prunes old transcript files. |
+| `local.claude-plan-prune.plist` | launchd job: prunes old plan files from `~/.claude/plans/`. |
+| `local.claude-transcript-prune.plist` | launchd job: prunes old transcript files. |
 
 ## Subdirectories
 

@@ -4,7 +4,7 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.user.focus-nginx</string>
+    <string>local.focus-nginx</string>
     <key>ProgramArguments</key>
     <array>
         <string>/opt/homebrew/bin/nginx</string>
