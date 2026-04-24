@@ -39,12 +39,16 @@ write_html() {
   local state=$1 next=$2 updated
   updated=$(date "+%H:%M")
 
+  local probe_script=""
   if [ "$state" = "blocked" ]; then
     local icon="🔒" title="Focus Mode" subtitle="Back to work." detail="Unblocks at $next"
-    local reload_script=""
   else
-    local icon="🟢" title="Unblocked" subtitle="Connecting to real site…" detail="Focus resumes at $next"
-    local reload_script='<script>setTimeout(()=>location.reload(),5000)</script>'
+    local icon="🟢" title="Unblocked" subtitle="Checking DNS…" detail="Focus resumes at $next"
+    # Chrome's hosts-file DNS cache can stick long past /etc/hosts being restored.
+    # Fetch a sentinel path same-origin: if nginx still answers, body matches our
+    # known string and we stay put. If DNS has flipped to the real site, the path
+    # 404s / returns something else / network errors — any of which means reload.
+    probe_script='<script>(function(){var tries=0;function probe(){tries++;fetch("/__focus_guard_probe__?cb="+Date.now(),{cache:"no-store"}).then(function(r){return r.text();}).then(function(b){if(b!=="FOCUS_GUARD_SENTINEL")location.reload();else if(tries>=10)location.replace(location.origin+"/?_fg="+Date.now());}).catch(function(){location.reload();});}setInterval(probe,3000);probe();})();</script>'
   fi
 
   cat > "$STATUS_HTML" <<HTML
@@ -53,6 +57,7 @@ write_html() {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
   <title>$title</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -79,7 +84,6 @@ write_html() {
     .detail   { color: #888; font-size: 0.85rem; }
     .updated  { color: #bbb; font-size: 0.75rem; margin-top: 1.5rem; }
   </style>
-  $reload_script
 </head>
 <body>
   <div class="card">
@@ -89,6 +93,7 @@ write_html() {
     <p class="detail">$detail</p>
     <p class="updated">Updated $updated</p>
   </div>
+  $probe_script
 </body>
 </html>
 HTML
