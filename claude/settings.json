@@ -21,11 +21,6 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/tool-loop-warn.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/sync-plans-to-obsidian.sh",
-            "async": true
           }
         ]
       }
@@ -70,6 +65,5 @@
   },
   "effortLevel": "medium",
   "skipDangerousModePermissionPrompt": true,
-  "skipAutoPermissionPrompt": true,
-  "model": "sonnet"
+  "skipAutoPermissionPrompt": true
 }
