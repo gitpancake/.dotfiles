@@ -30,7 +30,6 @@ Wired in `settings.json`:
 | --- | --- | --- |
 | `Notification` | `tmux-bell.sh` | Rings the tmux bell so the user notices Claude needs input. |
 | `PostToolUse` (any) | `tool-loop-warn.sh` | Emits a `systemMessage` once per session at 30× same-tool calls or 100 total — a nudge to consider the batch pattern or `/clear`. |
-| `PostToolUse` (`Write`) | `sync-plans-to-obsidian.sh` | Mirrors `~/.claude/plans/` writes into Obsidian (async). |
 
 ## Statusline
 
