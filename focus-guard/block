@@ -1,2 +1,3 @@
 #!/bin/bash
+echo "blocked" | sudo tee /usr/local/var/focus/override > /dev/null
 sudo switch-hosts.sh block && sudo /usr/local/bin/focus-guard.sh

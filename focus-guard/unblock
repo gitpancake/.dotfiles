@@ -1,2 +1,3 @@
 #!/bin/bash
+sudo rm -f /usr/local/var/focus/override
 sudo switch-hosts.sh unblock && sudo /usr/local/bin/focus-guard.sh

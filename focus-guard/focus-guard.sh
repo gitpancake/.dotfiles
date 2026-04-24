@@ -5,6 +5,7 @@ HOSTS_BLOCKED=/etc/hosts.blocked
 HOSTS_OPEN=/etc/hosts.open
 STATE_FILE=/usr/local/var/focus/state
 STATUS_HTML=/usr/local/var/focus/index.html
+OVERRIDE_FILE=/usr/local/var/focus/override
 
 is_focus_time() {
   local day hour
@@ -40,8 +41,10 @@ write_html() {
 
   if [ "$state" = "blocked" ]; then
     local icon="🔒" title="Focus Mode" subtitle="Back to work." detail="Unblocks at $next"
+    local reload_script=""
   else
-    local icon="🟢" title="Unblocked" subtitle="Enjoy your break." detail="Focus resumes at $next"
+    local icon="🟢" title="Unblocked" subtitle="Connecting to real site…" detail="Focus resumes at $next"
+    local reload_script='<script>setTimeout(()=>location.reload(),5000)</script>'
   fi
 
   cat > "$STATUS_HTML" <<HTML
@@ -76,6 +79,7 @@ write_html() {
     .detail   { color: #888; font-size: 0.85rem; }
     .updated  { color: #bbb; font-size: 0.75rem; margin-top: 1.5rem; }
   </style>
+  $reload_script
 </head>
 <body>
   <div class="card">
@@ -93,7 +97,9 @@ HTML
 main() {
   local target current
 
-  if is_focus_time; then
+  if [ -f "$OVERRIDE_FILE" ]; then
+    target=$(cat "$OVERRIDE_FILE")
+  elif is_focus_time; then
     target="blocked"
   else
     target="open"
@@ -101,13 +107,14 @@ main() {
 
   current=$(cat "$STATE_FILE" 2>/dev/null || echo "unknown")
 
+  if [ "$target" = "blocked" ]; then
+    cp "$HOSTS_BLOCKED" /etc/hosts
+  else
+    cp "$HOSTS_OPEN" /etc/hosts
+  fi
+  dscacheutil -flushcache
+
   if [ "$current" != "$target" ]; then
-    if [ "$target" = "blocked" ]; then
-      cp "$HOSTS_BLOCKED" /etc/hosts
-    else
-      cp "$HOSTS_OPEN" /etc/hosts
-    fi
-    dscacheutil -flushcache
     echo "$target" > "$STATE_FILE"
     echo "$(date): switched to $target"
   fi
