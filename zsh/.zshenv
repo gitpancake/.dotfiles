@@ -1,4 +1,4 @@
-. "$HOME/.cargo/env"
+[[ -f "$HOME/.cargo/env" ]] && . "$HOME/.cargo/env"
 
 # Make nvm-managed node available in non-interactive shells without the lazy-load wrapper.
 # Without this, sub-shells (tools, scripts, tmux panes) hit "command not found: _zsh_nvm_load"

@@ -48,7 +48,8 @@
     "skill-creator@claude-plugins-official": true,
     "atlassian@claude-plugins-official": false,
     "notion-workspace-plugin@notion-plugin-marketplace": true,
-    "paper-desktop@paper": false
+    "paper-desktop@paper": false,
+    "vercel@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "notion-plugin-marketplace": {
