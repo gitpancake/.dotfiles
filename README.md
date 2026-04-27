@@ -28,6 +28,8 @@ dotfiles/
 │       ├── tmux-bell.sh              # tmux bell on Notification events
 │       └── tool-loop-warn.sh         # PostToolUse warning at 30× same-tool
 │                                     #   or 100 total calls per session
+│   # ~/.claude/org/ lives outside this repo (gitignored) — per-org
+│   # engineering context loaded at session start, never committed.
 ├── focus-guard/
 │   ├── focus-guard.sh                # Time-aware blocker: swaps /etc/hosts on a
 │   │                                 #   10-min cron, writes status page
@@ -119,6 +121,19 @@ Typical model selection:
 - **Haiku** — mechanical edits, renames, simple greps
 
 `claude/hooks/tool-loop-warn.sh` is a PostToolUse hook that fires a one-time warning per session when the same tool has been called ≥30× or total tool calls cross 100, suggesting the batch pattern or `/clear` between logical chunks.
+
+## Claude Code: Org Context
+
+`~/.claude/org/<org-name>/` holds private, per-organisation engineering standards that Claude loads automatically — never committed to this repo.
+
+```
+~/.claude/org/
+└── <org-name>/
+    ├── context.md    # Full reference: stack, norms, incident culture, team
+    └── preamble.md   # Condensed version injected into every subagent prompt
+```
+
+At session start Claude checks for a matching `org/` folder and applies it. When dispatching specialist subagents, `preamble.md` is prepended to the prompt so org standards travel with the agent. Add a new org by creating the folder — no config changes needed.
 
 ## Focus Guard
 

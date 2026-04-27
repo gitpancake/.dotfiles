@@ -22,6 +22,23 @@ Configuration, hooks, agents, and tooling for [Claude Code](https://claude.com/c
 | `hooks/` | Shell hooks invoked by Claude Code on session events (notifications, tool use, etc.). |
 | `scripts/` | Helper scripts called by hooks / commands. |
 
+## Org Context (not committed)
+
+`~/.claude/org/<org-name>/` holds private, per-organisation engineering context that Claude loads when working in that org's codebase. Never symlinked or committed — lives only on the local machine.
+
+```
+~/.claude/org/
+└── <org-name>/
+    ├── context.md    # Full reference: stack, norms, culture, team
+    └── preamble.md   # ~40-line condensed version injected into subagent prompts
+```
+
+**How it's used:**
+- At session start, Claude checks for a matching `org/` folder and loads `context.md`.
+- When dispatching a subagent, `preamble.md` is prepended to the subagent prompt so it inherits org-specific engineering standards.
+
+To add a new org, create `~/.claude/org/<name>/context.md` and `preamble.md` — no config changes needed.
+
 ## Hooks
 
 Wired in `settings.json`:

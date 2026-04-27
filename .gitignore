@@ -4,5 +4,7 @@
 *.jsonl
 projects/
 tool-results/
+# Org context — private per-org engineering standards, never committed.
+org/
 # macOS noise
 .DS_Store

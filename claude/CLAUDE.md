@@ -30,6 +30,8 @@ Dispatch these via the Agent tool (`subagent_type: "<name>"`) for focused, conte
 
 Every subagent ends its workflow by invoking the `/simplify` slash command to review its own diff before declaring done.
 
+**Org preamble injection**: When dispatching any subagent while working in a known org's codebase, read `~/.claude/org/<org>/preamble.md` and prepend its contents to the subagent prompt. This ensures subagents inherit org-specific engineering standards without requiring the full context file.
+
 ## Global Slash Commands
 
 - `/simplify` — scoped review of the current diff for reuse, clarity, efficiency, over-abstraction, dead code. Fixes issues in place.
@@ -47,6 +49,7 @@ When beginning work in any project:
 1. Read the project CLAUDE.md before writing code. If none exists, scan the repo and create one.
 2. Check OV for relevant context (project name, APIs in use).
 3. Check `git status` and branch state. For established projects, create a feature branch if starting new work.
+4. **Org context**: Check if `~/.claude/org/` has a folder matching the current project's org. If so, read its `context.md` and apply it for the session.
 
 ## Code Quality
 
