@@ -6,5 +6,8 @@ projects/
 tool-results/
 # Org context — private per-org engineering standards, never committed.
 org/
+# Machine-local secrets / overrides. The canonical file lives at ~/.zshenv.local
+# outside this repo, but this catches any *.local file dropped inside.
+*.local
 # macOS noise
 .DS_Store
