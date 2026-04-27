@@ -99,3 +99,7 @@ export PATH="$BUN_INSTALL/bin:$PATH"
 
 # Prefix any command with a space to keep it out of history
 setopt HIST_IGNORE_SPACE
+
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion

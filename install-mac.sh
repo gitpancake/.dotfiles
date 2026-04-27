@@ -24,6 +24,22 @@ else
   echo "  tmux: already installed"
 fi
 
+# zoxide
+if ! command -v zoxide &>/dev/null; then
+  echo "  Installing zoxide..."
+  brew install zoxide
+else
+  echo "  zoxide: already installed"
+fi
+
+# fzf
+if ! command -v fzf &>/dev/null; then
+  echo "  Installing fzf..."
+  brew install fzf
+else
+  echo "  fzf: already installed"
+fi
+
 # Oh My Zsh
 if [ ! -d "$HOME/.oh-my-zsh" ]; then
   echo "  Installing Oh My Zsh..."
@@ -106,7 +122,7 @@ if command -v sudo &>/dev/null; then
   mkcert -install
 
   # Runtime dirs
-  sudo mkdir -p /usr/local/var/focus/certs /usr/local/var/log
+  sudo mkdir -p /usr/local/bin /usr/local/var/focus/certs /usr/local/var/log
 
   # Scripts + commands
   for f in focus-guard.sh cert-gen.sh block unblock; do
