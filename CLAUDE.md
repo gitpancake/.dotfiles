@@ -12,6 +12,9 @@ Personal dotfiles repository for macOS and WSL2 (Ubuntu) development environment
 - `claude/statusline-command.sh` - Script powering Claude Code's bottom status line
 - `claude/CLAUDE.md` - Global instructions (thin coordination layer — workflow rules, agent routing, OV protocol)
 - `claude/commands/` - Specialized agent profiles invoked as `/backend`, `/frontend`, `/database`, `/platform`, `/fullstack`
+- `alacritty/alacritty.toml` - Alacritty config, imports a Gruvbox Material theme
+- `alacritty/themes/` - Gruvbox Material theme variants (medium dark/light, hard dark)
+- `iterm/` - Gruvbox Material iTerm2 color presets (`.itermcolors`)
 - `tmux/.tmux.conf` - tmux config with intuitive pane/window keybindings and gruvbox dark theme
 - `tmux/tmux-status.sh` - tmux status bar script showing battery, CPU, memory, disk with dynamic color-coded thresholds (green → yellow → orange → red)
 - `install.sh` - Symlink installer for Linux/WSL2 systems

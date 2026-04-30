@@ -91,6 +91,18 @@ mkdir -p ~/.tmux
 ln -sf "$DOTFILES_DIR/tmux/tmux-status.sh" ~/.tmux/tmux-status.sh
 echo "  Linked tmux config"
 
+# Alacritty
+if ! brew list --cask alacritty &>/dev/null && [ ! -d /Applications/Alacritty.app ]; then
+  echo "  Installing Alacritty..."
+  brew install --cask alacritty
+else
+  echo "  Alacritty: already installed"
+fi
+mkdir -p ~/.config/alacritty
+ln -sf "$DOTFILES_DIR/alacritty/alacritty.toml" ~/.config/alacritty/alacritty.toml
+ln -sfn "$DOTFILES_DIR/alacritty/themes" ~/.config/alacritty/themes
+echo "  Linked Alacritty config"
+
 # Claude auto-prune launchd jobs
 mkdir -p ~/Library/LaunchAgents ~/.claude/logs
 
