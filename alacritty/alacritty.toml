@@ -11,6 +11,10 @@ option_as_alt = "Both"
 
 [font]
 size = 13.0
+normal = { family = "Hack Nerd Font", style = "Regular" }
+bold = { family = "Hack Nerd Font", style = "Bold" }
+italic = { family = "Hack Nerd Font", style = "Italic" }
+bold_italic = { family = "Hack Nerd Font", style = "Bold Italic" }
 
 [scrolling]
 history = 10000

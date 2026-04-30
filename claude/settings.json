@@ -23,6 +23,15 @@
             "command": "bash ~/.claude/hooks/tool-loop-warn.sh"
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/tmux-follow.sh"
+          }
+        ]
       }
     ]
   },
@@ -48,7 +57,8 @@
     "atlassian@claude-plugins-official": false,
     "notion-workspace-plugin@notion-plugin-marketplace": true,
     "paper-desktop@paper": false,
-    "vercel@claude-plugins-official": true
+    "vercel@claude-plugins-official": true,
+    "caveman@caveman": true
   },
   "extraKnownMarketplaces": {
     "notion-plugin-marketplace": {
@@ -61,6 +71,12 @@
       "source": {
         "source": "github",
         "repo": "paper-design/agent-plugins"
+      }
+    },
+    "caveman": {
+      "source": {
+        "source": "github",
+        "repo": "JuliusBrussee/caveman"
       }
     }
   },
