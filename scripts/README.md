@@ -24,9 +24,16 @@ Press `q` or `Ctrl+C` to exit.
 ## Reactive matrix (commit-driven art installation)
 
 `matrix.py` polls `~/.local/share/art/state.json` (override via `ART_STATE_FILE`).
-When present, palette / intensity / burst / scrolling message are applied live.
+When present, palette / intensity / burst / commit log stack are applied live.
 Every running `matrix.py` reading the same state stays in sync — drop one across
 multiple tmux panes and they all wave together.
+
+The bottom of each pane renders `state.recent` as a stack of log lines:
+newest commit on the bottom row, older commits above (dimmer with age).
+Lines short enough to fit show static; long lines scroll left at ~3 chars/sec
+with a per-row stagger so rows feel like independent log streams. Each new
+commit landing on `main` pushes the stack up by one row, so the space slowly
+fills as commits accumulate.
 
 State schema:
 

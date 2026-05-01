@@ -22,6 +22,9 @@ STATE_PATH = os.environ.get(
     os.path.expanduser("~/.local/share/art/state.json"),
 )
 STATE_POLL_FRAMES = 10  # ~0.5s @ 20fps; mtime check only, cheap
+LOG_SCROLL_EVERY_FRAMES = 6  # advance ticker once per 6 frames → ~3 chars/sec
+LOG_MAX_ROWS = 8  # cap stacked log lines (state.recent ring max)
+LOG_ROW_STAGGER = 7  # per-row offset shift so rows don't move in lockstep
 
 # Half-width katakana + digits + a few latin = canonical matrix glyph pool
 GLYPHS_UNICODE = (
@@ -212,19 +215,56 @@ class MatrixRenderer:
                 attr = self._color(4) | curses.A_DIM
             self._safe_addstr(y, drop.col, ch, attr)
 
-    def _draw_message(self):
-        msg = self.state.message
-        if not msg or self.height < 3 or self.width < 10:
+    def _log_attr_for_row(self, i):
+        """Newest row brightest, older rows fade. Reverse for legibility
+        against falling glyphs."""
+        if i == 0:
+            return self._color(1, bold=True) | curses.A_REVERSE
+        if i == 1:
+            return self._color(2, bold=True) | curses.A_REVERSE
+        if i < 4:
+            return self._color(2) | curses.A_REVERSE
+        return self._color(3) | curses.A_DIM | curses.A_REVERSE
+
+    def _draw_log_stack(self):
+        """Render state.recent as a bottom-anchored stack of log lines.
+
+        Newest commit on the bottom row, older commits stacked above.
+        Lines that fit are drawn static; long lines scroll horizontally
+        at LOG_SCROLL_EVERY_FRAMES rate, with a per-row offset stagger
+        so the stack doesn't move in lockstep.
+        """
+        recent = self.state.recent
+        if not recent or self.height < 5 or self.width < 12:
             return
-        padded = msg + "   ·   "
-        offset = self.message_offset % len(padded)
-        doubled = padded + padded
-        slice_ = doubled[offset:offset + self.width]
-        y = self.height - 1
-        attr = self._color(1, bold=True) | curses.A_REVERSE
-        for x, ch in enumerate(slice_[: self.width - 1]):
-            self._safe_addstr(y, x, ch, attr)
-        self.message_offset += 1
+
+        if self.frame % LOG_SCROLL_EVERY_FRAMES == 0:
+            self.message_offset += 1
+
+        max_rows = min(len(recent), LOG_MAX_ROWS, max(1, self.height // 2))
+        for i in range(max_rows):
+            entry = recent[i]
+            sha = str(entry.get("sha", ""))[:8]
+            subject = str(entry.get("subject", ""))
+            line = f"{sha}  {subject}" if sha else subject
+            if not line:
+                continue
+
+            y = self.height - 1 - i
+            attr = self._log_attr_for_row(i)
+            usable = self.width - 1
+
+            if len(line) <= usable:
+                # Fits: draw static, left-aligned.
+                text = line
+            else:
+                padded = line + "   ·   "
+                row_offset = (self.message_offset + i * LOG_ROW_STAGGER) % len(padded)
+                doubled = padded + padded
+                text = doubled[row_offset:row_offset + usable]
+
+            for x, ch in enumerate(text[:usable]):
+                self._safe_addstr(y, x, ch, attr)
 
     def draw_frame(self):
         if self.frame % STATE_POLL_FRAMES == 0:
@@ -261,7 +301,7 @@ class MatrixRenderer:
             drop.step(speed_mult)
             self._draw_drop(drop)
 
-        self._draw_message()
+        self._draw_log_stack()
         self.stdscr.refresh()
 
     def run(self):
