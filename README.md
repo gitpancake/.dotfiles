@@ -9,7 +9,7 @@ dotfiles/
 ├── zsh/
 │   ├── .zshenv                       # Loaded by every zsh session (interactive or not)
 │   ├── .zshrc                        # Zsh config (Oh My Zsh, nvm, brew, aliases)
-│   └── robbyrussell-bar.zsh-theme    # Custom theme with time separator bar
+│   └── robbyrussell-bar.zsh-theme    # robbyrussell prompt (clock hook disabled)
 ├── tmux/
 │   ├── .tmux.conf                    # tmux config (keybindings, gruvbox dark theme)
 │   └── tmux-status.sh                # Status bar: battery, CPU, memory, disk
@@ -71,10 +71,9 @@ source ~/.zshrc
 
 ## Zsh Theme
 
-The `robbyrussell-bar` theme extends the default robbyrussell prompt with a full-width time separator:
+`robbyrussell-bar` is the stock robbyrussell prompt. The full-width time separator hook is registered but disabled — it actively unregisters on shell start so re-sourcing `.zshrc` will not re-attach a stale clock from a prior session.
 
 ```
-── ──────────────────────────────────────────────────────────────── 14:30:25 ──
 ➜ my-project git:(main) ✗
 ```
 

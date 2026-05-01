@@ -30,7 +30,9 @@ function _status_bar_precmd() {
 
 # Register precmd hook (safe for multiple sources)
 autoload -Uz add-zsh-hook
-add-zsh-hook precmd _status_bar_precmd
+# Clock removed: actively unregister in case prior session registered it
+add-zsh-hook -d precmd _status_bar_precmd 2>/dev/null
+# add-zsh-hook precmd _status_bar_precmd  # disabled
 
 # Original robbyrussell prompt (unchanged)
 PROMPT="%(?:%{$fg_bold[green]%}%1{➜%} :%{$fg_bold[red]%}%1{➜%} ) %{$fg[cyan]%}%c%{$reset_color%}"
