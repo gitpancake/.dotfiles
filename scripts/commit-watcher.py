@@ -36,6 +36,7 @@ State schema (written atomically):
 }
 """
 
+import fcntl
 import json
 import os
 import subprocess
@@ -51,11 +52,36 @@ DEFAULT_STATE_PATH = os.environ.get(
     "ART_STATE_FILE",
     os.path.expanduser("~/.local/share/art/state.json"),
 )
+LOCK_PATH = os.path.expanduser("~/.local/share/art/commit-watcher.lock")
 DESCRIBER_CACHE_DIR = os.path.expanduser("~/.local/share/art/describer-cache")
 RECENT_RING_SIZE = 8
 INTENSITY_BASELINE = 1.0
 INTENSITY_DECAY_PER_TICK = 0.05
 LOC_INTENSITY_SCALE = 200.0  # LOC delta that maps to +1.0 intensity bump
+
+
+def acquire_singleton_lock():
+    """Hold an exclusive flock on LOCK_PATH for process lifetime.
+
+    If another watcher already holds the lock, exit cleanly (rather than
+    error) so callers like the zsh `art matrix` wrapper can blindly spawn
+    without checking pgrep first.
+
+    Returns the open file handle — caller must keep a reference to it so
+    the OS doesn't close it and release the lock.
+    """
+    Path(os.path.dirname(LOCK_PATH)).mkdir(parents=True, exist_ok=True)
+    f = open(LOCK_PATH, "w")
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        sys.stderr.write(
+            f"commit-watcher: another instance holds {LOCK_PATH}, exiting\n"
+        )
+        sys.exit(0)
+    f.write(f"{os.getpid()}\n")
+    f.flush()
+    return f
 
 
 def load_config(path):
@@ -250,6 +276,9 @@ def process_commit(sha, ctx, recent):
 
 
 def main():
+    # Hold for process lifetime; assigning to a name keeps the FD alive.
+    _lock_fd = acquire_singleton_lock()  # noqa: F841
+
     config_path = DEFAULT_CONFIG_PATH
     if len(sys.argv) > 1:
         config_path = sys.argv[1]
