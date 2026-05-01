@@ -1,13 +1,27 @@
 #!/usr/bin/env python3
-"""Animated ASCII matrix digital rain — falling green glyph streams."""
+"""Animated ASCII matrix digital rain — falling green glyph streams.
+
+Optionally reactive to a shared state file at $ART_STATE_FILE
+(default: ~/.local/share/art/state.json). When present, palette,
+intensity, burst, and an optional scrolling message are applied live.
+All running matrix.py instances reading the same state stay in sync.
+"""
 
 import curses
+import json
+import os
 import random
 import sys
 import time
 
 TARGET_FPS = 20
 FRAME_TIME = 1.0 / TARGET_FPS
+
+STATE_PATH = os.environ.get(
+    "ART_STATE_FILE",
+    os.path.expanduser("~/.local/share/art/state.json"),
+)
+STATE_POLL_FRAMES = 10  # ~0.5s @ 20fps; mtime check only, cheap
 
 # Half-width katakana + digits + a few latin = canonical matrix glyph pool
 GLYPHS_UNICODE = (
@@ -16,6 +30,20 @@ GLYPHS_UNICODE = (
     "Z:・.=*+-<>¦"
 )
 GLYPHS_ASCII = "0123456789ABCDEF:.*+-<>|/\\"
+
+
+def _palettes():
+    """Built lazily so curses constants are available."""
+    return {
+        "green":   (curses.COLOR_WHITE, curses.COLOR_GREEN,   curses.COLOR_GREEN,   curses.COLOR_BLUE),
+        "amber":   (curses.COLOR_WHITE, curses.COLOR_YELLOW,  curses.COLOR_YELLOW,  curses.COLOR_RED),
+        "magenta": (curses.COLOR_WHITE, curses.COLOR_MAGENTA, curses.COLOR_MAGENTA, curses.COLOR_BLUE),
+        "cyan":    (curses.COLOR_WHITE, curses.COLOR_CYAN,    curses.COLOR_CYAN,    curses.COLOR_BLUE),
+        "red":     (curses.COLOR_WHITE, curses.COLOR_RED,     curses.COLOR_RED,     curses.COLOR_YELLOW),
+    }
+
+
+DEFAULT_PALETTE = "green"
 
 
 class Drop:
@@ -28,15 +56,72 @@ class Drop:
     def reset(self, initial=False):
         self.length = random.randint(6, 18)
         self.speed = random.uniform(0.4, 1.4)  # rows per frame
-        # Initial stagger so streams don't all start at top simultaneously
         self.head = -random.randint(0, self.height) if initial else -random.randint(0, 6)
         self.chars = [random.randrange(1 << 30) for _ in range(self.length)]
         self.alive = True
 
-    def step(self):
-        self.head += self.speed
+    def step(self, speed_mult=1.0):
+        self.head += self.speed * speed_mult
         if self.head - self.length > self.height:
             self.alive = False
+
+
+class StateReader:
+    """Polls JSON state file. Burst decays exponentially from burst_ts so
+    a single commit produces a visible wave that fades over ~5s without
+    requiring the watcher to keep writing.
+    """
+
+    BURST_HALFLIFE_S = 2.5
+
+    def __init__(self, path):
+        self.path = path
+        self.last_mtime = 0.0
+        self.palette = DEFAULT_PALETTE
+        self.intensity = 1.0
+        self.burst_ts = 0.0
+        self.message = ""
+        self.recent = []
+        self._dirty = True
+
+    def poll(self):
+        try:
+            mtime = os.path.getmtime(self.path)
+        except OSError:
+            return
+        if mtime == self.last_mtime:
+            return
+        self.last_mtime = mtime
+        try:
+            with open(self.path, "r") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return
+
+        new_palette = data.get("palette", DEFAULT_PALETTE)
+        if new_palette not in _palettes():
+            new_palette = DEFAULT_PALETTE
+        if new_palette != self.palette:
+            self.palette = new_palette
+            self._dirty = True
+
+        self.intensity = float(data.get("intensity", 1.0))
+        self.burst_ts = float(data.get("burst_ts", 0.0))
+        self.message = str(data.get("message", ""))[:500]
+        self.recent = data.get("recent", [])[:8]
+
+    def burst_factor(self):
+        if self.burst_ts <= 0:
+            return 1.0
+        age = time.time() - self.burst_ts
+        if age < 0 or age > 30:
+            return 1.0
+        return 1.0 + 1.5 * (0.5 ** (age / self.BURST_HALFLIFE_S))
+
+    def consume_dirty(self):
+        d = self._dirty
+        self._dirty = False
+        return d
 
 
 class MatrixRenderer:
@@ -47,26 +132,30 @@ class MatrixRenderer:
         self.drops = []
         self.last_width = 0
         self.last_height = 0
+        self.state = StateReader(STATE_PATH)
+        self.message_offset = 0
 
         curses.curs_set(0)
         stdscr.nodelay(True)
         stdscr.timeout(0)
 
-        self._setup_colors()
+        self.has_color = curses.has_colors()
+        if self.has_color:
+            curses.start_color()
+            curses.use_default_colors()
+        self._apply_palette()
         self._check_unicode()
         self._update_size()
         self._populate()
 
-    def _setup_colors(self):
-        self.has_color = curses.has_colors()
+    def _apply_palette(self):
         if not self.has_color:
             return
-        curses.start_color()
-        curses.use_default_colors()
-        curses.init_pair(1, curses.COLOR_WHITE, -1)   # head
-        curses.init_pair(2, curses.COLOR_GREEN, -1)   # bright trail
-        curses.init_pair(3, curses.COLOR_GREEN, -1)   # mid trail (dim via attr)
-        curses.init_pair(4, curses.COLOR_BLUE, -1)    # tail fade
+        head, bright, mid, tail = _palettes()[self.state.palette]
+        curses.init_pair(1, head, -1)
+        curses.init_pair(2, bright, -1)
+        curses.init_pair(3, mid, -1)
+        curses.init_pair(4, tail, -1)
 
     def _check_unicode(self):
         try:
@@ -99,20 +188,9 @@ class MatrixRenderer:
             except curses.error:
                 pass
 
-    def _mutate_chars(self, drop):
-        """Randomly flip glyphs in the trail to create the shimmer effect.
-
-        Each glyph in the drop's trail can mutate to a new random value
-        between frames. Mutation rate controls the visual feel.
-        """
-        # TODO: implement glyph mutation — modify drop.chars in place
-        # Available: drop.chars (list of int seeds), drop.length
-        # Approaches to consider:
-        #   - Uniform low rate    → each char ~3% chance per frame, calm shimmer
-        #   - Head-biased         → head mutates often, tail rarely (info "decays")
-        #   - Burst               → 0% most frames, occasional full reroll, glitchy
+    def _mutate_chars(self, drop, mutation_rate):
         for i in range(drop.length):
-            if random.random() < 0.05:
+            if random.random() < mutation_rate:
                 drop.chars[i] = random.randrange(1 << 30)
 
     def _draw_drop(self, drop):
@@ -123,18 +201,37 @@ class MatrixRenderer:
                 continue
             ch = self._glyph(drop.chars[i])
             if i == 0:
-                attr = self._color(1, bold=True)              # white head
+                attr = self._color(1, bold=True)
             elif i < 2:
-                attr = self._color(2, bold=True)              # bright green
+                attr = self._color(2, bold=True)
             elif i < drop.length * 0.6:
-                attr = self._color(2)                         # green
+                attr = self._color(2)
             elif i < drop.length * 0.85:
-                attr = self._color(3) | curses.A_DIM          # dim green
+                attr = self._color(3) | curses.A_DIM
             else:
-                attr = self._color(4) | curses.A_DIM          # blue fade
+                attr = self._color(4) | curses.A_DIM
             self._safe_addstr(y, drop.col, ch, attr)
 
+    def _draw_message(self):
+        msg = self.state.message
+        if not msg or self.height < 3 or self.width < 10:
+            return
+        padded = msg + "   ·   "
+        offset = self.message_offset % len(padded)
+        doubled = padded + padded
+        slice_ = doubled[offset:offset + self.width]
+        y = self.height - 1
+        attr = self._color(1, bold=True) | curses.A_REVERSE
+        for x, ch in enumerate(slice_[: self.width - 1]):
+            self._safe_addstr(y, x, ch, attr)
+        self.message_offset += 1
+
     def draw_frame(self):
+        if self.frame % STATE_POLL_FRAMES == 0:
+            self.state.poll()
+            if self.state.consume_dirty():
+                self._apply_palette()
+
         self.stdscr.erase()
         self._update_size()
 
@@ -150,15 +247,21 @@ class MatrixRenderer:
                 pass
             return
 
+        speed_mult = self.state.burst_factor()
+        intensity = max(0.2, min(3.0, self.state.intensity * speed_mult))
+        respawn_rate = 0.04 * intensity
+        mutation_rate = 0.05 * intensity
+
         for drop in self.drops:
             if not drop.alive:
-                if random.random() < 0.04:
+                if random.random() < respawn_rate:
                     drop.reset()
                 continue
-            self._mutate_chars(drop)
-            drop.step()
+            self._mutate_chars(drop, mutation_rate)
+            drop.step(speed_mult)
             self._draw_drop(drop)
 
+        self._draw_message()
         self.stdscr.refresh()
 
     def run(self):

@@ -1,0 +1,15 @@
+{
+  "repo_path": "~/code/your-repo",
+  "branch": "main",
+  "remote": "origin",
+  "poll_seconds": 30,
+  "describer_enabled": false,
+  "describer_model": "claude-haiku-4-5-20251001",
+  "path_palette_rules": [
+    {"prefix": "src/server/", "palette": "green"},
+    {"prefix": "src/app/",    "palette": "magenta"},
+    {"prefix": "src/schemas/", "palette": "amber"},
+    {"prefix": "infrastructure/", "palette": "red"},
+    {"prefix": "", "palette": "cyan"}
+  ]
+}
