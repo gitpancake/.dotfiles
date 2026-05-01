@@ -59,15 +59,28 @@ alias reload="source ~/.zshrc"
 alias ll="ls -la"
 alias cdsp="claude --dangerously-skip-permissions"
 unalias art 2>/dev/null
+# Idempotently start the commit-watcher daemon so reactive matrix panes
+# pick up new merges to main. No-op if config is missing or watcher is
+# already running. Logs go to /tmp/commit-watcher.log.
+_art_ensure_commit_watcher() {
+  local watcher="$HOME/.dotfiles/scripts/commit-watcher.py"
+  local config="$HOME/.dotfiles/scripts/commit-watcher.config.local"
+  [[ -f "$watcher" && -f "$config" ]] || return 0
+  pgrep -f "commit-watcher.py" >/dev/null 2>&1 && return 0
+  nohup python3 "$watcher" > /tmp/commit-watcher.log 2>&1 &
+  disown
+  echo "art: commit-watcher started (pid $!) → /tmp/commit-watcher.log"
+}
 art() {
   local name="${1:-hologram}"
   local script="$HOME/.local/share/art/${name}.py"
-  if [[ -f "$script" ]]; then
-    python3 "$script"
-  else
+  if [[ ! -f "$script" ]]; then
     echo "Unknown art: $name"
     echo "Available: $(ls ~/.local/share/art/*.py 2>/dev/null | xargs -n1 basename | sed 's/\.py$//' | tr '\n' ' ')"
+    return 1
   fi
+  [[ "$name" == "matrix" ]] && _art_ensure_commit_watcher
+  python3 "$script"
 }
 
 # Homebrew configuration (load first)
