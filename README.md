@@ -43,7 +43,8 @@ dotfiles/
 │   └── local.focus-nginx.plist         # launchd: keeps nginx alive on 80 + 443
 ├── scripts/
 │   ├── city.py                       # Animated ASCII night city skyline
-│   └── hologram.py                   # Animated 3D wireframe cube
+│   ├── hologram.py                   # Animated 3D wireframe cube
+│   └── matrix.py                     # Falling green glyph rain (matrix)
 ├── install.sh                        # Symlink installer (Linux/WSL2)
 ├── install-mac.sh                    # Symlink installer (macOS)
 └── README.md
