@@ -90,6 +90,18 @@ def head_sha(repo_path, remote, branch):
     return run_git(repo_path, "rev-parse", f"{remote}/{branch}")
 
 
+def commits_since(repo_path, remote, branch, minutes):
+    """Returns list of SHAs on remote/branch from oldest→newest within window."""
+    out = run_git(
+        repo_path, "log", f"{remote}/{branch}",
+        f"--since={minutes} minutes ago",
+        "--format=%H", "--reverse",
+    )
+    if not out:
+        return []
+    return [line.strip() for line in out.splitlines() if line.strip()]
+
+
 def commit_subject(repo_path, sha):
     return run_git(repo_path, "log", "-1", "--format=%s", sha) or ""
 
@@ -199,6 +211,44 @@ def load_existing_state(path):
         return {}
 
 
+def process_commit(sha, ctx, recent):
+    """Build state for a single commit and write it. Returns updated recent ring.
+
+    ctx: dict carrying repo_path, rules, describer_*, state_path.
+    """
+    subject = commit_subject(ctx["repo_path"], sha)
+    files = commit_files(ctx["repo_path"], sha)
+    loc_delta = commit_loc_delta(ctx["repo_path"], sha)
+    palette = palette_for_files(files, ctx["rules"])
+    message = subject
+    if ctx["describer_enabled"]:
+        message = describe_commit(
+            sha, subject, files, loc_delta, ctx["describer_model"],
+        )
+
+    intensity = min(3.0, INTENSITY_BASELINE + loc_delta / LOC_INTENSITY_SCALE)
+    now = time.time()
+    recent_entry = {"sha": sha[:8], "palette": palette, "subject": subject}
+    deduped = [r for r in recent if r.get("sha") != sha[:8]]
+    recent = ([recent_entry] + deduped)[:RECENT_RING_SIZE]
+
+    atomic_write_json(ctx["state_path"], {
+        "sha": sha,
+        "ts": now,
+        "burst_ts": now,
+        "intensity": intensity,
+        "palette": palette,
+        "message": message,
+        "files_touched": files,
+        "recent": recent,
+    })
+    sys.stderr.write(
+        f"commit-watcher: {sha[:8]} [{palette}] "
+        f"intensity={intensity:.2f} loc={loc_delta} — {subject[:60]}\n"
+    )
+    return recent, intensity
+
+
 def main():
     config_path = DEFAULT_CONFIG_PATH
     if len(sys.argv) > 1:
@@ -209,6 +259,8 @@ def main():
     branch = config.get("branch", "main")
     remote = config.get("remote", "origin")
     poll_seconds = int(config.get("poll_seconds", 30))
+    backfill_minutes = int(config.get("backfill_minutes", 30))
+    backfill_stagger_ms = int(config.get("backfill_stagger_ms", 1500))
     describer_enabled = bool(config.get("describer_enabled", False))
     describer_model = config.get("describer_model", "claude-haiku-4-5-20251001")
     rules = config.get("path_palette_rules", [{"prefix": "", "palette": "green"}])
@@ -219,52 +271,57 @@ def main():
         sys.exit(1)
 
     state = load_existing_state(state_path)
-    last_sha = state.get("sha")
     recent = state.get("recent", [])
     intensity = state.get("intensity", INTENSITY_BASELINE)
+
+    ctx = {
+        "repo_path": repo_path,
+        "rules": rules,
+        "describer_enabled": describer_enabled,
+        "describer_model": describer_model,
+        "state_path": state_path,
+    }
 
     sys.stderr.write(
         f"commit-watcher: watching {repo_path} {remote}/{branch} "
         f"every {poll_seconds}s → {state_path}\n"
     )
 
+    # Initial fetch so backfill sees latest remote state.
+    fetch(repo_path, remote)
+
+    # Backfill: replay commits from the last N minutes oldest→newest with a
+    # small stagger so panes show a visible ripple of recent history on boot.
+    backfill_shas = commits_since(repo_path, remote, branch, backfill_minutes)
+    if backfill_shas:
+        sys.stderr.write(
+            f"commit-watcher: backfilling {len(backfill_shas)} commits "
+            f"from last {backfill_minutes}min\n"
+        )
+        for sha in backfill_shas:
+            recent, intensity = process_commit(sha, ctx, recent)
+            time.sleep(backfill_stagger_ms / 1000.0)
+        last_sha = backfill_shas[-1]
+    else:
+        # Nothing in the window; seed palette/recent from current HEAD so the
+        # boot state isn't blank.
+        head = head_sha(repo_path, remote, branch)
+        if head:
+            sys.stderr.write(
+                f"commit-watcher: no commits in last {backfill_minutes}min; "
+                f"seeding from HEAD {head[:8]}\n"
+            )
+            recent, intensity = process_commit(head, ctx, recent)
+            last_sha = head
+        else:
+            last_sha = state.get("sha")
+
     while True:
         fetch(repo_path, remote)
         current = head_sha(repo_path, remote, branch)
 
         if current and current != last_sha:
-            subject = commit_subject(repo_path, current)
-            files = commit_files(repo_path, current)
-            loc_delta = commit_loc_delta(repo_path, current)
-            palette = palette_for_files(files, rules)
-            message = subject
-            if describer_enabled:
-                message = describe_commit(
-                    current, subject, files, loc_delta, describer_model,
-                )
-
-            intensity = min(
-                3.0,
-                INTENSITY_BASELINE + loc_delta / LOC_INTENSITY_SCALE,
-            )
-            now = time.time()
-            recent_entry = {"sha": current[:8], "palette": palette, "subject": subject}
-            recent = ([recent_entry] + recent)[:RECENT_RING_SIZE]
-
-            atomic_write_json(state_path, {
-                "sha": current,
-                "ts": now,
-                "burst_ts": now,
-                "intensity": intensity,
-                "palette": palette,
-                "message": message,
-                "files_touched": files,
-                "recent": recent,
-            })
-            sys.stderr.write(
-                f"commit-watcher: {current[:8]} [{palette}] "
-                f"intensity={intensity:.2f} loc={loc_delta} — {subject[:60]}\n"
-            )
+            recent, intensity = process_commit(current, ctx, recent)
             last_sha = current
 
         else:

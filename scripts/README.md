@@ -49,6 +49,12 @@ Driver process. Polls a remote, computes palette from changed file paths,
 LOC delta → intensity, optionally calls the Anthropic API for a poetic
 1-line description.
 
+On boot, replays commits from the last `backfill_minutes` (default 30)
+oldest→newest with a `backfill_stagger_ms` delay between each, so panes
+show a visible ripple of recent history immediately instead of waiting
+for the next push. If the window is empty, seeds from `HEAD` so the
+initial palette/message reflect current truth.
+
 Config lives at `~/.dotfiles/scripts/commit-watcher.config.local`
 (gitignored — copy `commit-watcher.config.example.json` and edit).
 
