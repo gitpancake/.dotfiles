@@ -156,10 +156,13 @@ class WatchRenderer:
         stdscr.timeout(0)
 
         self.has_color = curses.has_colors()
-        self.color_count = curses.COLORS if self.has_color else 0
+        self.color_count = 0
         if self.has_color:
             curses.start_color()
             curses.use_default_colors()
+            # COLORS is only populated after start_color(); guard with
+            # getattr because some terminals expose it only conditionally.
+            self.color_count = getattr(curses, "COLORS", 8)
             self._init_colors()
         self._check_unicode()
         self._update_size()
