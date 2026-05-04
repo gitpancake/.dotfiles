@@ -62,7 +62,7 @@ unalias art 2>/dev/null
 # Idempotently start the commit-watcher daemon so reactive matrix panes
 # pick up new merges to main. No-op if config is missing or watcher is
 # already running. Logs go to /tmp/commit-watcher.log.
-_art_ensure_commit_watcher() {
+art_ensure_commit_watcher() {
   local watcher="$HOME/.dotfiles/scripts/commit-watcher.py"
   local config="$HOME/.dotfiles/scripts/commit-watcher.config.local"
   [[ -f "$watcher" && -f "$config" ]] || return 0
@@ -79,7 +79,7 @@ art() {
     echo "Available: $(ls ~/.local/share/art/*.py 2>/dev/null | xargs -n1 basename | sed 's/\.py$//' | tr '\n' ' ')"
     return 1
   fi
-  [[ "$name" == "matrix" ]] && _art_ensure_commit_watcher
+  [[ "$name" == "matrix" ]] && art_ensure_commit_watcher
   python3 "$script"
 }
 
