@@ -79,9 +79,20 @@ def acquire_singleton_lock():
             f"commit-watcher: another instance holds {LOCK_PATH}, exiting\n"
         )
         sys.exit(0)
-    f.write(f"{os.getpid()}\n")
-    f.flush()
     return f
+
+
+def write_lock_metadata(lock_fd, repo_path):
+    """Write pid<TAB>repo_path to the lock file.
+
+    The zsh `art matrix` wrapper reads this to decide whether the running
+    watcher is on the right repo. If it's on a different repo, the wrapper
+    kills it and spawns a new one rooted at the current cwd.
+    """
+    lock_fd.seek(0)
+    lock_fd.truncate()
+    lock_fd.write(f"{os.getpid()}\t{repo_path}\n")
+    lock_fd.flush()
 
 
 def load_config(path):
@@ -277,14 +288,20 @@ def process_commit(sha, ctx, recent):
 
 def main():
     # Hold for process lifetime; assigning to a name keeps the FD alive.
-    _lock_fd = acquire_singleton_lock()  # noqa: F841
+    lock_fd = acquire_singleton_lock()
 
     config_path = DEFAULT_CONFIG_PATH
     if len(sys.argv) > 1:
         config_path = sys.argv[1]
     config = load_config(config_path)
 
-    repo_path = os.path.expanduser(config["repo_path"])
+    # Repo precedence: COMMIT_WATCHER_REPO env var > config "repo_path".
+    # The zsh wrapper sets the env var to the repo containing $PWD, so
+    # `art matrix` watches whatever repo you ran it from. Config acts as
+    # a fallback for cases where the watcher is started outside any repo.
+    repo_override = os.environ.get("COMMIT_WATCHER_REPO", "").strip()
+    repo_path = os.path.expanduser(repo_override or config["repo_path"])
+
     branch = config.get("branch", "main")
     remote = config.get("remote", "origin")
     poll_seconds = int(config.get("poll_seconds", 30))
@@ -298,6 +315,8 @@ def main():
     if not os.path.isdir(os.path.join(repo_path, ".git")):
         sys.stderr.write(f"commit-watcher: not a git repo: {repo_path}\n")
         sys.exit(1)
+
+    write_lock_metadata(lock_fd, repo_path)
 
     state = load_existing_state(state_path)
     recent = state.get("recent", [])

@@ -59,17 +59,45 @@ alias reload="source ~/.zshrc"
 alias ll="ls -la"
 alias cdsp="claude --dangerously-skip-permissions"
 unalias art 2>/dev/null
-# Idempotently start the commit-watcher daemon so reactive matrix panes
-# pick up new merges to main. No-op if config is missing or watcher is
-# already running. Logs go to /tmp/commit-watcher.log.
+# Start (or hand off) the commit-watcher daemon so reactive matrix panes
+# pick up new merges to the current repo's main branch. The watcher is a
+# global singleton, but the repo it watches is dynamic: it follows the
+# repo containing $PWD. If a watcher is already running on a different
+# repo, we kill it and start one on this repo.
+#
+# No-op if the watcher script or config is missing. Logs go to
+# /tmp/commit-watcher.log.
 art_ensure_commit_watcher() {
   local watcher="$HOME/.dotfiles/scripts/commit-watcher.py"
   local config="$HOME/.dotfiles/scripts/commit-watcher.config.local"
   [[ -f "$watcher" && -f "$config" ]] || return 0
-  pgrep -f "commit-watcher.py" >/dev/null 2>&1 && return 0
-  nohup python3 "$watcher" > /tmp/commit-watcher.log 2>&1 &
+
+  local lock="$HOME/.local/share/art/commit-watcher.lock"
+  local repo
+  repo=$(git rev-parse --show-toplevel 2>/dev/null)
+
+  if [[ -f "$lock" ]]; then
+    local existing_pid existing_repo
+    IFS=$'\t' read -r existing_pid existing_repo < "$lock"
+    if [[ -n "$existing_pid" ]] && \
+       ps -p "$existing_pid" -o command= 2>/dev/null | grep -q commit-watcher.py; then
+      if [[ -z "$repo" || "$existing_repo" == "$repo" ]]; then
+        return 0
+      fi
+      kill "$existing_pid" 2>/dev/null
+      # Wait briefly for flock release; cap to ~1s.
+      local i=0
+      while (( i < 10 )) && ps -p "$existing_pid" >/dev/null 2>&1; do
+        sleep 0.1
+        (( i++ ))
+      done
+      echo "art: commit-watcher repo handoff: $existing_repo → ${repo:-config-default}"
+    fi
+  fi
+
+  COMMIT_WATCHER_REPO="$repo" nohup python3 "$watcher" > /tmp/commit-watcher.log 2>&1 &
   disown
-  echo "art: commit-watcher started (pid $!) → /tmp/commit-watcher.log"
+  echo "art: commit-watcher started (pid $!) repo=${repo:-config-default}"
 }
 art() {
   local name="${1:-hologram}"
