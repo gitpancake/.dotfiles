@@ -28,9 +28,9 @@ STATE_PATH = os.environ.get(
 )
 STATE_POLL_FRAMES = 10  # ~0.5s @ 20fps; mtime-only check, cheap
 
-BREATH_PERIOD_S = 6.0       # resting breath cadence
+BREATH_PERIOD_S = 12.0      # resting breath cadence — slow inhale/exhale
 DENSITY_BASELINE = 0.045    # fraction of cells active at breath peak, baseline intensity
-MAX_AGE = 22                # frames a cell stays visible before retirement
+MAX_AGE = 26                # frames a cell stays visible before retirement
 LOG_MAX_ROWS = 6
 LOG_SCROLL_EVERY_FRAMES = 8
 
@@ -246,21 +246,21 @@ class WatchRenderer:
         gruvbox gradient. Heads use the state's accent; older cells fall
         through neutral grays.
         """
-        if age <= 0:
-            return head_key
         if age <= 1:
-            return body_key
+            return head_key
         if age <= 3:
+            return body_key
+        if age <= 7:
+            return "bright"
+        if age <= 12:
             return "cream"
-        if age <= 6:
+        if age <= 16:
             return "soft"
-        if age <= 10:
+        if age <= 20:
             return "warm"
-        if age <= 14:
+        if age <= 23:
             return "mid"
-        if age <= 18:
-            return "fade"
-        return "ghost"
+        return "fade"
 
     def _attr_for(self, color_key):
         if not self.has_color:
@@ -285,7 +285,7 @@ class WatchRenderer:
         probability so the field gently inhales and exhales.
         """
         phase = (time.monotonic() - self.start_t) / BREATH_PERIOD_S
-        return 0.35 + 0.65 * (math.sin(phase * 2.0 * math.pi) + 1.0) / 2.0
+        return 0.5 + 0.5 * (math.sin(phase * 2.0 * math.pi) + 1.0) / 2.0
 
     def _spawn(self, count, head_key, body_key):
         """Add up to `count` new cells at random unoccupied positions.
