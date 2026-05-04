@@ -59,11 +59,11 @@ alias reload="source ~/.zshrc"
 alias ll="ls -la"
 alias cdsp="claude --dangerously-skip-permissions"
 unalias art 2>/dev/null
-# Start (or hand off) the commit-watcher daemon so reactive matrix panes
-# pick up new merges to the current repo's main branch. The watcher is a
-# global singleton, but the repo it watches is dynamic: it follows the
-# repo containing $PWD. If a watcher is already running on a different
-# repo, we kill it and start one on this repo.
+# Start (or hand off) the commit-watcher daemon so reactive `art watch`
+# panes pick up new merges to the current repo's main branch. The
+# watcher is a global singleton, but the repo it watches is dynamic: it
+# follows the repo containing $PWD. If a watcher is already running on
+# a different repo, we kill it and start one on this repo.
 #
 # No-op if the watcher script or config is missing. Logs go to
 # /tmp/commit-watcher.log.
@@ -107,7 +107,7 @@ art() {
     echo "Available: $(ls ~/.local/share/art/*.py 2>/dev/null | xargs -n1 basename | sed 's/\.py$//' | tr '\n' ' ')"
     return 1
   fi
-  [[ "$name" == "matrix" ]] && art_ensure_commit_watcher
+  [[ "$name" == "watch" ]] && art_ensure_commit_watcher
   python3 "$script"
 }
 

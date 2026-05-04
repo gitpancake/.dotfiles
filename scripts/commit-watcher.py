@@ -4,7 +4,7 @@
 Reads config from $ART_WATCHER_CONFIG (default:
 ~/.dotfiles/scripts/commit-watcher.config.local — gitignored).
 Writes shared state to $ART_STATE_FILE (default:
-~/.local/share/art/state.json), which matrix.py polls.
+~/.local/share/art/state.json), which watch.py polls.
 
 Config schema (JSON):
 {
@@ -85,7 +85,7 @@ def acquire_singleton_lock():
 def write_lock_metadata(lock_fd, repo_path):
     """Write pid<TAB>repo_path to the lock file.
 
-    The zsh `art matrix` wrapper reads this to decide whether the running
+    The zsh `art watch` wrapper reads this to decide whether the running
     watcher is on the right repo. If it's on a different repo, the wrapper
     kills it and spawns a new one rooted at the current cwd.
     """
@@ -297,7 +297,7 @@ def main():
 
     # Repo precedence: COMMIT_WATCHER_REPO env var > config "repo_path".
     # The zsh wrapper sets the env var to the repo containing $PWD, so
-    # `art matrix` watches whatever repo you ran it from. Config acts as
+    # `art watch` watches whatever repo you ran it from. Config acts as
     # a fallback for cases where the watcher is started outside any repo.
     repo_override = os.environ.get("COMMIT_WATCHER_REPO", "").strip()
     repo_path = os.path.expanduser(repo_override or config["repo_path"])
