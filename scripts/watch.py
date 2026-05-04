@@ -28,7 +28,7 @@ STATE_PATH = os.environ.get(
 )
 STATE_POLL_FRAMES = 10  # ~0.5s @ 20fps; mtime-only check, cheap
 
-BREATH_PERIOD_S = 12.0      # resting breath cadence — slow inhale/exhale
+BREATH_PERIOD_S = 60.0      # very slow inhale/exhale — meditative cadence
 DENSITY_BASELINE = 0.045    # fraction of cells active at breath peak, baseline intensity
 MAX_AGE = 26                # frames a cell stays visible before retirement
 LOG_MAX_ROWS = 6
