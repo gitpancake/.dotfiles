@@ -28,9 +28,10 @@ STATE_PATH = os.environ.get(
 )
 STATE_POLL_FRAMES = 10  # ~0.5s @ 20fps; mtime-only check, cheap
 
-BREATH_PERIOD_S = 180.0     # very slow inhale/exhale — deep meditative cadence
-DENSITY_BASELINE = 0.045    # fraction of cells active at breath peak, baseline intensity
-MAX_AGE = 26                # frames a cell stays visible before retirement
+BREATH_PERIOD_S = 180.0       # very slow inhale/exhale — deep meditative cadence
+DENSITY_CAP = 0.030           # max fraction of cells alive at any moment
+MAX_AGE = 240                 # frames a cell stays visible before retirement (12s @ 20fps)
+BASE_SPAWNS_PER_SECOND = 4.0  # neutral spawn rate, scaled by intensity and breath
 LOG_MAX_ROWS = 6
 LOG_SCROLL_EVERY_FRAMES = 8
 
@@ -150,6 +151,7 @@ class WatchRenderer:
         self.use_unicode = True
         self.start_t = time.monotonic()
         self.message_offset = 0
+        self.spawn_budget = 0.0
 
         curses.curs_set(0)
         stdscr.nodelay(True)
@@ -223,14 +225,17 @@ class WatchRenderer:
         for y in range(self.height):
             for x in range(self.width):
                 d = math.hypot(x - cx, (y - cy) * 2.0) / max_dist
+                # Boost stored as fraction of MAX_AGE so it stays visible
+                # at any MAX_AGE setting; outer ring jumps cells ~15% of
+                # the way through the gradient.
                 if d < 0.45:
-                    boost = 0
+                    boost = 0.0
                 elif d < 0.70:
-                    boost = 1
+                    boost = 0.05
                 elif d < 0.88:
-                    boost = 2
+                    boost = 0.10
                 else:
-                    boost = 3
+                    boost = 0.15
                 self.vignette[(y, x)] = boost
 
     # ------------------------------------------------------------------
@@ -241,24 +246,25 @@ class WatchRenderer:
         pool = GLYPHS_UNICODE if self.use_unicode else GLYPHS_ASCII
         return pool[random.randrange(len(pool))]
 
-    def _color_key_for_age(self, age, head_key, body_key):
-        """Map an effective age (cell age + vignette boost) onto the
+    def _color_key_for_pct(self, pct, head_key, body_key):
+        """Map an age fraction (0..1, with vignette boost added) onto the
         gruvbox gradient. Heads use the state's accent; older cells fall
-        through neutral grays.
+        through neutral grays. Percentage-based so the gradient holds
+        shape at any MAX_AGE.
         """
-        if age <= 1:
+        if pct <= 0.04:
             return head_key
-        if age <= 3:
+        if pct <= 0.12:
             return body_key
-        if age <= 7:
+        if pct <= 0.28:
             return "bright"
-        if age <= 12:
+        if pct <= 0.48:
             return "cream"
-        if age <= 16:
+        if pct <= 0.64:
             return "soft"
-        if age <= 20:
+        if pct <= 0.78:
             return "warm"
-        if age <= 23:
+        if pct <= 0.90:
             return "mid"
         return "fade"
 
@@ -320,9 +326,10 @@ class WatchRenderer:
                 retired.append(pos)
                 continue
             y, x = pos
-            boost = self.vignette.get(pos, 0)
+            boost = self.vignette.get(pos, 0.0)
             head_key, body_key = cell[2]
-            color_key = self._color_key_for_age(age + boost, head_key, body_key)
+            pct = min(1.0, age / MAX_AGE + boost)
+            color_key = self._color_key_for_pct(pct, head_key, body_key)
             self._safe_addstr(y, x, cell[1], self._attr_for(color_key))
         for pos in retired:
             del self.cells[pos]
@@ -381,14 +388,20 @@ class WatchRenderer:
         burst = self.state.burst_factor()
         intensity = max(0.5, min(3.0, self.state.intensity * burst))
         breath = self._breath_factor()
-        target_density = DENSITY_BASELINE * intensity * breath
-        usable_cells = self.width * self.height
-        target_count = int(target_density * usable_cells)
-        # Spawn at most a small fraction of the deficit per frame so growth
-        # is gradual; prevents jarring pop-in when intensity jumps.
-        deficit = max(0, target_count - len(self.cells))
-        spawns = min(deficit, max(1, target_count // 12))
-        self._spawn(spawns, head_key, body_key)
+
+        # Rate-limited spawning: float accumulator integrates a target
+        # rate (spawns/second), independent of how many cells are alive
+        # or have just retired. Combined with long MAX_AGE this is what
+        # makes individual glyphs feel slow rather than flickery.
+        rate_per_frame = (BASE_SPAWNS_PER_SECOND / TARGET_FPS) * intensity * breath
+        self.spawn_budget += rate_per_frame
+        spawns_due = int(self.spawn_budget)
+        if spawns_due > 0:
+            self.spawn_budget -= spawns_due
+            cap = int(DENSITY_CAP * self.width * self.height)
+            headroom = max(0, cap - len(self.cells))
+            self._spawn(min(spawns_due, headroom), head_key, body_key)
+
         self._draw_cells()
         self._draw_log_stack()
         self.stdscr.refresh()
