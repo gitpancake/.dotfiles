@@ -40,6 +40,14 @@ else
   echo "  fzf: already installed"
 fi
 
+# glow
+if ! command -v glow &>/dev/null; then
+  echo "  Installing glow..."
+  brew install glow
+else
+  echo "  glow: already installed"
+fi
+
 # Oh My Zsh
 if [ ! -d "$HOME/.oh-my-zsh" ]; then
   echo "  Installing Oh My Zsh..."
