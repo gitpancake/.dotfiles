@@ -1,16 +1,16 @@
 # Global Instructions
 
-## Never Hallucinate — Ask Rather Than Guess
+## Verify Before Acting — No Memory, No Guessing
 
-**Never invent, assume, or fabricate anything.** This includes: function names, table names, event types, routing keys, API shapes, file paths, env var names, component names, library APIs, or any other fact about the codebase or environment.
+Before stating ANYTHING about: function signatures, file paths, API shapes, event types, env vars, field names, module structure, or library methods — **grep or read the source first.** Training data is stale. Code is truth.
 
-When stuck or uncertain, work through this order before acting:
-1. **Re-read the relevant source** — grep, read files, search OV. The answer is usually there.
-2. **Re-read the Linear ticket** — fetch it again and read every field and comment.
-3. **Re-read the original prompt** — the user may have already answered your question.
-4. **Ask the human.** If still uncertain after all the above, stop and ask. A direct question is never wrong — silent guessing always is.
+When uncertain, in order:
+1. Grep/read the relevant source.
+2. Re-read the Linear ticket.
+3. Re-read the original prompt.
+4. Ask the human. A direct question beats a confident wrong answer.
 
-Do not proceed on a guess. Do not invent a plausible-sounding name. Do not ship code that assumes something unverified.
+Do not proceed on a guess. Do not invent plausible-sounding names.
 
 ## Tone
 - Direct, concise, opinionated. Match the user's energy.
@@ -18,7 +18,7 @@ Do not proceed on a guess. Do not invent a plausible-sounding name. Do not ship 
 
 ## Specialist Subagents
 
-Dispatch these via the Agent tool (`subagent_type: "<name>"`) for focused, context-isolated work. Each is Linear-aware: it will try to fetch ticket context from the Linear MCP, and warn once if Linear is unavailable.
+Dispatch via Agent tool (`subagent_type: "<name>"`). Each is Linear-aware.
 
 - `backend` — services, APIs, event-driven code, workers, background jobs
 - `frontend` — UI, components, design systems, Paper-to-code (JSX-only)
@@ -28,129 +28,90 @@ Dispatch these via the Agent tool (`subagent_type: "<name>"`) for focused, conte
 - `infra` — Railway provisioning, deploy troubleshooting, env/domain config
 - `deploy` — pre-ship verification: tests, build, lint, diff review, push
 
-Every subagent ends its workflow by invoking the `/simplify` slash command to review its own diff before declaring done.
+Every subagent ends by invoking `/simplify` before declaring done.
 
-**Org preamble injection**: When dispatching any subagent while working in a known org's codebase, read `~/.claude/org/<org>/preamble.md` and prepend its contents to the subagent prompt. This ensures subagents inherit org-specific engineering standards without requiring the full context file.
+**Org preamble injection**: When dispatching any subagent in a known org's codebase, read `~/.claude/org/<org>/preamble.md` and prepend to the subagent prompt.
 
 ## Global Slash Commands
 
-- `/simplify` — scoped review of the current diff for reuse, clarity, efficiency, over-abstraction, dead code. Fixes issues in place.
+- `/simplify` — scoped review of the current diff for reuse, clarity, efficiency, dead code. Fixes in place.
 
 ## Planning — Linear First
 
-Assume the user plans work in Linear. When a task is non-trivial:
+For non-trivial tasks:
 1. Ask for (or resolve from context) the Linear issue URL or ID.
-2. Fetch it via `mcp__linear-server__get_issue` for full scope + acceptance criteria.
-3. If the Linear MCP isn't connected, warn once and proceed on user confirmation — don't silently skip planning context.
+2. Fetch via `mcp__linear-server__get_issue` for full scope + acceptance criteria.
+3. If Linear MCP unavailable, warn once and proceed on user confirmation.
 
 ## Session Start
 
-When beginning work in any project:
-1. Read the project CLAUDE.md before writing code. If none exists, scan the repo and create one.
+1. Read project CLAUDE.md before writing code. If none, scan repo and create one.
 2. Check OV for relevant context (project name, APIs in use).
-3. Check `git status` and branch state. For established projects, create a feature branch if starting new work.
-4. **Org context**: Check if `~/.claude/org/` has a folder matching the current project's org. If so, read its `context.md` and apply it for the session.
+3. Check `git status` and branch state. Create feature branch for new work.
+4. Check `~/.claude/org/` for org folder. If exists, read `context.md` and apply.
 
 ## Code Quality
 
-Apply always when writing, refactoring, or reviewing code:
-
-- Guard clauses at the top, early return. Happy path at shallowest indentation. Max 2 levels deep.
+- Guard clauses at top, early return. Happy path shallowest. Max 2 levels deep.
 - One task per function. If it parses AND computes AND formats, split it.
-- Extract unrelated subproblems into helpers. Main function reads like a plan.
 - Specific names: `fetchUserProfile` not `getData`, `delayMs` not `delay`. No `tmp`, `data`, `result`.
 - Booleans as assertions: `isValid`, `hasChildren`. Ranges: `first`/`last` or `begin`/`end`.
 - Complex conditions become named booleans: `const isOwner = req.user.id === doc.ownerId`.
 - `const` by default. Declare close to first use.
 - Comment the "why" (tradeoffs, edge cases), never the "what."
-- Composition over inheritance. Narrow interfaces — don't pass full objects when 2 fields suffice.
-- Patterns (Factory, Facade, Adapter) only where they simplify. A plain function is fine.
+- Composition over inheritance. Narrow interfaces over full objects.
+- Patterns (Factory, Facade, Adapter) only where they simplify.
 
-Search OV `resources/agents/code-structure-reference` for detailed principles with examples.
+Search OV `resources/agents/code-structure-reference` for detailed principles.
 
 ## Cost Discipline
 
-Every tool call re-reads the full conversation context at the current model's price. On Opus 1M, a 500k-context turn costs ~25× a Sonnet turn at 100k. Heavy tool loops compound fast.
+Tool calls re-read full conversation context at model price. Heavy loops compound fast.
 
-### Batch pattern (most important)
+**Batch pattern**: before touching N items, propose: one LLM call produces a plan, then a script executes it. Never run same tool 20+ times in a row — propose batch instead.
 
-Before any operation that touches N items (tickets, files, rows, PRs), STOP and propose the batch pattern:
-1. One LLM call produces a plan — JSON map, categorization, or action list.
-2. A script or targeted API calls execute it without re-invoking the LLM per item.
+**Model selection**: Opus for planning/architecture. Sonnet for coding (default). Haiku for mechanical edits.
 
-**If you're about to run the same tool 20+ times in a row, don't.** Propose the batch alternative, get confirmation, then execute. Reserve per-item LLM calls for cases that genuinely need *different* reasoning per item and can't be compressed into one plan.
-
-### Model selection
-
-Match model to task:
-- **Opus** — project planning, architecture decisions, breaking down ambiguous work.
-- **Sonnet** — coding (default once a plan exists), reviews, most reasoning.
-- **Haiku** — mechanical edits, renames, simple greps, trivial changes.
-
-Typical flow: start in Opus to plan, switch to Sonnet once implementing, drop to Haiku for cleanup and mechanical batches. Opus burns ~5× faster than Sonnet — reserve it for when you genuinely need deeper reasoning.
-
-### Context hygiene
-
-At context >70% or tool count >50 in a session, propose `/clear` + re-brief with only essential context. A PostToolUse hook (`~/.claude/hooks/tool-loop-warn.sh`) also emits warnings at 30 same-tool calls or 100 total — treat those as prompts to reassess, not noise.
+**Context hygiene**: At >70% context or >50 tool calls, propose `/clear` + re-brief. Hook at `~/.claude/hooks/tool-loop-warn.sh` warns at 30 same-tool calls or 100 total.
 
 ## Git Workflow
 
-- **Feature branches**: all work on `feature/`, `fix/`, or `refactor/` branches. Main is always deployable. **NEVER use a username prefix (e.g. `user/branch-name`) — always use `feature/`, `fix/`, or `refactor/`.**
-- **Auto-commit** after each isolated chunk (feature, bugfix, refactor). Separate commits for schema, backend, frontend.
-- **Never push** unless explicitly asked ("push", "push to upstream", "deploy").
-- **PR creation**: short title (<70 chars), summary + test plan in body. One PR per feature.
-- **Merging**: squash merge for clean main history. Delete feature branch after merge.
-- **Small projects exception**: solo projects < 1 week old can commit to main directly. Switch to branches once a bad commit would cost >10 minutes to fix.
+- Feature branches: `feature/`, `fix/`, or `refactor/`. Never `user/` prefix. Main always deployable.
+- Auto-commit after each isolated chunk. Separate commits for schema, backend, frontend.
+- Never push unless explicitly asked.
+- PR: short title (<70 chars), summary + test plan in body. One PR per feature.
+- Squash merge. Delete feature branch after merge.
+- Solo projects <1 week old: commit to main directly.
 
 ## Parallel Work (Worktree Agents)
 
-For independent tasks, spawn agents with `isolation: "worktree"` so each runs on its own branch in an isolated checkout. When done, each returns a branch + path; review and merge the ones worth keeping.
+Spawn with `isolation: "worktree"` for independent tasks. Each gets its own branch.
 
-- **Good fits**: one feature split into independent chunks (agent per module/file), or a batch of unrelated small tasks (bug list, cleanups) fanned out at once.
-- **Not fits**: anything touching shared runtime state. Worktrees share everything outside `.git` — same DB, same ports, same `node_modules`, same running dev server. Two agents both running `npm install` or hitting port 3000 will collide.
-- **Independence check before spawning**: if two agents would edit the same file, it's not parallel work — it's a merge conflict waiting to happen. Split tasks by module/file boundary.
-- **Branch naming**: worktree agents branch from current HEAD as `agent/<short-task>`. Squash-merge the winner, discard the rest.
+- Good: one feature split by module/file, or batch of unrelated small tasks.
+- Bad: anything touching shared state (DB, ports, `node_modules`, running dev server).
+- Independence check: if two agents edit the same file, it's a merge conflict — don't parallelize.
+- Branch naming: `agent/<short-task>`. Squash-merge winner, discard rest.
 
 ## Project Documentation Maintenance
 
-After each chunk of work:
-- **Update project `CLAUDE.md`** with new conventions, architecture decisions, setup steps, gotchas, or non-obvious context.
-- **Update `README.md`** if changes affect user-facing behavior, setup, API surface, or structure. Skip for internal refactors.
+After each chunk: update project `CLAUDE.md` (conventions, decisions, gotchas). Update `README.md` if user-facing behavior changes.
 
-### Scope: Global vs Project CLAUDE.md
-- **Global** (this file): workflow rules, code quality, tool usage — applies to all projects.
-- **Project**: architecture, gotchas, key patterns, commands, deployment — specific to that repo.
-- Project CLAUDE.md files must **never exceed 150 lines**. If approaching the limit, cut content derivable from code.
+- Global (this file): workflow rules, code quality, tool usage.
+- Project: architecture, gotchas, key patterns, commands, deployment.
+- Project CLAUDE.md: never exceed 150 lines. Cut anything derivable from code.
 
 ## OpenViking — cross-project knowledge base
 
-Persistent vector-indexed knowledge base (MCP) for knowledge that **spans projects or lives outside any single repo** — external API docs, cross-project decisions, research, reference material, agent domain knowledge.
+Vector-indexed MCP for knowledge spanning projects or outside any single repo — external API docs, cross-project decisions, research.
 
-**Not for:** per-project context (CLAUDE.md), work summaries (git), user preferences (auto-memory), anything derivable from code.
+**Not for**: per-project context (CLAUDE.md), work summaries (git), user preferences (auto-memory).
 
-### MANDATORY: Check OV before fetching external docs
+**MANDATORY**: Before `WebFetch`/`WebSearch`/`context7` for API docs, `find`/`search` OV first. If not found, fetch externally and store with `add_resource`.
 
-**Before `WebFetch`, `WebSearch`, or `context7` for API docs, ALWAYS `find`/`search` OpenViking first.** Re-fetching wastes time and context. If OV has it, use it. If not and you fetch externally, store it with `add_resource` for next time.
+Use `mcp__openviking__ls` at `resources/` to discover. Use `find`/`search` for keyword queries. Don't assume a path exists — list first.
 
-### Discovering what's in OV
+Namespaces: `resources/agents/`, `resources/<project>/`, `resources/<api-name>/`.
 
-Use `mcp__openviking__ls` at `resources/` to list top-level topics, then drill down. Use `mcp__openviking__find` or `search` for keyword queries across content. Don't assume a path exists — list first.
+Read: cross-project patterns, service/API references. Write: external API docs, cross-project decisions. Don't store: per-project conventions, ephemeral context.
 
-Common top-level namespaces:
-- `resources/agents/` — coding principles, architecture references, cross-project agent knowledge
-- `resources/<project>/` — project-scoped external API docs and architecture notes
-- `resources/<api-name>/` — standalone external API references
-
-### When to READ
-
-Beyond the mandatory doc-check: search OV when the user asks about cross-project patterns, when starting work that touches multiple projects, or when the user references a service/API by name.
-
-### When to WRITE
-
-Store: external API docs fetched during a session, cross-project architectural decisions, anything the user explicitly asks to save.
-Don't store: work summaries, per-project conventions, ephemeral debugging context.
-
-### Hygiene
-- Remove or update outdated entries when you encounter them.
-- Descriptive directory names (`resources/<service>-api/`, not `resources/Document_1/`).
-- Fewer high-quality entries over many low-value ones.
+Hygiene: descriptive dirs, remove stale entries, fewer high-quality entries.
