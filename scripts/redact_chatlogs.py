@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Redact sensitive data from Claude chatlog files in-place."""
+"""Redact secrets in memory/ dirs, delete all other transcripts."""
 import os
 import re
 import sys
@@ -9,56 +9,37 @@ from pathlib import Path
 ROOT = Path.home() / ".claude" / "projects"
 EXTS = {".jsonl", ".json", ".md", ".txt"}
 
-# Each entry: (name, pattern, replacement)
-# Patterns ordered most-specific first.
 PATTERNS = [
-    # Anthropic
     ("anthropic_key", re.compile(r"sk-ant-[A-Za-z0-9_\-]{20,}"), "[REDACTED:anthropic_key]"),
-    # OpenAI
     ("openai_key", re.compile(r"sk-(?:proj-|svcacct-|admin-)?[A-Za-z0-9_\-]{20,}"), "[REDACTED:openai_key]"),
-    # GitHub
     ("github_pat", re.compile(r"github_pat_[A-Za-z0-9_]{20,}"), "[REDACTED:github_pat]"),
     ("github_token", re.compile(r"\bgh[pousr]_[A-Za-z0-9]{30,}"), "[REDACTED:github_token]"),
-    # Slack
     ("slack_token", re.compile(r"xox[abprs]-[A-Za-z0-9\-]{10,}"), "[REDACTED:slack_token]"),
-    # Stripe
     ("stripe_key", re.compile(r"\b(?:sk|rk|pk)_(?:live|test)_[A-Za-z0-9]{20,}"), "[REDACTED:stripe_key]"),
-    # AWS
     ("aws_access_key", re.compile(r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b"), "[REDACTED:aws_access_key]"),
-    # Sendgrid
     ("sendgrid_key", re.compile(r"\bSG\.[A-Za-z0-9_\-]{20,}\.[A-Za-z0-9_\-]{20,}"), "[REDACTED:sendgrid_key]"),
-    # Twilio
     ("twilio_sid", re.compile(r"\bAC[a-f0-9]{32}\b"), "[REDACTED:twilio_sid]"),
-    # Google API key
     ("google_api_key", re.compile(r"\bAIza[A-Za-z0-9_\-]{30,}"), "[REDACTED:google_api_key]"),
-    # JWT (3 base64url segments)
     ("jwt", re.compile(r"\beyJ[A-Za-z0-9_\-]{10,}\.eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}"), "[REDACTED:jwt]"),
-    # PEM private keys (multi-line block — need DOTALL)
     ("private_key_pem", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", re.DOTALL), "[REDACTED:private_key_pem]"),
-    # Escaped PEM (in JSON: \n form)
     ("private_key_pem_escaped", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----(?:\\n|[^\"]){10,}?-----END [A-Z ]*PRIVATE KEY-----"), "[REDACTED:private_key_pem]"),
-    # SSH private key
     ("ssh_private_key", re.compile(r"-----BEGIN OPENSSH PRIVATE KEY-----.*?-----END OPENSSH PRIVATE KEY-----", re.DOTALL), "[REDACTED:ssh_private_key]"),
-    # DB URLs with creds
     ("db_url", re.compile(r"\b(postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|rediss|amqp|amqps)://[^:\s/@\"']+:[^@\s\"']+@[^\s\"'<>]+"), r"\1://[REDACTED:db_creds]@host"),
-    # Generic http(s) basic-auth URL
     ("http_basic_auth_url", re.compile(r"\bhttps?://[^:\s/@\"']+:[^@\s\"']+@[^\s\"'<>]+"), "[REDACTED:basic_auth_url]"),
-    # Bearer tokens
     ("bearer_token", re.compile(r"(?i)\bBearer\s+[A-Za-z0-9_\-\.=]{20,}"), "Bearer [REDACTED:token]"),
-    # Authorization headers
     ("authorization_header", re.compile(r"(?i)(authorization[\"']?\s*:\s*[\"']?)(basic|bearer|token)\s+[A-Za-z0-9_\-\.=:]{10,}"), r"\1\2 [REDACTED:auth]"),
-    # Generic token / key / secret / password assignments — JSON-ish
     ("kv_secret", re.compile(r"(?i)([\"']?(?:api[_-]?key|apikey|access[_-]?token|refresh[_-]?token|client[_-]?secret|secret[_-]?key|private[_-]?key|password|passwd|pwd|auth[_-]?token)[\"']?\s*[:=]\s*[\"'])[^\"'\s][^\"']{6,}([\"'])"), r"\1[REDACTED:secret]\2"),
-    # Env-style assignments (no quotes): API_KEY=value, PASSWORD=value
     ("env_secret", re.compile(r"(?im)^([A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|PASSWD|PWD|DSN|URL|URI)[A-Z0-9_]*)\s*=\s*([^\s\"'#][^\s\"'#]{6,})"), r"\1=[REDACTED:env]"),
-    # Firebase service account "private_key" JSON field (raw escaped)
     ("firebase_private_key", re.compile(r"(\"private_key\"\s*:\s*\")[^\"]+(\")"), r"\1[REDACTED:firebase_private_key]\2"),
-    # Generic high-entropy hex (64+ chars) likely keys — conservative
     ("hex_secret_64", re.compile(r"\b[a-f0-9]{64,}\b"), "[REDACTED:hex_secret]"),
 ]
 
 
-def process_file(path: Path, counts: Counter) -> bool:
+def in_memory_dir(path: Path) -> bool:
+    return "memory" in path.relative_to(ROOT).parts
+
+
+def redact_file(path: Path, counts: Counter) -> bool:
     try:
         raw = path.read_bytes()
     except OSError:
@@ -94,20 +75,45 @@ def process_file(path: Path, counts: Counter) -> bool:
 
 def main() -> int:
     counts = Counter()
-    files_changed = 0
+    files_redacted = 0
+    files_deleted = 0
     files_scanned = 0
+    bytes_freed = 0
+
     for dirpath, _, filenames in os.walk(ROOT):
         for fn in filenames:
-            if not any(fn.endswith(e) for e in EXTS):
-                continue
             files_scanned += 1
             p = Path(dirpath) / fn
-            if process_file(p, counts):
-                files_changed += 1
+            if in_memory_dir(p):
+                if any(fn.endswith(e) for e in EXTS):
+                    if redact_file(p, counts):
+                        files_redacted += 1
+            else:
+                try:
+                    bytes_freed += p.stat().st_size
+                    p.unlink()
+                    files_deleted += 1
+                except OSError as e:
+                    print(f"DELETE FAIL {p}: {e}", file=sys.stderr)
             if files_scanned % 500 == 0:
-                print(f"... scanned {files_scanned}, changed {files_changed}", file=sys.stderr)
+                print(f"... scanned {files_scanned}, redacted {files_redacted}, deleted {files_deleted}", file=sys.stderr)
 
-    print(f"\nDone. Scanned {files_scanned} files. Modified {files_changed}.")
+    # Prune empty dirs (bottom-up), but keep ROOT and memory/ trees
+    for dirpath, dirnames, filenames in os.walk(ROOT, topdown=False):
+        d = Path(dirpath)
+        if d == ROOT:
+            continue
+        if in_memory_dir(d):
+            continue
+        try:
+            if not any(d.iterdir()):
+                d.rmdir()
+        except OSError:
+            pass
+
+    print(f"\nDone. Scanned {files_scanned}.")
+    print(f"  Memory files redacted: {files_redacted}")
+    print(f"  Transcript files deleted: {files_deleted} ({bytes_freed / 1_000_000:.1f} MB)")
     print("Redactions by type:")
     for name, n in sorted(counts.items(), key=lambda kv: -kv[1]):
         print(f"  {name:<30} {n}")
