@@ -1,0 +1,5 @@
+{
+  "audio_weight": 0.50,
+  "min_breath_period_s": 30.0,
+  "_comment": "audio_weight 0..1 = how strongly live-audio reactivity overlays on the commit-driven baseline. Default 0.50 makes beats clearly visible; lower for more zen, higher for stronger pulses."
+}

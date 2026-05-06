@@ -81,9 +81,6 @@ art_ensure_commit_watcher() {
     IFS=$'\t' read -r existing_pid existing_repo < "$lock"
     if [[ -n "$existing_pid" ]] && \
        ps -p "$existing_pid" -o command= 2>/dev/null | grep -q commit-watcher.py; then
-      if [[ -z "$repo" || "$existing_repo" == "$repo" ]]; then
-        return 0
-      fi
       kill "$existing_pid" 2>/dev/null
       # Wait briefly for flock release; cap to ~1s.
       local i=0
@@ -91,7 +88,6 @@ art_ensure_commit_watcher() {
         sleep 0.1
         (( i++ ))
       done
-      echo "art: commit-watcher repo handoff: $existing_repo → ${repo:-config-default}"
     fi
   fi
 
@@ -99,16 +95,47 @@ art_ensure_commit_watcher() {
   disown
   echo "art: commit-watcher started (pid $!) repo=${repo:-config-default}"
 }
+# Start the audio-watcher daemon when `art watch` runs. Captures system
+# output via the BackgroundMusic loopback device and emits onset/energy/
+# tempo state for the renderer. Singleton enforced by flock inside the
+# watcher; this guard just avoids spawning a second one when one is alive.
+art_ensure_audio_watcher() {
+  local watcher="$HOME/.dotfiles/scripts/audio-watcher.py"
+  [[ -f "$watcher" ]] || return 0
+
+  local lock="$HOME/.local/share/art/audio-watcher.lock"
+  if [[ -f "$lock" ]]; then
+    local existing_pid
+    existing_pid=$(head -1 "$lock" | tr -d '[:space:]')
+    if [[ -n "$existing_pid" ]] && \
+       ps -p "$existing_pid" -o command= 2>/dev/null | grep -q audio-watcher.py; then
+      kill "$existing_pid" 2>/dev/null
+      local i=0
+      while (( i < 10 )) && ps -p "$existing_pid" >/dev/null 2>&1; do
+        sleep 0.1
+        (( i++ ))
+      done
+    fi
+  fi
+
+  nohup python3 "$watcher" > /tmp/audio-watcher.log 2>&1 &
+  disown
+  echo "art: audio-watcher started (pid $!)"
+}
 art() {
   local name="${1:-hologram}"
+  [[ $# -gt 0 ]] && shift
   local script="$HOME/.local/share/art/${name}.py"
   if [[ ! -f "$script" ]]; then
     echo "Unknown art: $name"
     echo "Available: $(ls ~/.local/share/art/*.py 2>/dev/null | xargs -n1 basename | sed 's/\.py$//' | tr '\n' ' ')"
     return 1
   fi
-  [[ "$name" == "watch" ]] && art_ensure_commit_watcher
-  python3 "$script"
+  if [[ "$name" == "watch" ]]; then
+    art_ensure_commit_watcher
+    art_ensure_audio_watcher
+  fi
+  python3 "$script" "$@"
 }
 
 # Homebrew configuration (load first)
