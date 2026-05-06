@@ -17,6 +17,7 @@ Personal dotfiles repository for macOS and WSL2 (Ubuntu) development environment
 - `iterm/` - Gruvbox Material iTerm2 color presets (`.itermcolors`)
 - `tmux/.tmux.conf` - tmux config with intuitive pane/window keybindings and gruvbox dark theme
 - `tmux/tmux-status.sh` - tmux status bar script showing battery, CPU, memory, disk with dynamic color-coded thresholds (green → yellow → orange → red)
+- `scripts/redact_chatlogs.py` - In-place secret redactor for `~/.claude/projects` logs (regex-based, covers Anthropic/OpenAI/AWS/GitHub/JWT/DB URLs/PEM keys/etc.)
 - `install.sh` - Symlink installer for Linux/WSL2 systems
 - `install-mac.sh` - Symlink installer for macOS systems
 
