@@ -18,6 +18,7 @@ ln -sf "$DOTFILES_DIR/claude/statusline-command.sh" ~/.claude/statusline-command
 ln -sf "$DOTFILES_DIR/claude/transcript-costs.sh" ~/.claude/transcript-costs.sh
 ln -sf "$DOTFILES_DIR/claude/settings.json" ~/.claude/settings.json
 ln -sf "$DOTFILES_DIR/claude/CLAUDE.md" ~/.claude/CLAUDE.md
+ln -sf "$DOTFILES_DIR/claude/worktree-protocol.md" ~/.claude/worktree-protocol.md
 for f in "$DOTFILES_DIR/claude/hooks/"*.sh; do
   chmod +x "$f"
   ln -sf "$f" ~/.claude/hooks/"$(basename "$f")"

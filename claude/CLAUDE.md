@@ -83,14 +83,9 @@ Tool calls re-read full conversation context at model price. Heavy loops compoun
 - Squash merge. Delete feature branch after merge.
 - Solo projects <1 week old: commit to main directly.
 
-## Parallel Work (Worktree Agents)
+## Branch Safety
 
-Spawn with `isolation: "worktree"` for independent tasks. Each gets its own branch.
-
-- Good: one feature split by module/file, or batch of unrelated small tasks.
-- Bad: anything touching shared state (DB, ports, `node_modules`, running dev server).
-- Independence check: if two agents edit the same file, it's a merge conflict — don't parallelize.
-- Branch naming: `agent/<short-task>`. Squash-merge winner, discard rest.
+Worktree by default for non-trivial work. Assume another agent may be active on any branch. Protocol: `~/.claude/worktree-protocol.md`. Cleanup only on user-confirmed PR merge.
 
 ## Project Documentation Maintenance
 
