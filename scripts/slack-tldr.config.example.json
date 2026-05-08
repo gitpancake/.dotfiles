@@ -1,0 +1,8 @@
+{
+  "app_token": "xapp-REPLACE-WITH-APP-LEVEL-TOKEN",
+  "bot_token": "xoxb-REPLACE-WITH-BOT-OAUTH-TOKEN",
+  "channel_ids": [],
+  "backfill_count": 2,
+  "model": "claude-haiku-4-5-20251001",
+  "max_active": 50
+}

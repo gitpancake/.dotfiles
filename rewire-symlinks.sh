@@ -51,6 +51,20 @@ sed "s|DOTFILES_DIR_PLACEHOLDER|$NEW|g" \
   "$NEW/claude/local.claude-plan-prune.plist" > "$PLAN_PLIST"
 launchctl unload "$PLAN_PLIST" 2>/dev/null || true
 launchctl load -w "$PLAN_PLIST"
+
+# slack-tldr daemon (only loads if config exists; placeholder substitution
+# means we always regenerate rather than symlink).
+SLACK_PLIST="$HOME/Library/LaunchAgents/local.slack-tldr.plist"
+rm -f "$SLACK_PLIST"
+sed "s|DOTFILES_DIR_PLACEHOLDER|$NEW|g" \
+  "$NEW/claude/local.slack-tldr.plist" > "$SLACK_PLIST"
+launchctl unload "$SLACK_PLIST" 2>/dev/null || true
+if [ -f "$NEW/scripts/slack-tldr.config.local" ]; then
+  launchctl load -w "$SLACK_PLIST"
+  echo "  slack-tldr: loaded"
+else
+  echo "  slack-tldr: skipped (no scripts/slack-tldr.config.local)"
+fi
 echo "  launchd: OK"
 
 # Clean up empty ~/Documents/code if it exists

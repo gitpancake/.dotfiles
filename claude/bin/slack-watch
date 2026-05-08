@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Run the slack-tldr pane renderer in the current terminal/pane.
+# Refresh every 2s. Ctrl-C to exit.
+exec watch -tcn2 "$HOME/.dotfiles/scripts/slack-tldr-pane.sh"

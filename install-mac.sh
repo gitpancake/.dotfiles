@@ -132,6 +132,25 @@ launchctl load -w "$PLAN_PLIST"
 
 echo "  Loaded Claude transcript + plan auto-prune launchd jobs"
 
+# slack-tldr — Slack alerts → Haiku TLDR pane
+if ! python3 -c "import slack_sdk" &>/dev/null; then
+  echo "  Installing slack_sdk (user pip)..."
+  pip3 install --user --quiet slack_sdk
+fi
+SLACK_PLIST="$HOME/Library/LaunchAgents/local.slack-tldr.plist"
+rm -f "$SLACK_PLIST"
+sed "s|DOTFILES_DIR_PLACEHOLDER|$DOTFILES_DIR|g" \
+  "$DOTFILES_DIR/claude/local.slack-tldr.plist" > "$SLACK_PLIST"
+launchctl unload "$SLACK_PLIST" 2>/dev/null || true
+if [ -f "$DOTFILES_DIR/scripts/slack-tldr.config.local" ]; then
+  launchctl load -w "$SLACK_PLIST"
+  echo "  slack-tldr daemon loaded"
+else
+  echo "  slack-tldr config missing — copy scripts/slack-tldr.config.example.json"
+  echo "    → scripts/slack-tldr.config.local, fill tokens, then:"
+  echo "      launchctl load -w $SLACK_PLIST"
+fi
+
 # Focus Guard (requires sudo for /usr/local/bin and /Library/LaunchDaemons)
 if command -v sudo &>/dev/null; then
   # Dependencies

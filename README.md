@@ -44,7 +44,11 @@ dotfiles/
 ├── scripts/
 │   ├── city.py                       # Animated ASCII night city skyline
 │   ├── hologram.py                   # Animated 3D wireframe cube
-│   └── matrix.py                     # Falling green glyph rain (matrix)
+│   ├── matrix.py                     # Falling green glyph rain (matrix)
+│   ├── claude_oauth.py               # Reusable: Claude Code OAuth → Anthropic API
+│   ├── slack-tldr.py                 # Slack alerts → Haiku TLDR daemon (Socket Mode)
+│   ├── slack-tldr-pane.sh            # tmux pane renderer for slack-tldr
+│   └── slack-tldr.config.example.json
 ├── install.sh                        # Symlink installer (Linux/WSL2)
 ├── install-mac.sh                    # Symlink installer (macOS)
 └── README.md
@@ -134,6 +138,56 @@ Typical model selection:
 ```
 
 At session start Claude checks for a matching `org/` folder and applies it. When dispatching specialist subagents, `preamble.md` is prepended to the prompt so org standards travel with the agent. Add a new org by creating the folder — no config changes needed.
+
+## Slack Alerts → tmux pane
+
+A daemon that subscribes to specific Slack channels via Socket Mode, runs each new message through Haiku for a one-line TLDR, and writes the result to a state file rendered in a tmux pane.
+
+**Setup (one-time):**
+
+1. Create a Slack app at <https://api.slack.com/apps> → *From scratch*.
+2. **Socket Mode** → enable → generate App-Level Token (`xapp-…`) with scope `connections:write`.
+3. **OAuth & Permissions** → Bot Token Scopes: `channels:history`, `groups:history`, `im:history`, `mpim:history`, `channels:read`.
+4. **Event Subscriptions** → enable → subscribe bot to `message.channels`, `member_joined_channel` (+ `message.groups` / `message.im` if private channels / DMs).
+5. *Install to Workspace* → copy Bot Token (`xoxb-…`).
+6. `/invite @your-bot` in each alerts channel. By default, the daemon auto-discovers every channel the bot is a member of — no channel IDs to maintain. Set `channel_ids: ["C…"]` in config only if you want a strict allow-list.
+7. `cp scripts/slack-tldr.config.example.json scripts/slack-tldr.config.local`, fill in tokens.
+8. Re-run `./install-mac.sh` (or `./rewire-symlinks.sh`) to load the launchd agent.
+
+**Auth:** API calls run through your Claude Code OAuth token (loaded from the macOS keychain — service `Claude Code-credentials`). No `ANTHROPIC_API_KEY` needed. Falls back to that env var if the keychain entry is missing.
+
+**Backfill:** on daemon startup (and whenever the bot is invited to a new channel), the last `backfill_count` messages from each channel are TLDR'd and added to the active pane. Default is `2`. Set to `0` to disable.
+
+**Pane:** in any tmux pane, run
+
+```bash
+watch -tcn2 ~/.dotfiles/scripts/slack-tldr-pane.sh
+```
+
+You'll see a numbered list of active alerts with timestamps and channel names.
+
+**Dismiss:**
+```bash
+slack-tldr dismiss 2     # dismiss the 2nd active alert
+slack-tldr dismiss-all   # clear everything
+```
+
+Bind `dismiss-all` to a tmux key for one-shot clearing, e.g. add to `.tmux.conf`:
+```tmux
+bind-key D run-shell "slack-tldr dismiss-all"
+```
+
+**State + logs:**
+- `~/.local/share/slack-tldr/state.json` — active alerts + dismissed ring
+- `/tmp/slack-tldr.{out,err}` — daemon stdout/stderr
+
+**Troubleshooting:**
+```bash
+launchctl list | grep slack-tldr           # is it running?
+launchctl unload ~/Library/LaunchAgents/local.slack-tldr.plist
+launchctl load -w ~/Library/LaunchAgents/local.slack-tldr.plist
+tail -f /tmp/slack-tldr.err
+```
 
 ## Focus Guard
 
