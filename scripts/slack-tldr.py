@@ -454,14 +454,27 @@ def cmd_list():
     print(json.dumps(state.get("active", []), indent=2))
 
 
-def _render_pane(state, out):
-    """Write the numbered alert list to `out`. Blinks alerts whose ts
-    exceeds state['ack_ts']."""
+def _render_pane(state, out, blink_on=True):
+    """Write the numbered alert list to `out`.
+
+    Alerts with ts > ack_ts are drawn in an attention-grabbing style.
+    `blink_on` toggles between two color frames so callers that re-render
+    on a timer get a real flash effect even on terminals (Alacritty) that
+    ignore ANSI slow-blink. Static callers can just leave it True.
+    """
     active = state.get("active", [])
     ack_ts = float(state.get("ack_ts") or 0.0)
     if not active:
         out.write("\033[2mno active alerts\033[0m\n")
         return
+
+    # New-alert color frames: bright red inverse vs yellow inverse. Inverse
+    # video (\033[7m) works everywhere, and toggling the foreground color
+    # gives a clear pulse instead of relying on \033[5m (which Alacritty
+    # silently drops).
+    new_on  = "\033[1;7;31m"   # bold + inverse + red
+    new_off = "\033[1;7;33m"   # bold + inverse + yellow
+
     for i, a in enumerate(active, 1):
         ts = float(a.get("ts") or 0)
         hhmm = time.strftime("%H:%M", time.localtime(ts))
@@ -469,10 +482,9 @@ def _render_pane(state, out):
         tldr = a.get("tldr") or ""
         is_new = ts > ack_ts
         if is_new:
-            # blink + bold so it pulls the eye until acked
+            sgr = new_on if blink_on else new_off
             out.write(
-                f"\033[5;33m[{i}]\033[0m \033[2m{hhmm}\033[0m "
-                f"\033[36m#{ch}\033[0m  \033[1m{tldr}\033[0m\n"
+                f"{sgr} [{i}] {hhmm} #{ch}  {tldr} \033[0m\n"
             )
         else:
             out.write(
@@ -517,12 +529,10 @@ def cmd_watch():
         sys.exit(2)
 
     old_attr = termios.tcgetattr(fd)
-    poll_s = 0.5
-    min_render_interval = 1.0
-    last_render = 0.0
-    last_mtime = 0.0
+    frame_s = 0.5  # 2 Hz blink + render cadence
+    last_seen_max_ts = 0.0  # track newest-alert ts to detect arrivals → BEL
 
-    def render_now():
+    def render_frame(blink_on):
         sys.stdout.write("\033[2J\033[H")  # clear + home
         state = _load_state()
         active = state.get("active", [])
@@ -531,47 +541,56 @@ def cmd_watch():
             1 for a in active if float(a.get("ts") or 0) > ack_ts
         )
         if not active:
-            sys.stdout.write(
-                "\033[1mslack alerts\033[0m  \033[32mclear\033[0m\n\n"
-            )
+            header = "\033[1mslack alerts\033[0m  \033[32mclear\033[0m"
         elif new_count:
-            sys.stdout.write(
+            badge_sgr = "\033[1;7;31m" if blink_on else "\033[1;7;33m"
+            header = (
                 f"\033[1mslack alerts\033[0m  "
-                f"\033[31;5m{new_count} NEW\033[0m "
-                f"\033[2m({len(active)} total) — any key acks, q quits\033[0m\n\n"
+                f"{badge_sgr} {new_count} NEW \033[0m "
+                f"\033[2m({len(active)} total) — any key acks, q quits\033[0m"
             )
         else:
-            sys.stdout.write(
+            header = (
                 f"\033[1mslack alerts\033[0m  "
                 f"\033[31m{len(active)} active\033[0m "
-                f"\033[2m— q to quit\033[0m\n\n"
+                f"\033[2m— q to quit\033[0m"
             )
-        _render_pane(state, sys.stdout)
+        sys.stdout.write(header + "\n\n")
+        _render_pane(state, sys.stdout, blink_on=blink_on)
         sys.stdout.flush()
+        return state, active, ack_ts
 
     try:
         tty.setcbreak(fd)
         sys.stdout.write("\033[?25l")  # hide cursor
         sys.stdout.flush()
+        frame_idx = 0
         while True:
-            now = time.time()
-            try:
-                mtime = os.path.getmtime(DEFAULT_STATE)
-            except OSError:
-                mtime = 0.0
-            if mtime != last_mtime or (now - last_render) >= min_render_interval:
-                render_now()
-                last_render = now
-                last_mtime = mtime
+            blink_on = (frame_idx % 2 == 0)
+            state, active, ack_ts = render_frame(blink_on)
 
-            ready, _, _ = select.select([sys.stdin], [], [], poll_s)
-            if not ready:
-                continue
-            ch = sys.stdin.read(1)
-            if ch in ("q", "Q", "\x03", "\x04"):  # q, Ctrl-C, Ctrl-D
-                break
-            cmd_ack()
-            last_render = 0.0  # force immediate re-render
+            # BEL on first detection of an alert newer than what we'd
+            # previously rendered. tmux's monitor-bell highlights the pane
+            # border so an unfocused pane still grabs attention.
+            current_max = max(
+                (float(a.get("ts") or 0) for a in active), default=0.0,
+            )
+            if (
+                current_max > last_seen_max_ts
+                and current_max > ack_ts
+                and last_seen_max_ts > 0.0  # skip first frame to avoid boot-bell
+            ):
+                sys.stdout.write("\a")
+                sys.stdout.flush()
+            last_seen_max_ts = max(last_seen_max_ts, current_max)
+
+            ready, _, _ = select.select([sys.stdin], [], [], frame_s)
+            if ready:
+                ch = sys.stdin.read(1)
+                if ch in ("q", "Q", "\x03", "\x04"):  # q, Ctrl-C, Ctrl-D
+                    break
+                cmd_ack()
+            frame_idx += 1
     finally:
         sys.stdout.write("\033[?25h")  # restore cursor
         sys.stdout.flush()
