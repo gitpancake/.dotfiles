@@ -53,8 +53,11 @@ DEFAULT_MAX_ACTIVE = 50
 DISMISSED_RING_SIZE = 500
 SEEN_RING_SIZE = 200
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
-DEFAULT_BACKFILL_COUNT = 2
+DEFAULT_BACKFILL_COUNT = 5
 BACKFILL_STAGGER_MS = 500
+BACKFILL_FETCH_MULTIPLIER = 8  # over-fetch then filter — joins/edits/etc can dominate
+BACKFILL_FETCH_MIN = 30
+BACKFILL_FETCH_MAX = 200
 
 
 # ----------------------------------------------------------------------
@@ -266,8 +269,12 @@ def backfill_channel(web, channel_id, count, name_cache, model, max_active):
     """Pull last `count` non-trivial messages from channel and add as alerts."""
     if count <= 0:
         return
+    fetch_limit = min(
+        BACKFILL_FETCH_MAX,
+        max(BACKFILL_FETCH_MIN, count * BACKFILL_FETCH_MULTIPLIER),
+    )
     try:
-        resp = web.conversations_history(channel=channel_id, limit=max(count, 5))
+        resp = web.conversations_history(channel=channel_id, limit=fetch_limit)
     except Exception as e:
         sys.stderr.write(f"slack-tldr: backfill {channel_id} failed: {e}\n")
         return

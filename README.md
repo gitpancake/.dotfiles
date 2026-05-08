@@ -156,7 +156,7 @@ A daemon that subscribes to specific Slack channels via Socket Mode, runs each n
 
 **Auth:** API calls run through your Claude Code OAuth token (loaded from the macOS keychain — service `Claude Code-credentials`). No `ANTHROPIC_API_KEY` needed. Falls back to that env var if the keychain entry is missing.
 
-**Backfill:** on daemon startup (and whenever the bot is invited to a new channel), the last `backfill_count` messages from each channel are TLDR'd and added to the active pane. Default is `2`. Set to `0` to disable.
+**Backfill:** on daemon startup (and whenever the bot is invited to a new channel), the last `backfill_count` *non-trivial* messages from each channel are TLDR'd and added to the active pane. Default is `5`. The daemon over-fetches from the API and filters out join/leave/edit subtypes, so a channel full of recent invites still surfaces the real alerts beneath them. Set to `0` to disable.
 
 **Pane:** in any tmux pane, run
 
