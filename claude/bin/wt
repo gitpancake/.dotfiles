@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+# wt — spin up a worktree lane in one command.
+#
+# Usage:   wt <task-slug-or-ticket>
+#   wt team-1530        # raw slug → worktree only, no auto-kickoff
+#   wt TEAM-1530        # Linear ticket → also kicks off /ticket-pickup TEAM-1530
+#                       (or resumes from existing plan at ~/.claude/plans/TEAM-1530.md)
+#
+# Effect:
+#   - Worktree at <repo>/.claude/worktrees/agent-<slug>
+#   - Branch agent/<slug> off current HEAD (skipped if branch already exists)
+#   - Per-lane port stamped in .env.local.port (3100 + lane index)
+#   - .claude/agent-state seeded as IDLE (visible to agent-board)
+#   - In tmux: opens new window running claude, with optional initial prompt
+#   - Outside tmux: prints the path so you can cd in manually
+
+set -euo pipefail
+
+raw=${1:-}
+[[ -z "$raw" ]] && { echo "usage: wt <task-slug-or-ticket>" >&2; exit 1; }
+
+# Detect Linear-style ticket: TEAM-NNNN. Lowercase the slug for paths.
+ticket=""
+if [[ "$raw" =~ ^[A-Za-z]+-[0-9]+$ ]]; then
+  ticket=$(printf '%s' "$raw" | tr '[:lower:]' '[:upper:]')
+  slug=$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')
+else
+  slug="$raw"
+fi
+
+repo=$(git rev-parse --show-toplevel 2>/dev/null) \
+  || { echo "wt: not inside a git repo" >&2; exit 1; }
+
+wt_dir="$repo/.claude/worktrees"
+wt_path="$wt_dir/agent-$slug"
+branch="agent/$slug"
+
+mkdir -p "$wt_dir"
+
+if [[ ! -d "$wt_path" ]]; then
+  if git -C "$repo" rev-parse --verify "$branch" >/dev/null 2>&1; then
+    git -C "$repo" worktree add "$wt_path" "$branch"
+  else
+    git -C "$repo" worktree add "$wt_path" -b "$branch"
+  fi
+fi
+
+existing=$(find "$wt_dir" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
+port=$((3099 + existing))
+printf 'PORT=%s\n' "$port" > "$wt_path/.env.local.port"
+
+mkdir -p "$wt_path/.claude"
+echo "IDLE" > "$wt_path/.claude/agent-state"
+
+# Build initial prompt — autonomous dev loop.
+# Lane runs end-to-end and only stops when there's a PR ready for review.
+initial=""
+if [[ -n "$ticket" ]]; then
+  plan="$HOME/.claude/plans/${ticket}.md"
+  if [[ -f "$plan" ]]; then
+    initial="Autonomous mode. Plan at ${plan}. Read it. Implement every slice end-to-end: per slice run type-check + tests (use \`bun test\` in example-org-agent), commit per layer (schema → backend → frontend), then move on. After the final slice, run /ship to open the PR and run a full review. Stop only when the PR is open and the review report is back. If you hit a genuine blocker (ambiguity not resolvable from the plan, repeated test failure on the same root cause, missing credential), stop and report — do not guess. Do not ask for confirmation between slices."
+  else
+    initial="Autonomous mode. Run /ticket-pickup ${ticket} first to scope (it will write ~/.claude/plans/${ticket}.md). Then implement every slice end-to-end per the plan: type-check + tests per slice, commit per layer, no inter-slice confirmation. After the final slice, run /ship. Stop only when the PR is open and the review report is back. Stop early only on a genuine blocker (ambiguity, repeated failure, missing credential)."
+  fi
+fi
+
+# Use --dangerously-skip-permissions by default (matches user's `cdsp` alias).
+# Lanes default to Sonnet (cost discipline); main cockpit stays on Opus.
+# Override per invocation:
+#   WT_MODEL=opus wt <slug>          # swap model only
+#   WT_CLAUDE='claude' wt <slug>     # full bypass (WT_MODEL ignored)
+claude_bin="${WT_CLAUDE:-claude --dangerously-skip-permissions --model ${WT_MODEL:-sonnet}}"
+claude_cmd="$claude_bin"
+[[ -n "$initial" ]] && claude_cmd="$claude_bin $(printf '%q' "$initial")"
+
+# Layout: where to place the new claude lane.
+#   pane    (default) — split current window horizontally, claude on the right
+#   window  — new window/tab in current session
+#   session — detached new tmux session named "wt-<slug>" (attach with `tmux attach -t wt-<slug>`)
+layout="${WT_LAYOUT:-window}"
+
+if [[ -n "${TMUX:-}" ]]; then
+  case "$layout" in
+    pane)
+      tmux split-window -h -c "$wt_path" "$claude_cmd"
+      tmux select-pane -T "$slug" 2>/dev/null || true
+      ;;
+    window)
+      tmux new-window -n "$slug" -c "$wt_path" "$claude_cmd"
+      ;;
+    session)
+      tmux new-session -d -s "wt-$slug" -c "$wt_path" "$claude_cmd"
+      echo "wt: detached session 'wt-$slug'. Attach: tmux attach -t wt-$slug"
+      ;;
+    *)
+      echo "wt: unknown WT_LAYOUT=$layout (expected pane|window|session)" >&2
+      exit 1
+      ;;
+  esac
+else
+  echo "wt: not in tmux."
+  echo "  worktree: $wt_path"
+  echo "  port:     $port"
+  echo "  branch:   $branch"
+  [[ -n "$initial" ]] && echo "  kickoff:  $claude_cmd"
+fi

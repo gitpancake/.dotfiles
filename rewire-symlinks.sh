@@ -15,14 +15,24 @@ ln -sf "$NEW/claude/statusline-command.sh" ~/.claude/statusline-command.sh
 ln -sf "$NEW/claude/transcript-costs.sh" ~/.claude/transcript-costs.sh
 ln -sf "$NEW/claude/settings.json" ~/.claude/settings.json
 ln -sf "$NEW/claude/CLAUDE.md" ~/.claude/CLAUDE.md
+ln -sf "$NEW/claude/worktree-protocol.md" ~/.claude/worktree-protocol.md
 for f in "$NEW/claude/hooks/"*.sh; do ln -sf "$f" ~/.claude/hooks/"$(basename "$f")"; done
 for f in "$NEW/claude/commands/"*.md; do ln -sf "$f" ~/.claude/commands/"$(basename "$f")"; done
 for f in "$NEW/claude/agents/"*.md; do ln -sf "$f" ~/.claude/agents/"$(basename "$f")"; done
+mkdir -p ~/.local/bin
+for f in "$NEW/claude/bin/"*; do
+  [ -e "$f" ] || continue
+  chmod +x "$f"
+  ln -sf "$f" ~/.local/bin/"$(basename "$f")"
+done
 echo "  claude: OK"
 
 # tmux
 ln -sf "$NEW/tmux/.tmux.conf" ~/.tmux.conf
+mkdir -p ~/.tmux
 ln -sf "$NEW/tmux/tmux-status.sh" ~/.tmux/tmux-status.sh
+ln -sf "$NEW/tmux/agent-board.sh" ~/.tmux/agent-board.sh
+[ -f "$NEW/tmux/grid-4x2.sh" ] && ln -sf "$NEW/tmux/grid-4x2.sh" ~/.tmux/grid-4x2.sh
 echo "  tmux: OK"
 
 # vim

@@ -35,6 +35,73 @@ The `code-simplifier` plugin reviews diffs automatically — subagents do not ne
 ## Global Slash Commands
 
 - `/simplify` — scoped review of the current diff for reuse, clarity, efficiency, dead code. Fixes in place.
+- `/scope <free text>` — turn a free-text problem into a Linear ticket draft. Crawls codebase (mirror search, surface area, gotchas, prereqs). Stops before creating; "go" → creates.
+- `/read-ticket <ID>` — fetch a Linear ticket and render it in the terminal. Pure read, no edits.
+- `/rescope <ID> [adjustments]` — apply user's recommendations to an existing ticket; shows diff, stops, "go" → updates.
+- `/ticket-pickup <ID>` — scope an existing Linear ticket into a slice plan, post Linear comment, then spawn a worktree lane via `wt`. Stops before implementation; the spawned lane waits for "go".
+- `/ship [PR#]` — commit + push + open PR with house-style bullet body, run a full PR review, report findings as a severity table. Idempotent.
+- `/linear-review [team]` — audit user's Linear tickets + open PRs, propose state cleanups (merged→Done, dups, stale backlog cancel, forgotten high-prio flag). Read-only by default; mutations on explicit `go`.
+
+## Ticket Lifecycle (user's house workflow)
+
+```
+/scope <problem>          → drafts ticket from free text, creates on go
+/read-ticket <ID>         → pulls ticket + comments + linked PRs into the terminal
+/rescope <ID> <edits>     → applies your recs, diffs, updates Linear on go
+/ticket-pickup <ID>       → writes plan to ~/.claude/plans/<ID>.md, comments on Linear,
+                            spawns an AUTONOMOUS worktree lane via `wt`
+# (the new lane runs end-to-end, no babysitting:)
+slice 1 → type-check + test + commit per layer
+slice 2 → …
+slice N → final flip
+/ship                     → opens PR, runs full review
+# Stops only when PR is up + review report is back, or on a genuine blocker.
+```
+
+**Autonomous semantics.** `wt` and `/ticket-pickup` are one-shot fire-and-forget. The lane never stops between slices to ask "ready for slice N+1?" — it just goes. It stops on:
+1. PR open + review report posted (success).
+2. Genuine blocker: ambiguity not resolvable from the plan, repeated test failure on the same root cause, missing credential. Reports and stops.
+
+user watches `agent-board.sh`. Red row → look. Otherwise leave it alone.
+
+`wt <slug-or-TICKET-ID>` is the lane primitive. Linear-style IDs (`TEAM-1530`) auto-resume from `~/.claude/plans/<ID>.md` if it exists, otherwise auto-invoke `/ticket-pickup` first. Lane runs `claude --dangerously-skip-permissions` (override with `WT_CLAUDE='claude' wt …`). Default layout = new tmux window; `WT_LAYOUT=pane|session` overrides.
+
+## Slice Protocol — how user actually ships
+
+user's default cadence for non-trivial Linear tickets is trunk-based slices, not one big PR. Match it.
+
+1. **Scope first**: `/ticket-pickup <ID>` writes a plan to `~/.claude/plans/<ID>.md`. Stops. user reviews.
+2. **One slice = one PR**: each slice merges to main on its own and leaves main shippable. If a slice can't merge alone, restructure until it can.
+3. **Branch shape**: base feature branch `feature/<ticket-slug>`. Per-slice branches off of it (`agent/<slug>` or `henry/<slug>-slice-N`). Final flip slice merges the feature branch to main.
+4. **Per-slice handoff**: user signals "slice N merged, next!" — that means: switch to next slice, re-brief from the plan, do not summarize what you just did. The plan in `~/.claude/plans/` is the source of truth, not your turn history.
+5. **Commit per layer**: schema → backend → frontend separate commits inside a slice. user squashes on merge.
+
+## Parallel Worktree Lanes
+
+Default: one lane per ticket. Use `wt <slug-or-TICKET-ID>` to spawn. Outputs:
+- worktree at `<repo>/.claude/worktrees/agent-<slug>`
+- branch `agent/<slug>` off current HEAD
+- per-lane port stamped in `.env.local.port` (3100 + lane index)
+- `.claude/agent-state` seeded to `IDLE` (visible to `agent-board.sh`)
+- new tmux window running `claude`. Linear-style ID auto-invokes `/ticket-pickup <ID>` (or resumes from existing plan).
+
+**Same-repo parallel-lane gotchas** (assume any could bite when 3+ lanes are live in example-org-agent):
+- `node_modules` is per-worktree. First action in a fresh worktree is usually `bun install`.
+- Dev servers collide on port. Always read `PORT` from `.env.local.port`; never hardcode.
+- Trigger.dev local runners across lanes can race the same task queue. Stagger or scope via env.
+- `CLAUDE.md` cache + Linear ticket conventions are shared via the worktree's mounted `.git`.
+- Tests inside a worktree must be `bun test` (the `:vm` flag is required for isolation).
+
+## Aggregator Status Pane
+
+Pin a tmux pane running `watch -tcn2 ~/.tmux/agent-board.sh`. It reads `<wt>/.claude/agent-state` for every worktree under `~/Documents/code/*/`. States:
+- `IDLE` (dim) — agent done, no pending check
+- `RUNNING:precheck` (yellow) — background type-check / tests in flight
+- `WAITING:<msg>` (red) — agent paused, needs user's input
+- `DONE` (green) — last precheck passed
+- `FAILED:<step>` (red) — precheck failed; tail `<wt>/.claude/precheck.log`
+
+Any project that wants the green/red signal drops an executable `.claude/precheck.sh`. Keep it fast (type-check, lint) — it forks to background but it's still the signal user watches.
 
 ## Planning — Linear First
 

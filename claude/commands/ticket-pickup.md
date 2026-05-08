@@ -88,13 +88,12 @@ Lump diagnostics drive nothing. Split:
 - Touches **tests** → `bun test` (`:vm` flag required in worktrees), and ensure failures include human-readable explanations for AO.
 - Touches **Trigger.dev tasks** → confirm both `TaskRegistry` and `TASK_ROUTES_ENV` are updated (silently no-ops in dev otherwise — known gotcha).
 
-## 9. Branch + worktree
+## 9. Branch + worktree (planning only)
 
-Propose, do not create:
+Reserve naming in the plan; the actual creation happens in §11.
 
-- Branch name: `feature/<ticket-slug>` or `fix/<ticket-slug>` (lowercase, hyphenated, ≤50 chars).
-- Worktree path: `<repo>/.claude/worktrees/<ticket-slug>` per example-org worktrees-by-default.
-- Trigger command the user can run: `git worktree add <path> -b <branch>`.
+- Branch name: `agent/<ticket-id-lower>` (matches `wt`'s convention so plan and worktree align).
+- Worktree path: `<repo>/.claude/worktrees/agent-<ticket-id-lower>`.
 
 ## 10. Linear comment
 
@@ -102,6 +101,48 @@ Post via `mcp__linear-server__save_comment`:
 
 > Scoping in progress for $ARGUMENTS. Plan at `~/.claude/plans/$ARGUMENTS.md`. Reviewing with @henry before any code edits.
 
+## 11. Spawn the worktree lane (only if not already in one)
+
+Detect: is the current directory already inside a worktree (`<repo>/.claude/worktrees/<lane>`)?
+
+```bash
+case "$PWD" in
+  */.claude/worktrees/*) IN_LANE=1 ;;
+  *) IN_LANE=0 ;;
+esac
+```
+
+### If NOT already in a lane (`IN_LANE=0`)
+
+Spawn one via `wt`:
+
+```bash
+wt $ARGUMENTS
+```
+
+`wt` will:
+- Create `<repo>/.claude/worktrees/agent-<lowercased-id>` and the matching `agent/<id>` branch.
+- Allocate a per-lane port (`.env.local.port`) and seed `.claude/agent-state` to `IDLE`.
+- Open a new claude lane (default: new tmux window — `WT_LAYOUT=pane|session` overrides).
+- Hand the new lane an autonomous-mode kickoff: read the plan, implement every slice end-to-end, then `/ship`. The new lane only stops when the PR is open and the review report is back.
+
+After spawning, this session is done:
+
+> Lane spawned. Autonomous dev loop running there. This pane is done.
+
+**Stop.** Do not implement here — implementation happens in the spawned lane.
+
+### If already in a lane (`IN_LANE=1`)
+
+`/ticket-pickup` was invoked from inside an existing autonomous lane (e.g. `wt` kicked it off). Do **not** spawn another `wt` — that would recurse.
+
+Instead, continue inline:
+
+> Plan ready. Beginning autonomous implementation. Slices will commit per layer; no inter-slice confirmation. /ship at the end.
+
+Then proceed straight to slice 1 of the plan and run the full autonomous loop in this same session.
+
 ## Stop condition
 
-After writing `~/.claude/plans/$ARGUMENTS.md` and posting the Linear comment, **stop**. Do not run grep beyond what was needed for sections 3–4. Do not edit any code file. Wait for the user's explicit "go" or follow-up before implementing.
+- `IN_LANE=0` path: stop after §10 + §11. Spawn happened; lane runs elsewhere.
+- `IN_LANE=1` path: do not stop. Continue with autonomous slice implementation per the plan. Stop only when /ship is done and the PR is up, or when a genuine blocker (ambiguity, repeated failure, missing credential) needs user. Do not stop "to confirm before slice N" — autonomous means autonomous.
