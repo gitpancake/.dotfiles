@@ -2,10 +2,11 @@
 # PostToolUse hook: warn once per session when tool-call patterns suggest
 # the "LLM-per-item" budget blowup.
 #
-# NOTE: PostToolUse hooks do NOT fire for subagent tool calls — only for the
-# top-level session. Subagent tracking requires a Claude Code feature addition
-# (filed: https://github.com/anthropics/claude-code/issues). The groupKey
-# logic below is wired and ready for when CLAUDE_PARENT_SESSION_ID is added.
+# KNOWN GAP: PostToolUse does NOT fire for subagent tool calls — only for the
+# top-level session. So heavy subagent fan-out (the workflow shape that
+# actually blows up ExampleCorp bills) is invisible to this hook. The groupKey
+# logic below remains wired in case CLAUDE_PARENT_SESSION_ID lands upstream;
+# until then this only catches loops in the parent session.
 #
 # Thresholds (each fires once per group):
 #   - Same tool called >=30 times        -> suggests batch pattern

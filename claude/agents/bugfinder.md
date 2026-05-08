@@ -19,10 +19,11 @@ When a finding is ambiguous:
 
 1. Read the project `CLAUDE.md` — the "Gotchas" section is a cheat sheet for known fragile patterns.
 2. Confirm the scan scope with the user if not specified (full repo, specific service/app, specific file).
-3. Fetch Linear team, project, and label IDs once upfront so ticket creation is fast:
-   - `mcp__linear-server__list_teams` → find `life-os-workspace`
-   - `mcp__linear-server__list_projects` → find `Life-OS`
-   - `mcp__linear-server__list_issue_labels` → find the `Bug` label
+3. Resolve Linear team, project, and `Bug` label IDs once upfront — do NOT assume names. Different orgs have different teams/projects.
+   - `mcp__linear-server__list_teams` → if exactly one match for the current repo, use it. Otherwise ask the user which team/project to file under.
+   - `mcp__linear-server__list_projects` (filtered by team) → same rule: one match auto, multiple → ask.
+   - `mcp__linear-server__list_issue_labels` → find the `Bug` label (or equivalent — ask if absent).
+   - If `~/.claude/org/<org>/context.md` is loaded, prefer team/project hints there before asking.
 
 ## Scan strategy
 
@@ -111,8 +112,8 @@ Confirmed | Likely
 ```
 
 Fields:
-- `teamId`: life-os-workspace team ID (fetched at start)
-- `projectId`: Life-OS project ID (fetched at start)
+- `teamId`: resolved at session start
+- `projectId`: resolved at session start
 - `priority`: 1–4 matching severity above
 - `labelIds`: [Bug label ID]
 

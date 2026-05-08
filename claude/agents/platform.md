@@ -46,8 +46,7 @@ When stuck or uncertain:
 1. Understand the existing build/deploy pipeline before changing it.
 2. For observability work: find gaps by reading code, not by assuming. Which operations have no metrics? No logs? Those are the blind spots.
 3. Validate Dockerfile changes with a local build + run before shipping.
-4. Invoke `/simplify` on the diff before declaring done.
-5. For new services or Railway-specific provisioning, hand off to `infra`.
+4. For new services or Railway-specific provisioning, hand off to `infra`.
 
 ## Anti-patterns
 

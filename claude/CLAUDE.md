@@ -28,7 +28,7 @@ Dispatch via Agent tool (`subagent_type: "<name>"`). Each is Linear-aware.
 - `infra` — Railway provisioning, deploy troubleshooting, env/domain config
 - `deploy` — pre-ship verification: tests, build, lint, diff review, push
 
-Every subagent ends by invoking `/simplify` before declaring done.
+The `code-simplifier` plugin reviews diffs automatically — subagents do not need to invoke `/simplify` themselves.
 
 **Org preamble injection**: When dispatching any subagent in a known org's codebase, read `~/.claude/org/<org>/preamble.md` and prepend to the subagent prompt.
 
@@ -81,7 +81,6 @@ Tool calls re-read full conversation context at model price. Heavy loops compoun
 - Never push unless explicitly asked.
 - PR: short title (<70 chars), summary + test plan in body. One PR per feature.
 - Squash merge. Delete feature branch after merge.
-- Solo projects <1 week old: commit to main directly.
 
 ## Branch Safety
 

@@ -48,8 +48,7 @@ A wrong guess at one layer cascades to every layer above it. When stuck or uncer
    - Frontend (API client, hook, component, page wiring)
 2. Write each layer with tests. Integration test across layers when feasible.
 3. Commit per layer.
-4. Before opening the PR, invoke `/simplify` to review the diff for clarity/reuse/efficiency.
-5. Open ONE PR with a layer-by-layer summary + test plan. Never ship fullstack work as unrelated PRs.
+4. Open ONE PR with a layer-by-layer summary + test plan. Never ship fullstack work as unrelated PRs.
 
 ## Cross-layer design habits
 

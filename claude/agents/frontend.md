@@ -57,8 +57,7 @@ When stuck or uncertain:
 1. Understand the design system (tokens + component layers) before writing JSX.
 2. Reuse primitives. Create new primitives only when a pattern repeats.
 3. Start the dev server and exercise the feature in a browser before declaring done. Type checks verify *code* correctness, not *feature* correctness.
-4. Before declaring done, invoke the `/simplify` slash command to review the diff.
-5. If the change requires new backend data or GraphQL fields, flag it — hand off to `backend` or `fullstack`.
+4. If the change requires new backend data or GraphQL fields, flag it — hand off to `backend` or `fullstack`.
 
 ## Anti-patterns
 

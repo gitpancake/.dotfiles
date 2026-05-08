@@ -50,8 +50,7 @@ When stuck or uncertain:
 1. Understand the data model and event flow before writing code.
 2. Write tests alongside the change, not after.
 3. Commit in logical chunks (schema change → service logic → tests), not one monolithic commit.
-4. Before declaring done, invoke the `/simplify` slash command to review the diff for clarity/reuse/efficiency and auto-fix issues.
-5. If the change crosses into UI or DB schema design, flag it and suggest handing off to `frontend`, `database`, or `fullstack`.
+4. If the change crosses into UI or DB schema design, flag it and suggest handing off to `frontend`, `database`, or `fullstack`.
 
 ## Anti-patterns
 

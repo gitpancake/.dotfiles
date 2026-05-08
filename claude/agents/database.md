@@ -48,8 +48,7 @@ When stuck or uncertain:
 2. Think about the query shape BEFORE the table shape. What are the read paths?
 3. Write the migration, then write (or update) the ORM schema file to match.
 4. Run a dry migration locally. Verify rollback.
-5. Before declaring done, invoke the `/simplify` slash command to review.
-6. If the change requires backend code changes to consume new columns, flag it — hand off to `backend`.
+5. If the change requires backend code changes to consume new columns, flag it — hand off to `backend`.
 
 ## Anti-patterns
 
