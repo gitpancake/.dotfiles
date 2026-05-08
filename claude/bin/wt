@@ -37,6 +37,21 @@ branch="agent/$slug"
 
 mkdir -p "$wt_dir"
 
+# Always fetch latest before spawning a lane so it doesn't branch off stale code.
+# If cockpit is on main/master and behind origin, fast-forward in place. Fails
+# loud on dirty working tree or non-ff divergence — better than silent stale.
+# Skip with WT_NO_FETCH=1.
+if [[ -z "${WT_NO_FETCH:-}" ]]; then
+  git -C "$repo" fetch --quiet origin || echo "wt: warning, fetch failed" >&2
+  current=$(git -C "$repo" rev-parse --abbrev-ref HEAD)
+  if [[ "$current" == "main" || "$current" == "master" ]]; then
+    if git -C "$repo" merge-base --is-ancestor HEAD "origin/$current" 2>/dev/null; then
+      git -C "$repo" merge --ff-only "origin/$current" \
+        || echo "wt: warning, fast-forward of $current failed (dirty tree?)" >&2
+    fi
+  fi
+fi
+
 if [[ ! -d "$wt_path" ]]; then
   if git -C "$repo" rev-parse --verify "$branch" >/dev/null 2>&1; then
     git -C "$repo" worktree add "$wt_path" "$branch"
