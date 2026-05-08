@@ -98,6 +98,7 @@ echo "  Linked Claude Code config"
 ln -sf "$DOTFILES_DIR/tmux/.tmux.conf" ~/.tmux.conf
 mkdir -p ~/.tmux
 ln -sf "$DOTFILES_DIR/tmux/tmux-status.sh" ~/.tmux/tmux-status.sh
+ln -sf "$DOTFILES_DIR/tmux/grid-4x2.sh" ~/.tmux/grid-4x2.sh
 echo "  Linked tmux config"
 
 # Alacritty
