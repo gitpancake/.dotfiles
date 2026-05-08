@@ -161,13 +161,20 @@ A daemon that subscribes to specific Slack channels via Socket Mode, runs each n
 **Pane:** in any tmux pane, run
 
 ```bash
+slack-watch
+```
+
+The pane shows a numbered list of active alerts with timestamps and channel names. New (unacked) alerts **blink** until you focus the pane and press any key — that acks every active alert and clears the blink. `q` / Ctrl-C exits.
+
+If you'd rather have a passive view with no keypress handling, the static renderer still works:
+
+```bash
 watch -tcn2 ~/.dotfiles/scripts/slack-tldr-pane.sh
 ```
 
-You'll see a numbered list of active alerts with timestamps and channel names.
-
-**Dismiss:**
+**Dismiss / ack:**
 ```bash
+slack-tldr ack           # mark all current alerts as seen (stops the blink)
 slack-tldr dismiss 2     # dismiss the 2nd active alert
 slack-tldr dismiss-all   # clear everything
 ```

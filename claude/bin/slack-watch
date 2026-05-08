@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
-# Run the slack-tldr pane renderer in the current terminal/pane.
-# Refresh every 2s. Ctrl-C to exit.
-exec watch -tcn2 "$HOME/.dotfiles/scripts/slack-tldr-pane.sh"
+# Interactive Slack alerts pane.
+# - new alerts blink until acked
+# - any key acks (clears the blink)
+# - q / Ctrl-C exits
+exec /usr/bin/env python3 "$HOME/.dotfiles/scripts/slack-tldr.py" watch

@@ -3,8 +3,10 @@
 
 Subcommands:
   daemon       — run the Socket Mode listener (long-lived process)
+  watch        — interactive pane: blinks new alerts, any key acks, q quits
   list         — print active alerts as JSON (debug)
-  pane         — render active alerts for `watch` (one-shot)
+  pane         — render active alerts for `watch(1)` (one-shot)
+  ack          — mark all current alerts as seen (clears the blink)
   dismiss N    — dismiss the Nth active alert (1-indexed)
   dismiss-all  — clear every active alert
 
@@ -24,6 +26,7 @@ State at $SLACK_TLDR_STATE (default ~/.local/share/slack-tldr/state.json):
     "active":        [{"id": "<ts>", "ts": <epoch>, "channel": "C…",
                        "channel_name": "alerts", "tldr": "…", "raw": "…"}],
     "dismissed_ts":  ["<ts>", …],   # ring of recent dismissals
+    "ack_ts":        <epoch>,       # alerts with ts > ack_ts are "new"
     "channel_names": {"C…": "alerts"}  # cache for pretty rendering
   }
 """
@@ -81,6 +84,7 @@ def _load_state():
     data.setdefault("dismissed_ts", [])
     data.setdefault("channel_names", {})
     data.setdefault("seen_ts", [])
+    data.setdefault("ack_ts", 0.0)
     return data
 
 
@@ -450,23 +454,128 @@ def cmd_list():
     print(json.dumps(state.get("active", []), indent=2))
 
 
-def cmd_pane():
-    """One-shot render for `watch`. ANSI-colored numbered list."""
-    state = _load_state()
+def _render_pane(state, out):
+    """Write the numbered alert list to `out`. Blinks alerts whose ts
+    exceeds state['ack_ts']."""
     active = state.get("active", [])
+    ack_ts = float(state.get("ack_ts") or 0.0)
     if not active:
-        print("\033[2mno active alerts\033[0m")
+        out.write("\033[2mno active alerts\033[0m\n")
         return
     for i, a in enumerate(active, 1):
-        ts = a.get("ts") or 0
+        ts = float(a.get("ts") or 0)
         hhmm = time.strftime("%H:%M", time.localtime(ts))
         ch = a.get("channel_name") or a.get("channel") or "?"
         tldr = a.get("tldr") or ""
-        # [N] HH:MM #channel  tldr
-        print(
-            f"\033[33m[{i}]\033[0m \033[2m{hhmm}\033[0m "
-            f"\033[36m#{ch}\033[0m  {tldr}"
+        is_new = ts > ack_ts
+        if is_new:
+            # blink + bold so it pulls the eye until acked
+            out.write(
+                f"\033[5;33m[{i}]\033[0m \033[2m{hhmm}\033[0m "
+                f"\033[36m#{ch}\033[0m  \033[1m{tldr}\033[0m\n"
+            )
+        else:
+            out.write(
+                f"\033[33m[{i}]\033[0m \033[2m{hhmm}\033[0m "
+                f"\033[36m#{ch}\033[0m  {tldr}\n"
+            )
+
+
+def cmd_pane():
+    """One-shot render for `watch(1)`. ANSI-colored numbered list."""
+    _render_pane(_load_state(), sys.stdout)
+
+
+def cmd_ack():
+    """Mark every active alert as acked — clears the blink."""
+    def mutate(state):
+        active = state.get("active", [])
+        if not active:
+            return None
+        max_ts = max(float(a.get("ts") or 0) for a in active)
+        state["ack_ts"] = max_ts
+        return state
+    _with_state_lock(mutate)
+
+
+def cmd_watch():
+    """Interactive in-pane viewer.
+
+    - re-renders on state changes (and at least once per second so
+      the clock + freshness stay current);
+    - blinks any alert with ts > ack_ts;
+    - any keypress acks every active alert (stops the blink);
+    - 'q', Ctrl-C, or Ctrl-D exits.
+    """
+    import select
+    import termios
+    import tty
+
+    fd = sys.stdin.fileno()
+    if not sys.stdin.isatty():
+        sys.stderr.write("slack-tldr: watch requires a TTY\n")
+        sys.exit(2)
+
+    old_attr = termios.tcgetattr(fd)
+    poll_s = 0.5
+    min_render_interval = 1.0
+    last_render = 0.0
+    last_mtime = 0.0
+
+    def render_now():
+        sys.stdout.write("\033[2J\033[H")  # clear + home
+        state = _load_state()
+        active = state.get("active", [])
+        ack_ts = float(state.get("ack_ts") or 0.0)
+        new_count = sum(
+            1 for a in active if float(a.get("ts") or 0) > ack_ts
         )
+        if not active:
+            sys.stdout.write(
+                "\033[1mslack alerts\033[0m  \033[32mclear\033[0m\n\n"
+            )
+        elif new_count:
+            sys.stdout.write(
+                f"\033[1mslack alerts\033[0m  "
+                f"\033[31;5m{new_count} NEW\033[0m "
+                f"\033[2m({len(active)} total) — any key acks, q quits\033[0m\n\n"
+            )
+        else:
+            sys.stdout.write(
+                f"\033[1mslack alerts\033[0m  "
+                f"\033[31m{len(active)} active\033[0m "
+                f"\033[2m— q to quit\033[0m\n\n"
+            )
+        _render_pane(state, sys.stdout)
+        sys.stdout.flush()
+
+    try:
+        tty.setcbreak(fd)
+        sys.stdout.write("\033[?25l")  # hide cursor
+        sys.stdout.flush()
+        while True:
+            now = time.time()
+            try:
+                mtime = os.path.getmtime(DEFAULT_STATE)
+            except OSError:
+                mtime = 0.0
+            if mtime != last_mtime or (now - last_render) >= min_render_interval:
+                render_now()
+                last_render = now
+                last_mtime = mtime
+
+            ready, _, _ = select.select([sys.stdin], [], [], poll_s)
+            if not ready:
+                continue
+            ch = sys.stdin.read(1)
+            if ch in ("q", "Q", "\x03", "\x04"):  # q, Ctrl-C, Ctrl-D
+                break
+            cmd_ack()
+            last_render = 0.0  # force immediate re-render
+    finally:
+        sys.stdout.write("\033[?25h")  # restore cursor
+        sys.stdout.flush()
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_attr)
 
 
 def cmd_dismiss(arg):
@@ -512,16 +621,21 @@ def main():
     argv = sys.argv[1:]
     if not argv:
         sys.stderr.write(
-            "usage: slack-tldr {daemon|list|pane|dismiss N|dismiss-all}\n"
+            "usage: slack-tldr "
+            "{daemon|watch|list|pane|ack|dismiss N|dismiss-all}\n"
         )
         sys.exit(2)
     cmd = argv[0]
     if cmd == "daemon":
         run_daemon()
+    elif cmd == "watch":
+        cmd_watch()
     elif cmd == "list":
         cmd_list()
     elif cmd == "pane":
         cmd_pane()
+    elif cmd == "ack":
+        cmd_ack()
     elif cmd == "dismiss":
         if len(argv) < 2:
             sys.stderr.write("usage: slack-tldr dismiss <N>\n")
