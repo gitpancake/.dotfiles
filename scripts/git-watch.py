@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Watch commits across all repos in $CODE_DIR. Slack-alerts style.
 
-One-shot render — designed for `watch -tcn5 git-watch`. Walks every
-top-level repo under $CODE_DIR, collects commits across all refs within
-$GIT_WATCH_SINCE, renders newest-first.
+Modes:
+  git-watch          interactive live pane (default; q / Ctrl-C exits)
+  git-watch once     one-shot render (for `watch -tcn5 git-watch once`)
+  git-watch ack      mark all current fresh-on-main commits as seen
 
 Subtle "fresh" highlight: when origin/<main-branch> for a repo advances,
-the new commits get a left-bar marker for $GIT_WATCH_NEW_WINDOW seconds.
-First few seconds = bright bar + non-dim subject; then dims; then off.
+the new commits get a green left-bar + bold subject. The bar pulses for
+the first second, then fades over $GIT_WATCH_NEW_WINDOW seconds.
 
 Env:
   CODE_DIR              — repo root scan (default ~/Documents/code)
@@ -17,15 +18,19 @@ Env:
   GIT_WATCH_FETCH       — "1" to `git fetch --quiet` each repo (slow)
   GIT_WATCH_NEW_WINDOW  — seconds to mark fresh commits (default 15)
   GIT_WATCH_BELL        — "1" to `\\a` on first detection (tmux pane border)
+  GIT_WATCH_POLL        — seconds between git polls in live mode (default 5)
   GIT_WATCH_STATE       — state file (default ~/.local/share/git-watch/state.json)
 """
 
 import fcntl
 import json
 import os
+import select
 import subprocess
 import sys
+import termios
 import time
+import tty
 from pathlib import Path
 
 CODE_DIR = Path(os.environ.get("CODE_DIR", os.path.expanduser("~/Documents/code")))
@@ -35,6 +40,7 @@ AUTHOR = os.environ.get("GIT_WATCH_AUTHOR", "")
 FETCH = os.environ.get("GIT_WATCH_FETCH", "0") == "1"
 NEW_WINDOW_S = int(os.environ.get("GIT_WATCH_NEW_WINDOW", "15"))
 BELL = os.environ.get("GIT_WATCH_BELL", "0") == "1"
+POLL_S = float(os.environ.get("GIT_WATCH_POLL", "5"))
 STATE_PATH = Path(os.environ.get(
     "GIT_WATCH_STATE",
     os.path.expanduser("~/.local/share/git-watch/state.json"),
@@ -43,6 +49,7 @@ LOCK_PATH = STATE_PATH.with_suffix(".lock")
 
 MAIN_BRANCHES = ("main", "master", "trunk")
 REMOTE = "origin"
+FRAME_S = 0.5  # 2 Hz pulse
 
 DIM     = "\033[2m"
 BOLD    = "\033[1m"
@@ -98,7 +105,6 @@ def collect():
 
 
 def main_head(repo_path):
-    """Return (branch, full_sha) for the repo's main-equivalent branch."""
     for b in MAIN_BRANCHES:
         sha = run(
             ["git", "rev-parse", "--verify", "--quiet", f"{REMOTE}/{b}"],
@@ -158,10 +164,8 @@ def with_state_lock(fn):
 
 
 def update_fresh():
-    """Diff each repo's main head vs stored. Returns set of full_shas
-    currently considered fresh, plus first_seen_ts map, plus count of
-    *newly detected this tick* (for bell).
-    """
+    """Diff each repo's main head vs stored. Returns (first_seen_map,
+    newly_detected_count). first_seen_map keys = (repo, full_sha)."""
     now = time.time()
     newly_detected = 0
 
@@ -210,40 +214,52 @@ def update_fresh():
     return first_seen, newly_detected
 
 
+def ack_fresh():
+    def mutate():
+        state = load_state()
+        state["fresh"] = []
+        save_state(state)
+    with_state_lock(mutate)
+
+
 def trunc(s, n):
     if len(s) <= n:
         return s
     return s[: max(0, n - 1)] + "…"
 
 
-def fresh_marker(age_s):
-    """Return (left_bar, subject_sgr) for given age. Fades over NEW_WINDOW_S."""
+def fresh_style(age_s, blink_on):
+    """Return (left_bar, subject_sgr) given age + 2Hz blink frame.
+
+    First second: pulse — alternates inverse-green ▍ vs bright green ▍.
+    Up to 33% window: solid bright bar + bold subject.
+    33-66%: plain bar.
+    66-100%: dim bar.
+    """
     if age_s < 0:
         age_s = 0
+    if age_s < 1.0:
+        if blink_on:
+            return f"\033[7;32m▍{RESET}", BOLD
+        return f"{GREEN}{BOLD}▍{RESET}", BOLD
     if age_s < NEW_WINDOW_S * 0.33:
-        return f"{GREEN}▍{RESET}", BOLD
+        return f"{GREEN}{BOLD}▍{RESET}", BOLD
     if age_s < NEW_WINDOW_S * 0.66:
         return f"{GREEN}▍{RESET}", ""
     return f"{DIM}{GREEN}▍{RESET}", DIM
 
 
-def main():
-    first_seen, newly_detected = update_fresh()
-    rows = collect()
-
+def render(out, rows, first_seen, blink_on=True, cols=None):
     window = SINCE.strip()
     if window.endswith(" ago"):
         window = window[: -len(" ago")]
 
     if not rows:
-        print(
+        out.write(
             f"{BOLD}git activity{RESET}  {GREEN}quiet{RESET} "
-            f"{DIM}(last {window}){RESET}"
+            f"{DIM}(last {window}){RESET}\n"
         )
         return
-
-    if BELL and newly_detected > 0:
-        sys.stdout.write("\a")
 
     n = len(rows)
     fresh_in_view = sum(
@@ -251,21 +267,25 @@ def main():
     )
     fresh_tag = ""
     if fresh_in_view:
-        fresh_tag = f"  {GREEN}+{fresh_in_view} fresh on main{RESET}"
-    print(
+        sgr = f"\033[7;32m" if blink_on and any(
+            (time.time() - first_seen[(r[1], r[3])]) < 1.0
+            for r in rows[:LIMIT] if (r[1], r[3]) in first_seen
+        ) else GREEN
+        fresh_tag = f"  {sgr}+{fresh_in_view} fresh on main{RESET}"
+    out.write(
         f"{BOLD}git activity{RESET}  {RED}{n} commits{RESET} "
-        f"{DIM}(last {window}, top {min(LIMIT, n)}){RESET}{fresh_tag}"
+        f"{DIM}(last {window}, top {min(LIMIT, n)}){RESET}{fresh_tag}\n\n"
     )
-    print()
 
     shown = rows[:LIMIT]
     repo_w = min(max(len(r[1]) for r in shown), 24)
 
-    cols = 80
-    try:
-        cols = os.get_terminal_size().columns
-    except OSError:
-        pass
+    if cols is None:
+        cols = 80
+        try:
+            cols = os.get_terminal_size().columns
+        except OSError:
+            pass
     idx_w = len(str(len(shown))) + 2
     fixed = 2 + idx_w + 1 + 5 + 1 + repo_w + 1 + 7 + 2 + 3
     subj_max = max(20, cols - fixed)
@@ -280,7 +300,7 @@ def main():
         key = (repo, full_sha)
         if key in first_seen:
             age = now - first_seen[key]
-            bar, subj_sgr = fresh_marker(age)
+            bar, subj_sgr = fresh_style(age, blink_on)
         else:
             bar = " "
             subj_sgr = ""
@@ -288,12 +308,99 @@ def main():
         subj_open = subj_sgr
         subj_close = RESET if subj_sgr else ""
 
-        print(
+        out.write(
             f"{bar} {YELLOW}[{i}]{RESET} {DIM}{hhmm}{RESET} "
             f"{MAGENTA}{repo_disp}{RESET} "
             f"{DIM}{short_sha}{RESET}  {subj_open}{subj_disp}{subj_close}  "
-            f"{DIM}— {author_disp}{RESET}"
+            f"{DIM}— {author_disp}{RESET}\n"
         )
+
+
+def cmd_once():
+    first_seen, newly = update_fresh()
+    if BELL and newly > 0:
+        sys.stdout.write("\a")
+    rows = collect()
+    render(sys.stdout, rows, first_seen)
+
+
+def cmd_watch():
+    """Live pane. Polls git every POLL_S; redraws every FRAME_S for pulse."""
+    fd = sys.stdin.fileno()
+    if not sys.stdin.isatty():
+        cmd_once()
+        return
+
+    old_attr = termios.tcgetattr(fd)
+    rows = []
+    first_seen = {}
+    last_poll = 0.0
+    frame_idx = 0
+    last_pulse_keys = set()  # for bell — only ring on transition into fresh
+
+    try:
+        tty.setcbreak(fd)
+        sys.stdout.write("\033[?25l\033[?1049h")  # hide cursor + alt screen
+        sys.stdout.flush()
+
+        while True:
+            now = time.time()
+            if now - last_poll >= POLL_S or last_poll == 0.0:
+                first_seen, newly = update_fresh()
+                rows = collect()
+                last_poll = now
+                current_keys = set(first_seen.keys())
+                arrived = current_keys - last_pulse_keys
+                if BELL and arrived:
+                    sys.stdout.write("\a")
+                last_pulse_keys = current_keys
+
+            blink_on = (frame_idx % 2 == 0)
+
+            try:
+                cols, _ = os.get_terminal_size()
+            except OSError:
+                cols = 80
+
+            buf = []
+            class _Buf:
+                def write(self, s): buf.append(s)
+            render(_Buf(), rows, first_seen, blink_on=blink_on, cols=cols)
+            sys.stdout.write("\033[H\033[J")  # home + clear
+            sys.stdout.write("".join(buf))
+            sys.stdout.write(
+                f"\n{DIM}q quits · a acks fresh · poll {int(POLL_S)}s{RESET}\n"
+            )
+            sys.stdout.flush()
+
+            r, _, _ = select.select([sys.stdin], [], [], FRAME_S)
+            if r:
+                ch = sys.stdin.read(1)
+                if ch in ("q", "\x03", "\x04"):  # q, Ctrl-C, Ctrl-D
+                    break
+                if ch == "a":
+                    ack_fresh()
+                    first_seen = {}
+                    last_pulse_keys = set()
+            frame_idx += 1
+    finally:
+        sys.stdout.write("\033[?25h\033[?1049l")  # restore cursor + main screen
+        sys.stdout.flush()
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_attr)
+
+
+def main():
+    cmd = sys.argv[1] if len(sys.argv) > 1 else ""
+    if cmd == "once":
+        cmd_once()
+    elif cmd == "ack":
+        ack_fresh()
+    elif cmd in ("", "watch", "live"):
+        cmd_watch()
+    else:
+        sys.stderr.write(f"git-watch: unknown command {cmd!r}\n")
+        sys.stderr.write("usage: git-watch [watch | once | ack]\n")
+        sys.exit(2)
 
 
 if __name__ == "__main__":
