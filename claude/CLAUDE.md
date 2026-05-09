@@ -28,7 +28,7 @@ Dispatch via Agent tool (`subagent_type: "<name>"`). Each is Linear-aware.
 - `infra` — Railway provisioning, deploy troubleshooting, env/domain config
 - `deploy` — pre-ship verification: tests, build, lint, diff review, push
 
-The `code-simplifier` plugin reviews diffs automatically — subagents do not need to invoke `/simplify` themselves.
+Run `/simplify` after a chunk of work to review the diff for reuse, clarity, and dead code. Subagents should not invoke it themselves — the orchestrator runs it once at chunk boundaries.
 
 **Org preamble injection**: When dispatching any subagent in a known org's codebase, read `~/.claude/org/<org>/preamble.md` and prepend to the subagent prompt.
 
@@ -97,9 +97,11 @@ Default: one lane per ticket. Use `wt <slug-or-TICKET-ID>` to spawn. Outputs:
 Pin a tmux pane running `watch -tcn2 ~/.tmux/agent-board.sh`. It reads `<wt>/.claude/agent-state` for every worktree under `~/Documents/code/*/`. States:
 - `IDLE` (dim) — agent done, no pending check
 - `RUNNING:precheck` (yellow) — background type-check / tests in flight
-- `WAITING:<msg>` (red) — agent paused, needs user's input
+- `WAITING:<code>:<detail>` — agent paused. Color by code class (red/yellow/dim).
 - `DONE` (green) — last precheck passed
 - `FAILED:<step>` (red) — precheck failed; tail `<wt>/.claude/precheck.log`
+
+Before pausing for human input, run `~/.claude/scripts/lane-pause.sh <code> <detail>` to tag the reason. Codes documented in `~/.claude/agent-state-vocab.md`.
 
 Any project that wants the green/red signal drops an executable `.claude/precheck.sh`. Keep it fast (type-check, lint) — it forks to background but it's still the signal user watches.
 
