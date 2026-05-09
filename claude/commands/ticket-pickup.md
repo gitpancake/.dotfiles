@@ -1,148 +1,124 @@
 ---
 description: Scope a Linear ticket into a merge-safe slice plan. Stops before implementation.
-argument-hint: <LINEAR-ID>
+argument-hint: <LINEAR-ID> [base-branch]
 ---
 
 # /ticket-pickup $ARGUMENTS
 
-Produce a scoping doc at `~/.claude/plans/$ARGUMENTS.md`. Do **not** edit any other file. Stop after writing the plan and posting the Linear comment.
+Produce a scoping doc at `~/.claude/plans/<TICKET>.md`. Do **not** edit any other file. Stop after writing the plan and posting the Linear comment.
 
-If `$ARGUMENTS` is empty, ask for a Linear ID and stop.
+## Argument parsing
+
+`$ARGUMENTS` = `<TICKET> [base-branch]`. First token = Linear ticket ID (required). Second = base branch (optional; defaults to cockpit's current branch). Empty first token → ask and stop.
 
 ## 1. State check (parallel)
 
-Run these in parallel before reading code:
+- `mcp__linear-server__get_issue <TICKET>` → body, comments, status, priority, assignee, labels, parent, sub-issues, **attachments**.
+- If `BASE` was passed: `git rev-parse --verify "origin/<BASE>"` — stop if missing.
 
-- `mcp__linear-server__get_issue $ARGUMENTS` → full body, comments, status, priority, assignee, labels, parent, sub-issues, attachments.
-- For each linked ticket / sub-issue surfaced in the body, fetch it too.
-- `gh pr list --search "$ARGUMENTS"` (and `--state all` to catch closed/merged) — is there already work in flight?
-- `git log --all --grep="$ARGUMENTS"` — has anyone already started a branch?
+Linear `attachments[]` already names linked PRs. Fall back to `gh pr list --search "<TICKET>" --state all` and `git log --all --grep="<TICKET>"` only if attachments are empty.
 
-**Stop conditions** (report and wait for go):
-- Status is in-progress and assignee is not the user.
-- An open PR already references this ticket.
-- Ticket has a `Blocked` label or unresolved blocker comment.
+**Linked tickets**: fetch parent + tickets named in `relations.blocks`/`blockedBy` only. Defer sibling/related fetches until a slice needs them. Plan-lint flags fetched-but-never-referenced tickets as `over-fetched` notes — keep §1 fetches lean.
 
-## 2. Verbatim extraction (no paraphrase)
+**Stop conditions** (report and wait): in-progress + assignee not user; open PR exists; `Blocked` label or unresolved blocker comment.
 
-Paraphrase rewards eloquence; copy-paste rewards understanding.
+## 2. Verbatim extraction
 
-- **Acceptance criteria** — copy directly from the ticket. If the ticket has none, say so explicitly and propose criteria for user confirmation.
-- **Explicitly out of scope** — copy directly. If absent, list what you are *assuming* is out of scope so the user can correct it.
-- **Linked tickets / docs** — one-line summary each, with IDs.
-- **Recent comments** — last 5 comments verbatim if they shift scope or constraints.
+Copy directly, do not paraphrase:
+
+- **Acceptance criteria** — copy from ticket. None? Say so, propose criteria for confirmation.
+- **Out of scope** — copy from ticket. Absent? List your *assumptions* so user can correct.
+- **Linked tickets** — one line each: `ID — title — status`.
+- **Recent comments** — last 5 verbatim if they shift scope/constraints.
 
 ## 3. Mirror search (before grep)
 
-Before searching the codebase blind, look for the analogous feature. Most example-org-agent work is "mirror Slack equivalent for Teams" / "mirror Relay integration for CarrierB" shaped.
+Most example-org-agent work is "mirror the X equivalent for Y" shaped. Name the analogous feature first; list its entry points (workflow, route, model, UI). For vendor integrations, search OpenViking `resources/example-org/<vendor>/` first; cite `source_file § section` for any spec claim.
 
-- Is there an existing feature this is structurally similar to? Name it.
-- For each relevant layer, list the mirror's entry point: workflow, route handler, model, UI component.
-- For integration tickets (CarrierA / CarrierB / Relay / CarrierC / CarrierD / CarrierE / Shopify / CarrierF / email-api / etc.), **search OpenViking first** per the example-org org rule:
-  - `mcp__openviking__search` `resources/example-org/<vendor>/`
-  - Cite `source_file § section` for any spec claim, or say "no docs indexed for this vendor — propose adding them."
+## 4. Surface area (grounded grep, only after §3)
 
-## 4. Surface area (grounded grep)
-
-Only after mirror search:
-
-- Top ≤10 files to read first, each with a one-line reason.
-- Imports / callers of the affected types and functions.
-- Any project `CLAUDE.md` "Gotchas" section entries that apply — quote them.
+Top ≤10 files to read first, each with a one-line reason. Imports/callers of affected types. Quote any project `CLAUDE.md` "Gotchas" entries that apply.
 
 ## 5. Slice plan (trunk-based, merge-safe)
 
-Mirror the TEAM-1450 plan format. Each slice ships to main on its own; the user sees nothing until the final flip.
+Each slice ships to main on its own. User sees nothing until the final flip.
+
+### 5a. Human table
 
 | # | Slice | User-visible? | Why safe to merge alone |
 |---|-------|---------------|-------------------------|
 | 1 | … | No | … |
-| … | … | … | … |
-| N | **Flip** | Yes | One-line registry / endpoint change |
+| N | **Flip** | Yes | One-line registry/endpoint change |
 
-Slices should map cleanly to PR boundaries. If a slice can't merge alone without breaking main or showing half-finished UI, restructure until it can.
+If a slice can't merge alone without breaking main or showing half-finished UI, restructure until it can.
 
-## 6. Open questions — split into two lists
+### 5b. DAG block
 
-Lump diagnostics drive nothing. Split:
+If slice count > 1, embed a `<!-- slice-dag:start -->` … `<!-- slice-dag:end -->` block per `~/.claude/dag-schema.md`. Used by `wt --dag <TICKET>` to spawn ready slices in parallel. Single-slice plans may omit.
 
-**Ambiguous** — concrete question + who to ask:
-- Question: …
-- Ask: ticket author / Alex / Sam / #eng-chat / customer
+## 6. Open questions — split
 
-**Risky** — blast radius + rollback path:
-- What breaks if wrong: …
-- Rollback: …
+**Ambiguous** — concrete question + who to ask (ticket author / Alex / Sam / #eng-chat / customer).
+**Risky** — what breaks if wrong + rollback path.
 
 ## 7. Estimate
 
-- **Slice count**: 1 / 3 / 5 / 8.
-- **Vs prior reference**: "M like AE-XXXX" — pull a prior plan from `~/.claude/plans/` and compare.
-- **Top 1–2 unknowns** that would shift it up.
+Slice count (1/3/5/8). Comparable prior plan from `~/.claude/plans/` ("M like AE-XXXX"). Top 1–2 unknowns that would shift it up.
 
 ## 8. ExampleCorp-specific checks (if working in example-org-agent)
 
-- Touches **prompts / context / system messages** → flag llm-vendor cache-prefix risk (95% bar).
-- Touches **error handling / Sentry / catch blocks** → confirm threshold-0 norm preserved; no catch-and-swallow.
-- Touches **function signatures with multiple primitives** → object-params rule.
-- Touches **tests** → `bun test` (`:vm` flag required in worktrees), and ensure failures include human-readable explanations for AO.
-- Touches **Trigger.dev tasks** → confirm both `TaskRegistry` and `TASK_ROUTES_ENV` are updated (silently no-ops in dev otherwise — known gotcha).
+- Prompts/context/system messages → llm-vendor cache-prefix risk (95% bar).
+- Error handling/Sentry/catch → no catch-and-swallow; threshold-0 norm.
+- Function signatures with multiple primitives → object-params rule.
+- Tests → `bun test` (`:vm` flag required in worktrees).
+- Trigger.dev tasks → both `TaskRegistry` and `TASK_ROUTES_ENV` updated.
 
 ## 9. Branch + worktree (planning only)
 
-Reserve naming in the plan; the actual creation happens in §11.
-
-- Branch name: `agent/<ticket-id-lower>` (matches `wt`'s convention so plan and worktree align).
-- Worktree path: `<repo>/.claude/worktrees/agent-<ticket-id-lower>`.
+Branch: `agent/<ticket-id-lower>`. Worktree: `<repo>/.claude/worktrees/agent-<ticket-id-lower>`. Base: `BASE` if passed, else cockpit's current branch. Record base in plan.
 
 ## 10. Linear comment
 
 Post via `mcp__linear-server__save_comment`:
 
-> Scoping in progress for $ARGUMENTS. Plan at `~/.claude/plans/$ARGUMENTS.md`. Reviewing with @henry before any code edits.
+> Scoping in progress for <TICKET>. Plan at `~/.claude/plans/<TICKET>.md`. Reviewing with @henry before any code edits.
 
-## 11. Spawn the worktree lane (only if not already in one)
+## 10.5 Plan-lint gate
 
-Detect: is the current directory already inside a worktree (`<repo>/.claude/worktrees/<lane>`)?
+Run `~/.claude/scripts/plan-lint.sh <TICKET>`.
+
+- If output starts with `plan-lint: CACHED` → skip the subagent. Read `~/.claude/plans/<TICKET>.lint.md` directly.
+- Otherwise → dispatch the `plan-lint` subagent with `TICKET`, `PLAN_PATH`, `VERDICT_PATH`. Then read the verdict file.
+
+Force re-lint with `PLAN_LINT_FORCE=1 ~/.claude/scripts/plan-lint.sh <TICKET>` if the plan didn't change but the upstream Linear ticket did.
+
+- **PASS** → §11.
+- **FAIL** → STOP. Print gap table to user. Do not spawn a lane. user can `/rescope` or hand-edit, then re-run.
+
+## 11. Spawn the lane
+
+Detect lane:
 
 ```bash
-case "$PWD" in
-  */.claude/worktrees/*) IN_LANE=1 ;;
-  *) IN_LANE=0 ;;
-esac
+[[ "$PWD" == */.claude/worktrees/* ]] && IN_LANE=1 || IN_LANE=0
 ```
 
-### If NOT already in a lane (`IN_LANE=0`)
+### Cockpit (`IN_LANE=0`)
 
-Spawn one via `wt`:
+If `BASE` was passed, sync cockpit first (`wt` only ff-merges main/master):
 
 ```bash
-wt $ARGUMENTS
+[ -n "$BASE" ] && git fetch --quiet origin && git checkout "$BASE" && git merge --ff-only "origin/$BASE"
 ```
 
-`wt` will:
-- Create `<repo>/.claude/worktrees/agent-<lowercased-id>` and the matching `agent/<id>` branch.
-- Allocate a per-lane port (`.env.local.port`) and seed `.claude/agent-state` to `IDLE`.
-- Open a new claude lane (default: new tmux window — `WT_LAYOUT=pane|session` overrides).
-- Hand the new lane an autonomous-mode kickoff: read the plan, implement every slice end-to-end, then `/ship`. The new lane only stops when the PR is open and the review report is back.
-
-After spawning, this session is done:
+Then `wt <TICKET>`. `wt` creates the worktree + branch, allocates a per-lane port, opens a new claude lane with autonomous-mode kickoff. Stop after spawning:
 
 > Lane spawned. Autonomous dev loop running there. This pane is done.
 
-**Stop.** Do not implement here — implementation happens in the spawned lane.
+### Inside a lane (`IN_LANE=1`)
 
-### If already in a lane (`IN_LANE=1`)
+`/ticket-pickup` was invoked from inside an autonomous lane (don't recurse). Continue inline:
 
-`/ticket-pickup` was invoked from inside an existing autonomous lane (e.g. `wt` kicked it off). Do **not** spawn another `wt` — that would recurse.
+> Plan ready. Beginning autonomous implementation. Slices commit per layer; no inter-slice confirmation. /ship at end.
 
-Instead, continue inline:
-
-> Plan ready. Beginning autonomous implementation. Slices will commit per layer; no inter-slice confirmation. /ship at the end.
-
-Then proceed straight to slice 1 of the plan and run the full autonomous loop in this same session.
-
-## Stop condition
-
-- `IN_LANE=0` path: stop after §10 + §11. Spawn happened; lane runs elsewhere.
-- `IN_LANE=1` path: do not stop. Continue with autonomous slice implementation per the plan. Stop only when /ship is done and the PR is up, or when a genuine blocker (ambiguity, repeated failure, missing credential) needs user. Do not stop "to confirm before slice N" — autonomous means autonomous.
+Proceed straight to slice 1. Stop only on /ship complete + PR up, or genuine blocker (ambiguity, repeated failure, missing credential). Never stop "to confirm before slice N."
