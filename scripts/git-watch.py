@@ -29,6 +29,7 @@ import select
 import subprocess
 import sys
 import termios
+import textwrap
 import time
 import tty
 from pathlib import Path
@@ -286,15 +287,16 @@ def render(out, rows, first_seen, blink_on=True, cols=None):
             cols = os.get_terminal_size().columns
         except OSError:
             pass
-    fixed = 2 + 5 + 1 + repo_w + 2 + 3
-    subj_max = max(20, cols - fixed)
+
+    # column layout: "▍ HH:MM repo_w  <subject>"
+    indent_len = 2 + 5 + 1 + repo_w + 2
+    indent_str = " " * indent_len
+    subj_w = max(30, cols - indent_len)
 
     now = time.time()
     for ts, repo, _short_sha, full_sha, author, subj in shown:
         hhmm = time.strftime("%H:%M", time.localtime(ts))
         repo_disp = trunc(repo, repo_w).ljust(repo_w)
-        author_disp = trunc(author, 16)
-        subj_disp = trunc(subj, subj_max - len(author_disp) - 3)
 
         key = (repo, full_sha)
         if key in first_seen:
@@ -303,16 +305,32 @@ def render(out, rows, first_seen, blink_on=True, cols=None):
         else:
             bar = " "
             subj_sgr = ""
-
         subj_open = subj_sgr
         subj_close = RESET if subj_sgr else ""
 
-        out.write(
+        prefix = (
             f"{bar} {DIM}{hhmm}{RESET} "
             f"{MAGENTA}{repo_disp}{RESET}  "
-            f"{subj_open}{subj_disp}{subj_close}  "
-            f"{DIM}— {author_disp}{RESET}\n"
         )
+
+        parts = textwrap.wrap(
+            subj, width=subj_w,
+            break_long_words=False, break_on_hyphens=False,
+        ) or [""]
+
+        suffix_plain = f"  — {author}"
+        for j, line in enumerate(parts):
+            head = prefix if j == 0 else indent_str
+            is_last = (j == len(parts) - 1)
+            if is_last and len(line) + len(suffix_plain) <= subj_w:
+                out.write(
+                    f"{head}{subj_open}{line}{subj_close}"
+                    f"  {DIM}— {author}{RESET}\n"
+                )
+            else:
+                out.write(f"{head}{subj_open}{line}{subj_close}\n")
+                if is_last:
+                    out.write(f"{indent_str}{DIM}— {author}{RESET}\n")
 
 
 def cmd_once():
