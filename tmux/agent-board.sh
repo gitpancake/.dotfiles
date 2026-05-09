@@ -66,25 +66,23 @@ priority_for() {
 
 shopt -s nullglob 2>/dev/null || true
 
-# Live context size for a lane.
-# Maps lane_dir → encoded session dir (~/.claude/projects/<dir>), reads the
-# newest *.jsonl, and sums input+cache_read+cache_creation tokens from the last
-# assistant message's usage block. Cached by jsonl mtime+size to keep ticks fast.
-get_ctx_tokens() {
-  local lane_dir=$1
-  local enc=${lane_dir//\//-}
-  enc=${enc//./-}
-  local sess_dir="$HOME/.claude/projects/$enc"
+# Pick newest *.jsonl under a Claude Code session dir.
+newest_jsonl() {
+  local sess_dir=$1
   [[ -d "$sess_dir" ]] || { printf ''; return; }
-  local latest
-  latest=$(ls -t "$sess_dir"/*.jsonl 2>/dev/null | head -n1)
-  [[ -n "$latest" ]] || { printf ''; return; }
-  local mtime size cache_file
+  ls -t "$sess_dir"/*.jsonl 2>/dev/null | head -n1
+}
+
+# Sum input + cache_read + cache_creation tokens from the last usage block in a
+# jsonl file. Cached by jsonl mtime+size at $cache_file so 2s ticks stay cheap.
+_ctx_from_jsonl() {
+  local latest=$1 cache_file=$2
+  [[ -n "$latest" && -f "$latest" ]] || { printf ''; return; }
+  local mtime size
   mtime=$(stat -f %m "$latest" 2>/dev/null || echo 0)
   size=$(stat -f %z "$latest" 2>/dev/null || echo 0)
-  cache_file="$lane_dir/.claude/ctx-cache"
   if [[ -f "$cache_file" ]]; then
-    local cached cmtime csize ctokens
+    local cmtime csize ctokens
     IFS=: read -r cmtime csize ctokens < "$cache_file"
     if [[ "$cmtime" == "$mtime" && "$csize" == "$size" ]]; then
       printf '%s' "$ctokens"
@@ -102,8 +100,58 @@ except Exception:
   print("")
 ' 2>/dev/null)
   [[ -n "$tokens" ]] || tokens=0
+  mkdir -p "$(dirname "$cache_file")" 2>/dev/null
   printf '%s:%s:%s\n' "$mtime" "$size" "$tokens" > "$cache_file" 2>/dev/null
   printf '%s' "$tokens"
+}
+
+# Live context size for a lane (worktree).
+# Maps lane_dir → encoded session dir (~/.claude/projects/<dir>).
+get_ctx_tokens() {
+  local lane_dir=$1
+  local enc=${lane_dir//\//-}
+  enc=${enc//./-}
+  local sess_dir="$HOME/.claude/projects/$enc"
+  local latest cache_file
+  latest=$(newest_jsonl "$sess_dir")
+  [[ -n "$latest" ]] || { printf ''; return; }
+  cache_file="$lane_dir/.claude/ctx-cache"
+  _ctx_from_jsonl "$latest" "$cache_file"
+}
+
+# Live context size for a cockpit session (project session dir, no worktree).
+get_ctx_tokens_session() {
+  local session_dir=$1
+  local latest
+  latest=$(newest_jsonl "$session_dir")
+  [[ -n "$latest" ]] || { printf ''; return; }
+  _ctx_from_jsonl "$latest" "$session_dir/.ctx-cache"
+}
+
+# Pull cwd field from the first jsonl line that carries one (meta/summary
+# lines often lack it). Cached at <session_dir>/.cwd-cache so we don't grep
+# every tick.
+get_cwd_from_jsonl() {
+  local jsonl=$1
+  [[ -f "$jsonl" ]] || { printf ''; return; }
+  local sess_dir cache
+  sess_dir=$(dirname "$jsonl")
+  cache="$sess_dir/.cwd-cache"
+  if [[ -f "$cache" ]]; then
+    cat "$cache"
+    return
+  fi
+  local cwd
+  cwd=$(grep -m1 '"cwd"' "$jsonl" 2>/dev/null | python3 -c '
+import json,sys
+try:
+  d=json.loads(sys.stdin.read())
+  print(d.get("cwd") or "")
+except Exception:
+  print("")
+' 2>/dev/null)
+  [[ -n "$cwd" ]] && printf '%s' "$cwd" > "$cache" 2>/dev/null
+  printf '%s' "$cwd"
 }
 
 fmt_ctx() {
@@ -246,38 +294,132 @@ render_row() {
     "$prio" "$c" "$display" "$state" "$(humanAge "$age")" "$ctx_disp" "$port" "$reset"
 }
 
-printf '%s%-29s %-18s %-6s %-6s %s%s\n' \
-  "$bold" "LANE" "STATE" "AGE" "CTX" "PORT" "$reset"
-printf '%s%s%s\n' "$dim" "----------------------------------------------------------------" "$reset"
+# Render a cockpit row for an active claude session not under any tracked
+# worktree/main-repo path. Derives state from jsonl mtime when there's no
+# agent-state file (cockpit dirs don't usually run our hooks).
+render_cockpit_row() {
+  local cwd=$1 session_dir=$2
+  local latest age mtime now_local
+  latest=$(newest_jsonl "$session_dir")
+  [[ -n "$latest" ]] || return
+  mtime=$(stat -f %m "$latest" 2>/dev/null || echo "$now")
+  age=$((now - mtime))
 
-rows=""
-count=0
+  # Skip cockpit rows that haven't moved in >30 min — they're parked, not live.
+  (( age > 1800 )) && [[ -z "${BOARD_SHOW_ALL:-}" ]] && return
+
+  local state c
+  if [[ -f "$cwd/.claude/agent-state" ]]; then
+    state=$(tail -n1 "$cwd/.claude/agent-state" 2>/dev/null || echo IDLE)
+    case "$state" in
+      ACTIVE*) c=$green ;;
+      WAITING*) c=$red; state="W:input" ;;
+      DONE) c=$green ;;
+      RUNNING*) c=$yellow ;;
+      FAILED*) c=$red ;;
+      *) c=$dim ;;
+    esac
+  else
+    if (( age < 30 )); then state=ACTIVE; c=$green
+    elif (( age < 300 )); then state=RECENT; c=$yellow
+    else state=IDLE; c=$dim
+    fi
+  fi
+
+  local label="$cwd"
+  if [[ "$cwd" == "$HOME"* ]]; then
+    label="~${cwd#$HOME}"
+  fi
+  [[ ${#label} -gt 28 ]] && label="…${label: -27}"
+
+  local ctx ctx_disp
+  ctx=$(get_ctx_tokens_session "$session_dir")
+  ctx_disp=$(fmt_ctx "$ctx")
+
+  local port="-"
+  [[ -f "$cwd/.env.local.port" ]] && port=$(grep -oE '[0-9]+' "$cwd/.env.local.port" 2>/dev/null | head -n1)
+
+  local prio
+  case "$state" in
+    ACTIVE*)  prio=4 ;;
+    RECENT)   prio=5 ;;
+    *)        prio=6 ;;
+  esac
+
+  printf '%s\t%s%-29s %-18s %-6s %-6s %s%s\n' \
+    "$prio" "$c" "$label" "$state" "$(humanAge "$age")" "$ctx_disp" "$port" "$reset"
+}
+
+print_section_header() {
+  local title=$1
+  printf '%s%-29s %-18s %-6s %-6s %s%s\n' \
+    "$bold" "$title" "STATE" "AGE" "CTX" "PORT" "$reset"
+  printf '%s%s%s\n' "$dim" "----------------------------------------------------------------" "$reset"
+}
+
+# Build covered_cwds while iterating lanes so cockpit dedupes correctly.
+# Use newline-delimited string (bash 3.2 has no associative arrays).
+covered_cwds=$'\n'
+note_covered() { covered_cwds+="$1"$'\n'; }
+is_covered()   { [[ "$covered_cwds" == *$'\n'"$1"$'\n'* ]]; }
+
+lane_rows=""
+lane_count=0
 for root in "${ROOTS[@]}"; do
   for repo_dir in "$root"/*/; do
     [[ -d "$repo_dir.git" || -f "$repo_dir.git" ]] || continue
     state_file="$repo_dir.claude/agent-state"
     [[ -f "$state_file" ]] || continue
-    count=$((count + 1))
+    lane_count=$((lane_count + 1))
     repo=$(basename "${repo_dir%/}")
-    rows+=$(render_row "$state_file" "$repo/(main)")$'\n'
+    note_covered "${repo_dir%/}"
+    lane_rows+=$(render_row "$state_file" "$repo/(main)")$'\n'
   done
 
   for wt in "$root"/*/.claude/worktrees/*/; do
     [[ -d "$wt" ]] || continue
     state_file="$wt.claude/agent-state"
     [[ -f "$state_file" ]] || continue
-    count=$((count + 1))
+    lane_count=$((lane_count + 1))
     name=$(basename "${wt%/}")
     repo=$(basename "$(dirname "$(dirname "$(dirname "${wt%/}")")")")
-    rows+=$(render_row "$state_file" "$repo/$name")$'\n'
+    note_covered "${wt%/}"
+    lane_rows+=$(render_row "$state_file" "$repo/$name")$'\n'
   done
 done
 
-if (( count == 0 )); then
-  printf '%s(no worktrees found under: %s)%s\n' \
-    "$dim" "${ROOTS[*]}" "$reset"
+# Cockpit pass: any active Claude session whose cwd isn't already a tracked
+# lane. Window = jsonl mtime within COCKPIT_ACTIVE_SECS (default 5 min).
+COCKPIT_ACTIVE_SECS=${COCKPIT_ACTIVE_SECS:-300}
+cockpit_rows=""
+cockpit_count=0
+for sess_dir in "$HOME"/.claude/projects/*/; do
+  [[ -d "$sess_dir" ]] || continue
+  latest=$(newest_jsonl "${sess_dir%/}")
+  [[ -n "$latest" ]] || continue
+  mt=$(stat -f %m "$latest" 2>/dev/null || echo 0)
+  (( now - mt <= COCKPIT_ACTIVE_SECS )) || continue
+  cwd=$(get_cwd_from_jsonl "$latest")
+  [[ -n "$cwd" ]] || continue
+  is_covered "$cwd" && continue
+  cockpit_count=$((cockpit_count + 1))
+  cockpit_rows+=$(render_cockpit_row "$cwd" "${sess_dir%/}")$'\n'
+done
+
+if (( lane_count == 0 && cockpit_count == 0 )); then
+  printf '%s(no worktrees or active cockpit sessions)%s\n' "$dim" "$reset"
   exit 0
 fi
 
-# Drop blanks (hidden rows leave empty lines), sort by priority, strip key.
-printf '%s' "$rows" | grep -v '^$' | sort -k1,1n | cut -f2-
+print_section_header "LANES"
+if (( lane_count > 0 )); then
+  printf '%s' "$lane_rows" | grep -v '^$' | sort -k1,1n | cut -f2-
+else
+  printf '%s(none)%s\n' "$dim" "$reset"
+fi
+
+if (( cockpit_count > 0 )); then
+  printf '\n'
+  print_section_header "COCKPIT"
+  printf '%s' "$cockpit_rows" | grep -v '^$' | sort -k1,1n | cut -f2-
+fi
