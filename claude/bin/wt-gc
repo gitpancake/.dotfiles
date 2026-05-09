@@ -1,0 +1,158 @@
+#!/usr/bin/env bash
+# wt-gc — garbage-collect stale worktree lanes.
+#
+# Scans <repo>/.claude/worktrees/<lane>/ under known roots. For each lane whose
+# .claude/agent-state hasn't been touched in $THRESHOLD_HOURS hours, runs safety
+# checks and (if all pass) `git worktree remove` it. Branch is preserved.
+#
+# Usage:
+#   wt-gc                    # default: 10h threshold, real run, logs to ~/.claude/logs/wt-gc.log
+#   wt-gc --dry-run          # report what would happen, change nothing
+#   wt-gc --hours 24         # custom threshold
+#   wt-gc --force            # skip dirty/unpushed safety checks (DANGEROUS)
+#   wt-gc --quiet            # suppress stdout (cron mode); still writes log
+#
+# Safety checks (all must pass, unless --force):
+#   1. State file mtime older than threshold
+#   2. Working tree clean (no uncommitted changes)
+#   3. No unpushed commits on the worktree's branch (or upstream missing AND branch merged to main)
+#
+# Exit codes: 0 = ran cleanly. 1 = unexpected error.
+
+set -u
+set -o pipefail
+
+ROOTS=("${HOME}/Documents/code")
+THRESHOLD_HOURS=10
+DRY_RUN=0
+FORCE=0
+QUIET=0
+
+LOG_DIR="${HOME}/.claude/logs"
+LOG_FILE="${LOG_DIR}/wt-gc.log"
+mkdir -p "$LOG_DIR"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run)   DRY_RUN=1; shift ;;
+    --force)     FORCE=1; shift ;;
+    --quiet)     QUIET=1; shift ;;
+    --hours)     THRESHOLD_HOURS=${2:?--hours needs a value}; shift 2 ;;
+    -h|--help)   sed -n '2,30p' "$0"; exit 0 ;;
+    *)           echo "wt-gc: unknown flag: $1" >&2; exit 1 ;;
+  esac
+done
+
+THRESHOLD_SECS=$(( THRESHOLD_HOURS * 3600 ))
+NOW=$(date +%s)
+
+log() {
+  local line="[$(date '+%Y-%m-%d %H:%M:%S')] $*"
+  printf '%s\n' "$line" >> "$LOG_FILE"
+  (( QUIET )) || printf '%s\n' "$line"
+}
+
+removed=0
+skipped=0
+considered=0
+
+shopt -s nullglob 2>/dev/null || true
+
+for root in "${ROOTS[@]}"; do
+  [[ -d "$root" ]] || continue
+  for wt in "$root"/*/.claude/worktrees/*/; do
+    [[ -d "$wt" ]] || continue
+    state_file="$wt.claude/agent-state"
+    [[ -f "$state_file" ]] || continue
+
+    considered=$((considered + 1))
+    lane=$(basename "${wt%/}")
+    repo_dir=$(cd "$wt" && git rev-parse --show-toplevel 2>/dev/null || true)
+    main_repo=$(cd "$wt" && git rev-parse --git-common-dir 2>/dev/null | xargs -I{} dirname {} 2>/dev/null || true)
+    # git-common-dir returns the .git dir of the main checkout; its parent is
+    # the main worktree path we hand to `git worktree remove`.
+
+    state_mtime=$(stat -f %m "$state_file" 2>/dev/null || echo "$NOW")
+    age=$(( NOW - state_mtime ))
+
+    if (( age < THRESHOLD_SECS )); then
+      continue
+    fi
+
+    age_h=$(( age / 3600 ))
+
+    if (( ! FORCE )); then
+      # Safety 1: working tree clean. Ignore wt-injected scratch files
+      # (.claude/agent-state, .claude/agent-pid, .env.local.port) — those
+      # are lane infra, not user work.
+      dirty=$(git -C "$wt" status --porcelain 2>/dev/null \
+        | grep -Ev '^\?\? \.(claude/agent-(state|pid)|env\.local\.port)$' || true)
+      if [[ -n "$dirty" ]]; then
+        log "SKIP $lane — uncommitted changes (age ${age_h}h)"
+        skipped=$((skipped + 1))
+        continue
+      fi
+
+      # Safety 2: no unpushed commits, OR branch already merged to main/master
+      branch=$(git -C "$wt" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+      upstream=$(git -C "$wt" rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || echo "")
+      if [[ -n "$upstream" ]]; then
+        unpushed=$(git -C "$wt" rev-list "${upstream}..HEAD" --count 2>/dev/null || echo "0")
+        if [[ "$unpushed" != "0" ]]; then
+          log "SKIP $lane — $unpushed unpushed commit(s) on $branch (age ${age_h}h)"
+          skipped=$((skipped + 1))
+          continue
+        fi
+      else
+        # No upstream. Only safe if branch is fully merged into main/master.
+        merged_into=""
+        for base in main master; do
+          if git -C "$wt" rev-parse --verify "origin/$base" >/dev/null 2>&1 \
+             && git -C "$wt" merge-base --is-ancestor HEAD "origin/$base" 2>/dev/null; then
+            merged_into="origin/$base"
+            break
+          fi
+        done
+        if [[ -z "$merged_into" ]]; then
+          log "SKIP $lane — no upstream and not merged to main/master (age ${age_h}h)"
+          skipped=$((skipped + 1))
+          continue
+        fi
+      fi
+    fi
+
+    # All checks passed (or --force). Remove the worktree.
+    if (( DRY_RUN )); then
+      log "DRY-RUN would remove $lane (age ${age_h}h, branch=${branch:-?})"
+      removed=$((removed + 1))
+      continue
+    fi
+
+    if [[ -z "$main_repo" || ! -d "$main_repo" ]]; then
+      log "SKIP $lane — could not resolve main repo path"
+      skipped=$((skipped + 1))
+      continue
+    fi
+
+    # --force on the git command: our safety check already cleared the lane
+    # (only wt-scratch files like agent-state are present). git itself still
+    # refuses without --force when ANY untracked file exists.
+    if git -C "$main_repo" worktree remove --force "$wt" 2>>"$LOG_FILE"; then
+      log "REMOVED $lane (age ${age_h}h, branch ${branch:-?} preserved)"
+      removed=$((removed + 1))
+    else
+      log "FAIL $lane — git worktree remove failed (see log)"
+      skipped=$((skipped + 1))
+    fi
+  done
+done
+
+# Prune stale worktree admin entries (refs to dirs that no longer exist).
+for root in "${ROOTS[@]}"; do
+  for repo_dir in "$root"/*/; do
+    [[ -d "$repo_dir/.git" ]] || continue
+    git -C "$repo_dir" worktree prune 2>/dev/null || true
+  done
+done
+
+log "DONE considered=$considered removed=$removed skipped=$skipped threshold=${THRESHOLD_HOURS}h dry_run=$DRY_RUN force=$FORCE"

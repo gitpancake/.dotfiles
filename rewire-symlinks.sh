@@ -52,6 +52,13 @@ sed "s|DOTFILES_DIR_PLACEHOLDER|$NEW|g" \
 launchctl unload "$PLAN_PLIST" 2>/dev/null || true
 launchctl load -w "$PLAN_PLIST"
 
+WT_GC_PLIST="$HOME/Library/LaunchAgents/local.claude-wt-gc.plist"
+rm -f "$WT_GC_PLIST"
+sed "s|DOTFILES_DIR_PLACEHOLDER|$NEW|g" \
+  "$NEW/claude/local.claude-wt-gc.plist" > "$WT_GC_PLIST"
+launchctl unload "$WT_GC_PLIST" 2>/dev/null || true
+launchctl load -w "$WT_GC_PLIST"
+
 # slack-tldr daemon (only loads if config exists; placeholder substitution
 # means we always regenerate rather than symlink).
 SLACK_PLIST="$HOME/Library/LaunchAgents/local.slack-tldr.plist"
