@@ -175,3 +175,19 @@ export NVM_DIR="$HOME/.nvm"
 # gcloud
 source "/opt/homebrew/share/google-cloud-sdk/path.zsh.inc"
 source "/opt/homebrew/share/google-cloud-sdk/completion.zsh.inc"
+
+# Push current git branch into the tmux pane title via OSC 2. Replaces
+# the old #() shell-sub in pane-border-format — no fork per redraw, no
+# race-prone cache file. Lanes spawned by `wt` already set their own
+# title via `tmux select-pane -T`, so this only runs in interactive zsh.
+if [[ -n "$TMUX" ]]; then
+  __tmux_pane_title_branch() {
+    local b
+    b=$(git branch --show-current 2>/dev/null)
+    [[ -z "$b" ]] && b='-'
+    printf '\033]2;%s\033\\' "$b"
+  }
+  autoload -Uz add-zsh-hook
+  add-zsh-hook chpwd  __tmux_pane_title_branch
+  add-zsh-hook precmd __tmux_pane_title_branch
+fi
