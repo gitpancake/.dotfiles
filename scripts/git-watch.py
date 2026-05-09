@@ -286,12 +286,11 @@ def render(out, rows, first_seen, blink_on=True, cols=None):
             cols = os.get_terminal_size().columns
         except OSError:
             pass
-    idx_w = len(str(len(shown))) + 2
-    fixed = 2 + idx_w + 1 + 5 + 1 + repo_w + 1 + 7 + 2 + 3
+    fixed = 2 + 5 + 1 + repo_w + 2 + 3
     subj_max = max(20, cols - fixed)
 
     now = time.time()
-    for i, (ts, repo, short_sha, full_sha, author, subj) in enumerate(shown, 1):
+    for ts, repo, _short_sha, full_sha, author, subj in shown:
         hhmm = time.strftime("%H:%M", time.localtime(ts))
         repo_disp = trunc(repo, repo_w).ljust(repo_w)
         author_disp = trunc(author, 16)
@@ -309,9 +308,9 @@ def render(out, rows, first_seen, blink_on=True, cols=None):
         subj_close = RESET if subj_sgr else ""
 
         out.write(
-            f"{bar} {YELLOW}[{i}]{RESET} {DIM}{hhmm}{RESET} "
-            f"{MAGENTA}{repo_disp}{RESET} "
-            f"{DIM}{short_sha}{RESET}  {subj_open}{subj_disp}{subj_close}  "
+            f"{bar} {DIM}{hhmm}{RESET} "
+            f"{MAGENTA}{repo_disp}{RESET}  "
+            f"{subj_open}{subj_disp}{subj_close}  "
             f"{DIM}— {author_disp}{RESET}\n"
         )
 
