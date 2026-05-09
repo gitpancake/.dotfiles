@@ -1,14 +1,21 @@
 #!/usr/bin/env bash
 # Notification hook: agent paused, needs human input.
 # Sibling: tmux-bell.sh (visual bell). Both fire on Notification.
+#
+# If the lane already tagged its pause reason via lane-pause.sh, leave it.
+# Otherwise default to WAITING:input — vocab in ~/.claude/agent-state-vocab.md.
 
 set -u
 
 source "$HOME/.claude/hooks/_state-write.sh"
 
-input=$(cat 2>/dev/null || true)
-msg=$(printf '%s' "$input" | jq -r '.message // "input"' 2>/dev/null || echo "input")
-short=$(printf '%s' "$msg" | tr -d '\n' | cut -c1-12)
+dir="${CLAUDE_PROJECT_DIR:-$PWD}"
+existing=$(tail -n1 "$dir/.claude/agent-state" 2>/dev/null || true)
 
-write_state "WAITING:$short"
+KNOWN='ambiguity|creds|test-loop|merge-conflict|verify|scope|external|review|input'
+if [[ "$existing" =~ ^WAITING:($KNOWN): ]]; then
+  exit 0
+fi
+
+write_state "WAITING:input"
 exit 0
