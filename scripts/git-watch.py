@@ -29,7 +29,6 @@ import select
 import subprocess
 import sys
 import termios
-import textwrap
 import time
 import tty
 from pathlib import Path
@@ -288,14 +287,13 @@ def render(out, rows, first_seen, blink_on=True, cols=None):
             pass
 
     # layout: "▍ HH:MM  <subject…>  <repo>  — <author>"
-    indent_len = 2 + 5 + 2
-    indent_str = " " * indent_len
-    subj_w = max(40, cols - indent_len)
+    left_len = 2 + 5 + 2
 
     now = time.time()
     for ts, repo, _short_sha, full_sha, author, subj in shown:
         hhmm = time.strftime("%H:%M", time.localtime(ts))
         repo_disp = trunc(repo, 24)
+        author_disp = trunc(author, 16)
 
         key = (repo, full_sha)
         if key in first_seen:
@@ -307,30 +305,16 @@ def render(out, rows, first_seen, blink_on=True, cols=None):
         subj_open = subj_sgr
         subj_close = RESET if subj_sgr else ""
 
-        prefix = f"{bar} {DIM}{hhmm}{RESET}  "
+        right_plain = f"  {repo_disp}  — {author_disp}"
+        subj_w = max(20, cols - left_len - len(right_plain))
+        subj_disp = trunc(subj, subj_w)
 
-        parts = textwrap.wrap(
-            subj, width=subj_w,
-            break_long_words=False, break_on_hyphens=False,
-        ) or [""]
-
-        suffix_plain = f"  {repo_disp}  — {author}"
-        for j, line in enumerate(parts):
-            head = prefix if j == 0 else indent_str
-            is_last = (j == len(parts) - 1)
-            if is_last and len(line) + len(suffix_plain) <= subj_w:
-                out.write(
-                    f"{head}{subj_open}{line}{subj_close}"
-                    f"  {MAGENTA}{repo_disp}{RESET}"
-                    f"  {DIM}— {author}{RESET}\n"
-                )
-            else:
-                out.write(f"{head}{subj_open}{line}{subj_close}\n")
-                if is_last:
-                    out.write(
-                        f"{indent_str}{MAGENTA}{repo_disp}{RESET}"
-                        f"  {DIM}— {author}{RESET}\n"
-                    )
+        out.write(
+            f"{bar} {DIM}{hhmm}{RESET}  "
+            f"{subj_open}{subj_disp}{subj_close}  "
+            f"{MAGENTA}{repo_disp}{RESET}  "
+            f"{DIM}— {author_disp}{RESET}\n"
+        )
 
 
 def cmd_once():
