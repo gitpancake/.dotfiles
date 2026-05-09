@@ -279,7 +279,6 @@ def render(out, rows, first_seen, blink_on=True, cols=None):
     )
 
     shown = rows[:LIMIT]
-    repo_w = min(max(len(r[1]) for r in shown), 24)
 
     if cols is None:
         cols = 80
@@ -288,15 +287,15 @@ def render(out, rows, first_seen, blink_on=True, cols=None):
         except OSError:
             pass
 
-    # column layout: "▍ HH:MM repo_w  <subject>"
-    indent_len = 2 + 5 + 1 + repo_w + 2
+    # layout: "▍ HH:MM  <subject…>  <repo>  — <author>"
+    indent_len = 2 + 5 + 2
     indent_str = " " * indent_len
-    subj_w = max(30, cols - indent_len)
+    subj_w = max(40, cols - indent_len)
 
     now = time.time()
     for ts, repo, _short_sha, full_sha, author, subj in shown:
         hhmm = time.strftime("%H:%M", time.localtime(ts))
-        repo_disp = trunc(repo, repo_w).ljust(repo_w)
+        repo_disp = trunc(repo, 24)
 
         key = (repo, full_sha)
         if key in first_seen:
@@ -308,29 +307,30 @@ def render(out, rows, first_seen, blink_on=True, cols=None):
         subj_open = subj_sgr
         subj_close = RESET if subj_sgr else ""
 
-        prefix = (
-            f"{bar} {DIM}{hhmm}{RESET} "
-            f"{MAGENTA}{repo_disp}{RESET}  "
-        )
+        prefix = f"{bar} {DIM}{hhmm}{RESET}  "
 
         parts = textwrap.wrap(
             subj, width=subj_w,
             break_long_words=False, break_on_hyphens=False,
         ) or [""]
 
-        suffix_plain = f"  — {author}"
+        suffix_plain = f"  {repo_disp}  — {author}"
         for j, line in enumerate(parts):
             head = prefix if j == 0 else indent_str
             is_last = (j == len(parts) - 1)
             if is_last and len(line) + len(suffix_plain) <= subj_w:
                 out.write(
                     f"{head}{subj_open}{line}{subj_close}"
+                    f"  {MAGENTA}{repo_disp}{RESET}"
                     f"  {DIM}— {author}{RESET}\n"
                 )
             else:
                 out.write(f"{head}{subj_open}{line}{subj_close}\n")
                 if is_last:
-                    out.write(f"{indent_str}{DIM}— {author}{RESET}\n")
+                    out.write(
+                        f"{indent_str}{MAGENTA}{repo_disp}{RESET}"
+                        f"  {DIM}— {author}{RESET}\n"
+                    )
 
 
 def cmd_once():
