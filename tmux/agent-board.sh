@@ -33,15 +33,6 @@ class_for_code() {
   esac
 }
 
-humanAge() {
-  local s=$1
-  if   (( s < 60 ));    then printf '%ds' "$s"
-  elif (( s < 3600 ));  then printf '%dm' $((s/60))
-  elif (( s < 86400 )); then printf '%dh' $((s/3600))
-  else                       printf '%dd' $((s/86400))
-  fi
-}
-
 # Sort priority: lower number = higher up the board.
 priority_for() {
   local state=$1 class=$2
@@ -156,7 +147,7 @@ except Exception:
 
 fmt_ctx() {
   local n=${1:-}
-  [[ -z "$n" || "$n" == 0 ]] && { printf '-'; return; }
+  [[ -z "$n" || "$n" == 0 ]] && return
   if   (( n < 1000 ));    then printf '%d' "$n"
   elif (( n < 1000000 )); then printf '%dK' $((n/1000))
   else
@@ -178,15 +169,13 @@ render_row() {
   local state_file=$1 label=$2
   [[ -f "$state_file" ]] || return
 
-  local lane_dir port_file pid_file raw state state_mtime age port c pid is_stale
+  local lane_dir pid_file raw state state_mtime age c pid is_stale
   lane_dir=$(dirname "$(dirname "$state_file")")
-  port_file="$lane_dir/.env.local.port"
   pid_file="$lane_dir/.claude/agent-pid"
 
   raw=$(tail -n1 "$state_file" 2>/dev/null || echo "—")
   state_mtime=$(stat -f %m "$state_file" 2>/dev/null || echo "$now")
   age=$((now - state_mtime))
-  port=$(grep -oE '[0-9]+' "$port_file" 2>/dev/null | head -n1 || echo "-")
 
   # Hide stale IDLE rows. Active/waiting/failed/done always render.
   if [[ -z "${BOARD_SHOW_ALL:-}" && "$raw" == "IDLE" && $age -gt $HIDE_IDLE_AFTER ]]; then
@@ -227,8 +216,8 @@ render_row() {
 
   if (( is_stale )); then
     # Self-heal: claude exited without firing Stop (terminal close, kill, crash).
-    # Reset state to IDLE but preserve mtime so AGE still reflects when the
-    # lane actually went quiet, not when the board noticed.
+    # Reset state to IDLE but preserve mtime so the hide-idle threshold
+    # measures from when the lane actually went quiet, not when the board noticed.
     echo "IDLE" > "$state_file"
     touch -t "$(date -r "$state_mtime" '+%Y%m%d%H%M.%S')" "$state_file" 2>/dev/null || true
     rm -f "$pid_file"
@@ -290,8 +279,8 @@ render_row() {
   ctx=$(get_ctx_tokens "$lane_dir")
   ctx_disp=$(fmt_ctx "$ctx")
 
-  printf '%s\t%s%-29s %-18s %-6s %-6s %s%s\n' \
-    "$prio" "$c" "$display" "$state" "$(humanAge "$age")" "$ctx_disp" "$port" "$reset"
+  printf '%s\t%s%-29s %-18s %s%s\n' \
+    "$prio" "$c" "$display" "$state" "$ctx_disp" "$reset"
 }
 
 # Render a cockpit row for an active claude session not under any tracked
@@ -336,9 +325,6 @@ render_cockpit_row() {
   ctx=$(get_ctx_tokens_session "$session_dir")
   ctx_disp=$(fmt_ctx "$ctx")
 
-  local port="-"
-  [[ -f "$cwd/.env.local.port" ]] && port=$(grep -oE '[0-9]+' "$cwd/.env.local.port" 2>/dev/null | head -n1)
-
   local prio
   case "$state" in
     ACTIVE*)  prio=4 ;;
@@ -346,15 +332,14 @@ render_cockpit_row() {
     *)        prio=6 ;;
   esac
 
-  printf '%s\t%s%-29s %-18s %-6s %-6s %s%s\n' \
-    "$prio" "$c" "$label" "$state" "$(humanAge "$age")" "$ctx_disp" "$port" "$reset"
+  printf '%s\t%s%-29s %-18s %s%s\n' \
+    "$prio" "$c" "$label" "$state" "$ctx_disp" "$reset"
 }
 
 print_section_header() {
   local title=$1
-  printf '%s%-29s %-18s %-6s %-6s %s%s\n' \
-    "$bold" "$title" "STATE" "AGE" "CTX" "PORT" "$reset"
-  printf '%s%s%s\n' "$dim" "----------------------------------------------------------------" "$reset"
+  printf '%s%-29s %-18s %s%s\n' \
+    "$bold" "$title" "STATE" "CTX" "$reset"
 }
 
 # Build covered_cwds while iterating lanes so cockpit dedupes correctly.
