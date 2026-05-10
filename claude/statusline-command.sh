@@ -89,56 +89,37 @@ renderUsageBucket() {
     "$dim" "$(humanDuration "$remaining")" "$reset"
 }
 
-# Daily pacing: 7-day limit / 7 = ~14.29% per day. Shows what fraction of today's
-# allotment has been burned, derived from delta of 7d_pct since first sample today.
-# State stored in ~/.claude/cache/daily-usage.json: {date, startPct}.
-dailyUsedPctOfQuota() {
-  local currentRaw=$1
-  local stateDir=$HOME/.claude/cache
-  local stateFile=$stateDir/daily-usage.json
-  mkdir -p "$stateDir" 2>/dev/null
-  local today; today=$(date +%Y-%m-%d)
-
-  local storedDate="" storedPct=""
-  if [[ -r "$stateFile" ]]; then
-    read -r storedDate storedPct < <(
-      jq -r '"\(.date // "") \(.startPct // 0)"' "$stateFile" 2>/dev/null
-    )
-  fi
-
-  local needWrite=0
-  if [[ "$storedDate" != "$today" ]]; then
-    storedPct=$currentRaw
-    needWrite=1
-  elif awk -v c="$currentRaw" -v s="$storedPct" 'BEGIN{exit !(c+0 < s+0)}'; then
-    # 7d window rolled (current < stored) → restart day baseline.
-    storedPct=$currentRaw
-    needWrite=1
-  fi
-
-  if (( needWrite )); then
-    local tmp
-    tmp=$(mktemp "$stateDir/.daily-usage.XXXXXX" 2>/dev/null) || tmp=""
-    if [[ -n "$tmp" ]]; then
-      printf '{"date":"%s","startPct":%s}\n' "$today" "$storedPct" > "$tmp"
-      mv -f "$tmp" "$stateFile" 2>/dev/null || rm -f "$tmp"
-    fi
-  fi
-
-  awk -v c="$currentRaw" -v s="$storedPct" 'BEGIN{
-    d = c - s; if (d < 0) d = 0;
-    q = 100 / 7;
-    r = d / q * 100;
-    if (r < 0) r = 0;
-    if (r > 999) r = 999;
-    printf "%d", r
+# Pace ratio: actual 7d% / expected linear 7d% at this point in stint.
+# 100% = on pace. >100% = burning faster than sustainable. <100% = behind pace.
+# Stateless — pure function of current 7d% and reset timestamp.
+paceRatio() {
+  local pct=$1 resetAt=$2
+  awk -v p="$pct" -v r="$resetAt" -v n="$(date +%s)" 'BEGIN{
+    days = (r - n) / 86400;
+    if (days < 0) days = 0;
+    if (days > 7) days = 7;
+    expected = (1 - days / 7) * 100;
+    if (expected < 0.1) expected = 0.1;
+    ratio = p / expected * 100;
+    if (ratio < 0) ratio = 0;
+    if (ratio > 999) ratio = 999;
+    printf "%d", ratio
   }'
 }
 
-renderDailyBucket() {
+colorForPace() {
+  local p=$1
+  if   (( p >= 130 )); then printf '\033[31m'
+  elif (( p >= 115 )); then printf '\033[38;5;208m'
+  elif (( p >= 105 )); then printf '\033[33m'
+  else                      printf '\033[32m'
+  fi
+}
+
+renderPaceBucket() {
   local pct=$1
-  local color; color=$(colorForPercent "$pct")
-  printf ' %s│%s %sdy %d%%%s' "$dim" "$reset" "$color" "$pct" "$reset"
+  local color; color=$(colorForPace "$pct")
+  printf ' %s│%s %space %d%%%s' "$dim" "$reset" "$color" "$pct" "$reset"
 }
 
 # Guard: skip rendering if values look like uninitialized garbage (timestamps, tiny sizes)
@@ -148,7 +129,7 @@ isValidSize() { [[ "$1" =~ ^[0-9]+$ ]] && (( $1 > 1000 )); }
 if isValidPct "$ctxPct" && isValidSize "$ctxSize"; then
   renderContextBar
   if isValidPct "$sevenDayPct"; then
-    renderDailyBucket "$(dailyUsedPctOfQuota "$sevenDayPctRaw")"
+    renderPaceBucket "$(paceRatio "$sevenDayPctRaw" "$sevenDayReset")"
   fi
   isValidPct "$fiveHrPct"   && renderUsageBucket "5h" "$fiveHrPct"   "$fiveHrReset"
   isValidPct "$sevenDayPct" && renderUsageBucket "7d" "$sevenDayPct" "$sevenDayReset"
