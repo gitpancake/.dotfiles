@@ -23,11 +23,12 @@ If any are missing, stop and report.
 
 1. **Fetch the ticket** via `mcp__linear-server__get_issue <TICKET>`. Pull the body verbatim.
 2. **Read the plan** at `PLAN_PATH`.
-3. **Extract acceptance criteria** from the ticket body. Look for an "Acceptance criteria" / "Acceptance Criteria" / "AC" section. Each bullet is one AC. If the section is absent, check whether the plan's §2 ("Verbatim extraction") lists ACs the planner copied — use those. If both are absent, verdict is FAIL with reason "no AC source".
-4. **Map each AC to a slice.** Walk the plan's slice section (the `## 5. Slice plan` table or any "Slices" / "Slice plan" heading). For each AC, decide which slice covers it. Match on substance, not exact wording. If unclear, mark `NO`.
-5. **Check slice merge-safety.** For each slice, the plan must answer "Why safe to merge alone" (column in the §5 table) or equivalent prose. Per-slice yes/no.
-6. **Linked-ticket reference check (soft).** Parse the Linked tickets / Linked context section of the plan (§2 or wherever IDs like `TEAM-1234` are listed). For each linked ID, grep the rest of the plan (slices, surface area, open questions) for substantive reference (more than just re-listing the ID). Tickets fetched but never substantively referenced go into the verdict's `## Notes` section as `over-fetched: <ID>` — these are token waste, not coverage gaps. Do **not** fail the lint on them.
-7. **Forward-compatible**: if slices have YAML frontmatter with `needs:` / `touches:` fields, ignore them. They are for a parallel DAG-execution feature, not lint.
+3. **Plan size check (hard cap).** `wc -l "$PLAN_PATH"`. If line count >200, verdict is FAIL with reason `plan exceeds 200-line cap (<N> lines)`. Add to `## Gaps`: "Plan is <N> lines. Cap is 200. Trim before spawning a lane — move stable context to subdir notes or the ticket; the plan owns the slice sequence, not surrounding prose." Continue producing the AC/slice tables for visibility, but the verdict stays FAIL until the file is under cap.
+4. **Extract acceptance criteria** from the ticket body. Look for an "Acceptance criteria" / "Acceptance Criteria" / "AC" section. Each bullet is one AC. If the section is absent, check whether the plan's §2 ("Verbatim extraction") lists ACs the planner copied — use those. If both are absent, verdict is FAIL with reason "no AC source".
+5. **Map each AC to a slice.** Walk the plan's slice section (the `## 5. Slice plan` table or any "Slices" / "Slice plan" heading). For each AC, decide which slice covers it. Match on substance, not exact wording. If unclear, mark `NO`.
+6. **Check slice merge-safety.** For each slice, the plan must answer "Why safe to merge alone" (column in the §5 table) or equivalent prose. Per-slice yes/no.
+7. **Linked-ticket reference check (soft).** Parse the Linked tickets / Linked context section of the plan (§2 or wherever IDs like `TEAM-1234` are listed). For each linked ID, grep the rest of the plan (slices, surface area, open questions) for substantive reference (more than just re-listing the ID). Tickets fetched but never substantively referenced go into the verdict's `## Notes` section as `over-fetched: <ID>` — these are token waste, not coverage gaps. Do **not** fail the lint on them.
+8. **Forward-compatible**: if slices have YAML frontmatter with `needs:` / `touches:` fields, ignore them. They are for a parallel DAG-execution feature, not lint.
 
 ## Output
 
@@ -63,7 +64,7 @@ Generated: <ISO-8601 UTC>
 - over-fetched: TEAM-1411 (mentioned only in mirror reference)
 ```
 
-`Status: PASS` iff every AC row is `yes` AND every slice merge-safety row is `yes`. Notes do **not** affect status. Otherwise `FAIL`.
+`Status: PASS` iff every AC row is `yes` AND every slice merge-safety row is `yes` AND plan ≤200 lines. Notes do **not** affect status. Otherwise `FAIL`.
 
 If `Status: PASS`, the `## Gaps` section may be omitted or contain "none". `## Notes` may be omitted when empty.
 
@@ -73,6 +74,7 @@ After writing the file, also print a short summary to stdout:
 
 ```
 plan-lint <TICKET>: PASS|FAIL
+Size: <N> lines (cap 200)
 ACs: <covered>/<total> covered
 Slices: <safe>/<total> with merge-safety rationale
 Notes: <N> over-fetched linked tickets

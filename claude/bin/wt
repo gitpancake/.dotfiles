@@ -2,14 +2,20 @@
 # wt — spin up a worktree lane in one command.
 #
 # Usage:
-#   wt <task-slug-or-ticket>     # single lane (default)
-#   wt --dag <TICKET>            # parse plan DAG, spawn ready-set lanes
-#   wt --resolve <TICKET>        # re-spawn ready-set after slices merged
+#   wt [--type <prefix>] <task-slug-or-ticket>     # single lane (default)
+#   wt --dag [--type <prefix>] <TICKET>            # parse plan DAG, spawn ready-set lanes
+#   wt --resolve [--type <prefix>] <TICKET>        # re-spawn ready-set after slices merged
 #
-# Single-lane behavior (unchanged):
-#   wt team-1530        # raw slug → worktree only, no auto-kickoff
-#   wt TEAM-1530        # Linear ticket → also kicks off /ticket-pickup
-#                       (or resumes from existing plan at ~/.claude/plans/TEAM-1530.md)
+# Single-lane behavior:
+#   wt team-1530                    # raw slug → worktree only, no auto-kickoff
+#   wt TEAM-1530                    # bare Linear ticket → descriptor pulled from
+#                                   ~/.claude/plans/TEAM-1530.md heading; kicks off
+#                                   /ticket-pickup if no plan yet
+#   wt TEAM-1530-pr-feedback        # explicit descriptor; plan file matches slug
+#   wt --type fix TEAM-1530-bug-x   # branch fix/team-1530-bug-x
+#
+# Type prefix defaults to `feature`. Override with --type or WT_TYPE env.
+# Common values: feature, fix, chore, task, refactor.
 #
 # DAG mode:
 #   wt --dag TEAM-1530  → reads ~/.claude/plans/TEAM-1530.md slice-dag block,
@@ -22,6 +28,7 @@
 #                       flight (worktree exists).
 #
 # Env knobs:
+#   WT_TYPE=          branch type prefix (default: feature)
 #   WT_NO_FETCH=1     skip pre-spawn fetch + ff
 #   WT_LAYOUT=        pane|window|session (default: window)
 #   WT_CLAUDE='claude'  full bypass of model/permission flags
@@ -30,8 +37,8 @@
 #   WT_DAG=1          equivalent to --dag flag
 #
 # Effect (per lane):
-#   - Worktree at <repo>/.claude/worktrees/agent-<slug>
-#   - Branch agent/<slug> off current HEAD (skipped if branch already exists)
+#   - Worktree at <repo>/.claude/worktrees/<slug>
+#   - Branch <type>/<slug> off current HEAD (skipped if branch already exists)
 #   - Per-lane port stamped in .env.local.port (3100 + lane index)
 #   - .claude/agent-state seeded as IDLE (visible to agent-board)
 #   - In tmux: opens new window running claude, with optional initial prompt
@@ -42,22 +49,74 @@ set -euo pipefail
 # ---- arg parse -------------------------------------------------------------
 
 mode="single"
-case "${1:-}" in
-  --dag)     mode="dag";     shift ;;
-  --resolve) mode="resolve"; shift ;;
-esac
+type_prefix="${WT_TYPE:-feature}"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dag)     mode="dag";     shift ;;
+    --resolve) mode="resolve"; shift ;;
+    --type)
+      [[ -z "${2:-}" ]] && { echo "wt: --type requires an argument" >&2; exit 1; }
+      type_prefix="$2"; shift 2 ;;
+    --type=*)  type_prefix="${1#--type=}"; shift ;;
+    --)        shift; break ;;
+    *)         break ;;
+  esac
+done
 [[ "${WT_DAG:-}" == "1" && "$mode" == "single" ]] && mode="dag"
 
-raw=${1:-}
-[[ -z "$raw" ]] && { echo "usage: wt [--dag|--resolve] <task-slug-or-ticket>" >&2; exit 1; }
+# Sanitize type prefix: lowercase, alnum + dash only.
+type_prefix=$(printf '%s' "$type_prefix" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9-]//g')
+[[ -z "$type_prefix" ]] && { echo "wt: invalid --type prefix" >&2; exit 1; }
 
-# Detect Linear-style ticket: TEAM-NNNN. Lowercase the slug for paths.
+raw=${1:-}
+[[ -z "$raw" ]] && { echo "usage: wt [--dag|--resolve] [--type <prefix>] <task-slug-or-ticket>" >&2; exit 1; }
+
+# Derive a slug descriptor from the plan's first heading.
+#   '# TEAM-1530 — Add foo bar' → 'add-foo-bar'
+derive_descriptor_from_plan() {
+  local plan_file=$1 ticket_upper=$2 title desc
+  [[ -f "$plan_file" ]] || return 1
+  title=$(awk '/^# /{ sub(/^# +/, ""); print; exit }' "$plan_file")
+  [[ -z "$title" ]] && return 1
+  # Strip leading "TICKET" plus optional separator (— : -).
+  title=$(printf '%s' "$title" | sed -E "s/^${ticket_upper}[[:space:]]*([—:-][[:space:]]*)?//I")
+  desc=$(printf '%s' "$title" \
+    | tr '[:upper:]' '[:lower:]' \
+    | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' \
+    | cut -c1-50 \
+    | sed -E 's/-+$//')
+  [[ -z "$desc" ]] && return 1
+  printf '%s' "$desc"
+}
+
+# Detect Linear-style ticket: TEAM-NNNN, optionally with -descriptor suffix.
+#   TEAM-1530              → ticket=TEAM-1530, slug=team-1530-<derived>, plan=TEAM-1530.md
+#   TEAM-1530-pr-feedback  → ticket=TEAM-1530, slug=team-1530-pr-feedback,
+#                          plan=TEAM-1530-pr-feedback.md
+#   raw-feature-x        → no ticket, slug=raw-feature-x
 ticket=""
-if [[ "$raw" =~ ^[A-Za-z]+-[0-9]+$ ]]; then
-  ticket=$(printf '%s' "$raw" | tr '[:lower:]' '[:upper:]')
-  slug=$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')
+plan_slug=""
+if [[ "$raw" =~ ^([A-Za-z]+-[0-9]+)(-.+)?$ ]]; then
+  ticket=$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:lower:]' '[:upper:]')
+  ticket_lower=$(printf '%s' "$ticket" | tr '[:upper:]' '[:lower:]')
+  tail="${BASH_REMATCH[2]:-}"
+  if [[ -n "$tail" ]]; then
+    descriptor="${tail#-}"
+    slug="${ticket_lower}-${descriptor}"
+    plan_slug="${ticket}${tail}"
+  else
+    plan_slug="$ticket"
+    plan_file="$HOME/.claude/plans/${ticket}.md"
+    descriptor=$(derive_descriptor_from_plan "$plan_file" "$ticket" || true)
+    if [[ -z "$descriptor" ]]; then
+      slug="$ticket_lower"
+    else
+      slug="${ticket_lower}-${descriptor}"
+    fi
+  fi
 else
-  slug="$raw"
+  slug=$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')
 fi
 
 repo=$(git rev-parse --show-toplevel 2>/dev/null) \
@@ -157,12 +216,12 @@ JSON
 # ---- single-lane mode (default, unchanged behavior) -----------------------
 
 if [[ "$mode" == "single" ]]; then
-  wt_path="$wt_dir/agent-$slug"
-  branch="agent/$slug"
+  wt_path="$wt_dir/$slug"
+  branch="${type_prefix}/${slug}"
 
   initial=""
   if [[ -n "$ticket" ]]; then
-    plan="$HOME/.claude/plans/${ticket}.md"
+    plan="$HOME/.claude/plans/${plan_slug}.md"
     review_rule="Review findings: apply blocker/major fixes directly in the PR branch (commit + push), do NOT post them as PR comments. Never run \`gh pr comment\`, \`gh pr review --comment\`, or any \`gh\` command that writes to the PR conversation. Minor/NB findings: include in the final report only."
     if [[ -f "$plan" ]]; then
       initial="Autonomous mode. Plan at ${plan}. Read it. Implement every slice end-to-end: per slice run type-check + tests (use \`bun test\` in example-org-agent), commit per layer (schema → backend → frontend), then move on. After the final slice, run /ship to open the PR and run a full review. ${review_rule} Stop only when the PR is open and review-driven fixes are pushed. If you hit a genuine blocker (ambiguity not resolvable from the plan, repeated test failure on the same root cause, missing credential), stop and report — do not guess. Do not ask for confirmation between slices."
@@ -183,6 +242,8 @@ dag_parser="$HOME/.claude/scripts/dag-parse.sh"
 [[ -x "$dag_parser" ]] || dag_parser="$HOME/.dotfiles/claude/scripts/dag-parse.sh"
 
 # Run parser. Separate stdout (TSV) from stderr (errors).
+# Export WT_TYPE so dag-parse stamps the right branch prefix.
+export WT_TYPE="$type_prefix"
 set +e
 parse_err=$("$dag_parser" "$ticket" 2>&1 >/dev/null)
 tsv=$("$dag_parser" "$ticket" 2>/dev/null)
@@ -197,9 +258,9 @@ case "$parse_rc" in
     ;;
   3)
     echo "wt: no slice-dag block in plan — falling back to single-lane mode" >&2
-    wt_path="$wt_dir/agent-$slug"
-    branch="agent/$slug"
-    plan="$HOME/.claude/plans/${ticket}.md"
+    wt_path="$wt_dir/$slug"
+    branch="${type_prefix}/${slug}"
+    plan="$HOME/.claude/plans/${plan_slug}.md"
     review_rule="Review findings: apply blocker/major fixes directly in the PR branch (commit + push), do NOT post them as PR comments. Never run \`gh pr comment\`, \`gh pr review --comment\`, or any \`gh\` command that writes to the PR conversation. Minor/NB findings: include in the final report only."
     initial="Autonomous mode. Plan at ${plan}. Read it. Implement every slice end-to-end: per slice run type-check + tests, commit per layer, then move on. After the final slice, run /ship. ${review_rule} Stop only when the PR is open and review-driven fixes are pushed."
     spawn_lane "$slug" "$branch" "$wt_path" "$initial"
@@ -220,21 +281,21 @@ esac
 slice_count=$(printf '%s\n' "$tsv" | wc -l | tr -d ' ')
 if [[ "$slice_count" -le 1 ]]; then
   echo "wt: only one slice in DAG — falling back to single-lane mode"
-  wt_path="$wt_dir/agent-$slug"
-  branch="agent/$slug"
-  plan="$HOME/.claude/plans/${ticket}.md"
+  wt_path="$wt_dir/$slug"
+  branch="${type_prefix}/${slug}"
+  plan="$HOME/.claude/plans/${plan_slug}.md"
   initial="Autonomous mode. Plan at ${plan}. Single-slice plan. Implement it, run /ship."
   spawn_lane "$slug" "$branch" "$wt_path" "$initial"
   exit 0
 fi
 
 # Determine which slices are already merged. Heuristic:
-#   - branch agent/<slug>-<id> exists AND is reachable from feature branch HEAD,
+#   - branch <type>/<slug>-<id> exists AND is reachable from feature branch HEAD,
 #     OR
 #   - branch doesn't exist but a marker file says merged (future-proofing).
-# Feature branch == agent/<slug> (matches single-lane convention; for DAG plans
+# Feature branch == <type>/<slug> (matches single-lane convention; for DAG plans
 # this is the integration branch the slice lanes merge into).
-feature_branch="agent/$slug"
+feature_branch="${type_prefix}/${slug}"
 feature_ref=""
 if git -C "$repo" rev-parse --verify "$feature_branch" >/dev/null 2>&1; then
   feature_ref="$feature_branch"
@@ -270,7 +331,7 @@ for ((i=0; i<n; i++)); do
   if is_merged "${branches[$i]}"; then
     merged_ids="$merged_ids ${ids[$i]}"
   fi
-  s_wt="$wt_dir/agent-${slug}-${ids[$i]}"
+  s_wt="$wt_dir/${slug}-${ids[$i]}"
   if [[ -d "$s_wt" ]]; then
     inflight_ids="$inflight_ids ${ids[$i]}"
   fi
@@ -336,7 +397,7 @@ else
   echo "wt --dag $ticket: spawning ${#spawn_idx[@]} ready slice(s)"
 fi
 
-plan_path="$HOME/.claude/plans/${ticket}.md"
+plan_path="$HOME/.claude/plans/${plan_slug}.md"
 review_rule="Review findings: apply blocker/major fixes directly in the PR branch (commit + push), do NOT post them as PR comments."
 
 for i in "${spawn_idx[@]}"; do
@@ -344,7 +405,7 @@ for i in "${spawn_idx[@]}"; do
   s_name="${names[$i]}"
   s_branch="${branches[$i]}"
   s_slug="${slug}-${s_id}"
-  s_wt="$wt_dir/agent-${s_slug}"
+  s_wt="$wt_dir/${s_slug}"
   s_initial="Autonomous mode, DAG slice. Plan at ${plan_path}. Implement slice ${s_id} (${s_name}) only. Per-layer commits, run type-check + tests. After the slice is committed and pushed, STOP — do not run /ship and do not start another slice. The DAG resolver (\`wt --resolve ${ticket}\`) will re-spawn the next ready set after this slice merges. ${review_rule}"
   spawn_lane "$s_slug" "$s_branch" "$s_wt" "$s_initial"
 done

@@ -1,180 +1,99 @@
 # Global Instructions
 
-## Verify Before Acting — No Memory, No Guessing
+## Verify Before Acting
 
-Before stating ANYTHING about: function signatures, file paths, API shapes, event types, env vars, field names, module structure, or library methods — **grep or read the source first.** Training data is stale. Code is truth.
+Before stating ANYTHING about function signatures, file paths, API shapes, event types, env vars, field names, modules, or library methods — **grep or read the source first.** Training data stale. Code is truth.
 
 When uncertain, in order:
-1. Grep/read the relevant source.
+1. Grep/read the source.
 2. Re-read the Linear ticket.
 3. Re-read the original prompt.
-4. Ask the human. A direct question beats a confident wrong answer.
+4. Ask. Direct question beats confident wrong answer.
 
-Do not proceed on a guess. Do not invent plausible-sounding names.
+No guesses. No invented names.
 
 ## Tone
-- Direct, concise, opinionated. Match the user's energy.
-- No disclaimers, hedging, or unnecessary preamble.
 
-## Specialist Subagents
+Direct, concise, opinionated. Match user's energy. No disclaimers, hedging, preamble.
 
-Dispatch via Agent tool (`subagent_type: "<name>"`). Each is Linear-aware.
+## Subagents & Slash Commands
 
-- `backend` — services, APIs, event-driven code, workers, background jobs
-- `frontend` — UI, components, design systems, Paper-to-code (JSX-only)
-- `database` — schema design, migrations, query optimization, indexing
-- `fullstack` — end-to-end features spanning DB → service → API → UI in one PR
-- `platform` — Docker, observability (Prometheus/Loki/Tempo), build tooling
-- `infra` — Railway provisioning, deploy troubleshooting, env/domain config
-- `deploy` — pre-ship verification: tests, build, lint, diff review, push
+Subagents and slash commands self-describe via Agent/skills schemas — don't list here. Run `/simplify` at chunk boundaries (orchestrator only, not inside subagents). Org preamble: dispatching subagent in known org's codebase → read `~/.claude/org/<org>/preamble.md`, prepend.
 
-Run `/simplify` after a chunk of work to review the diff for reuse, clarity, and dead code. Subagents should not invoke it themselves — the orchestrator runs it once at chunk boundaries.
+## Ticket Lifecycle
 
-**Org preamble injection**: When dispatching any subagent in a known org's codebase, read `~/.claude/org/<org>/preamble.md` and prepend to the subagent prompt.
+`/scope` → draft → `/read-ticket` → `/rescope` → `/ticket-pickup` (writes `~/.claude/plans/<ID>.md`, spawns autonomous `wt` lane) → lane runs slice→slice with type-check + test + commit per layer → `/ship`.
 
-## Global Slash Commands
-
-- `/simplify` — scoped review of the current diff for reuse, clarity, efficiency, dead code. Fixes in place.
-- `/scope <free text>` — turn a free-text problem into a Linear ticket draft. Crawls codebase (mirror search, surface area, gotchas, prereqs). Stops before creating; "go" → creates.
-- `/read-ticket <ID>` — fetch a Linear ticket and render it in the terminal. Pure read, no edits.
-- `/rescope <ID> [adjustments]` — apply user's recommendations to an existing ticket; shows diff, stops, "go" → updates.
-- `/ticket-pickup <ID>` — scope an existing Linear ticket into a slice plan, post Linear comment, then spawn a worktree lane via `wt`. Stops before implementation; the spawned lane waits for "go".
-- `/ship [PR#]` — commit + push + open PR with house-style bullet body, run a full PR review, report findings as a severity table. Idempotent.
-- `/linear-review [team]` — audit user's Linear tickets + open PRs, propose state cleanups (merged→Done, dups, stale backlog cancel, forgotten high-prio flag). Read-only by default; mutations on explicit `go`.
-
-## Ticket Lifecycle (user's house workflow)
-
-```
-/scope <problem>          → drafts ticket from free text, creates on go
-/read-ticket <ID>         → pulls ticket + comments + linked PRs into the terminal
-/rescope <ID> <edits>     → applies your recs, diffs, updates Linear on go
-/ticket-pickup <ID>       → writes plan to ~/.claude/plans/<ID>.md, comments on Linear,
-                            spawns an AUTONOMOUS worktree lane via `wt`
-# (the new lane runs end-to-end, no babysitting:)
-slice 1 → type-check + test + commit per layer
-slice 2 → …
-slice N → final flip
-/ship                     → opens PR, runs full review
-# Stops only when PR is up + review report is back, or on a genuine blocker.
-```
-
-**Autonomous semantics.** `wt` and `/ticket-pickup` are one-shot fire-and-forget. The lane never stops between slices to ask "ready for slice N+1?" — it just goes. It stops on:
-1. PR open + review report posted (success).
-2. Genuine blocker: ambiguity not resolvable from the plan, repeated test failure on the same root cause, missing credential. Reports and stops.
-
-user watches `agent-board.sh`. Red row → look. Otherwise leave it alone.
-
-`wt <slug-or-TICKET-ID>` is the lane primitive. Linear-style IDs (`TEAM-1530`) auto-resume from `~/.claude/plans/<ID>.md` if it exists, otherwise auto-invoke `/ticket-pickup` first. Lane runs `claude --dangerously-skip-permissions` (override with `WT_CLAUDE='claude' wt …`). Default layout = new tmux window; `WT_LAYOUT=pane|session` overrides.
-
-## Slice Protocol — how user actually ships
-
-user's default cadence for non-trivial Linear tickets is trunk-based slices, not one big PR. Match it.
-
-1. **Scope first**: `/ticket-pickup <ID>` writes a plan to `~/.claude/plans/<ID>.md`. Stops. user reviews.
-2. **One slice = one PR**: each slice merges to main on its own and leaves main shippable. If a slice can't merge alone, restructure until it can.
-3. **Branch shape**: base feature branch `feature/<ticket-slug>`. Per-slice branches off of it (`agent/<slug>` or `henry/<slug>-slice-N`). Final flip slice merges the feature branch to main.
-4. **Per-slice handoff**: user signals "slice N merged, next!" — that means: switch to next slice, re-brief from the plan, do not summarize what you just did. The plan in `~/.claude/plans/` is the source of truth, not your turn history.
-5. **Commit per layer**: schema → backend → frontend separate commits inside a slice. user squashes on merge.
-
-## Parallel Worktree Lanes
-
-Default: one lane per ticket. Use `wt <slug-or-TICKET-ID>` to spawn. Outputs:
-- worktree at `<repo>/.claude/worktrees/agent-<slug>`
-- branch `agent/<slug>` off current HEAD
-- per-lane port stamped in `.env.local.port` (3100 + lane index)
-- `.claude/agent-state` seeded to `IDLE` (visible to `agent-board.sh`)
-- new tmux window running `claude`. Linear-style ID auto-invokes `/ticket-pickup <ID>` (or resumes from existing plan).
-
-**Same-repo parallel-lane gotchas** (assume any could bite when 3+ lanes are live in example-org-agent):
-- `node_modules` is per-worktree. First action in a fresh worktree is usually `bun install`.
-- Dev servers collide on port. Always read `PORT` from `.env.local.port`; never hardcode.
-- Trigger.dev local runners across lanes can race the same task queue. Stagger or scope via env.
-- `CLAUDE.md` cache + Linear ticket conventions are shared via the worktree's mounted `.git`.
-- Tests inside a worktree must be `bun test` (the `:vm` flag is required for isolation).
-
-## Aggregator Status Pane
-
-Pin a tmux pane running `watch -tcn2 ~/.tmux/agent-board.sh`. It reads `<wt>/.claude/agent-state` for every worktree under `~/Documents/code/*/`. States:
-- `IDLE` (dim) — agent done, no pending check
-- `RUNNING:precheck` (yellow) — background type-check / tests in flight
-- `WAITING:<code>:<detail>` — agent paused. Color by code class (red/yellow/dim).
-- `DONE` (green) — last precheck passed
-- `FAILED:<step>` (red) — precheck failed; tail `<wt>/.claude/precheck.log`
-
-Before pausing for human input, run `~/.claude/scripts/lane-pause.sh <code> <detail>` to tag the reason. Codes documented in `~/.claude/agent-state-vocab.md`.
-
-Any project that wants the green/red signal drops an executable `.claude/precheck.sh`. Keep it fast (type-check, lint) — it forks to background but it's still the signal user watches.
+**Autonomous semantics.** `wt` and `/ticket-pickup` fire-and-forget. Lane stops only on: (1) PR open + review posted, (2) genuine blocker (ambiguity not in plan, repeated test failure same root cause, missing credential). `wt <slug-or-ID>` auto-resumes from existing plan or invokes `/ticket-pickup`. Slice protocol + parallel-lane gotchas: `~/.dotfiles/CLAUDE.md`.
 
 ## Planning — Linear First
 
-For non-trivial tasks:
-1. Ask for (or resolve from context) the Linear issue URL or ID.
-2. Fetch via `mcp__linear-server__get_issue` for full scope + acceptance criteria.
-3. If Linear MCP unavailable, warn once and proceed on user confirmation.
+Non-trivial tasks: resolve Linear ID, fetch via `mcp__linear-server__get_issue`. MCP unavailable → warn once, proceed on confirmation.
 
 ## Session Start
 
-1. Read project CLAUDE.md before writing code. If none, scan repo and create one.
-2. Check OV for relevant context (project name, APIs in use).
-3. Check `git status` and branch state. Create feature branch for new work.
-4. Check `~/.claude/org/` for org folder. If exists, read `context.md` and apply.
+1. Read project CLAUDE.md before writing code. None → scan repo, create one.
+2. Check OV for relevant context.
+3. `git status` + branch state. Feature branch for new work.
+4. Check `~/.claude/org/` for org folder. Apply `context.md` if exists.
 
 ## Code Quality
 
-- Guard clauses at top, early return. Happy path shallowest. Max 2 levels deep.
-- One task per function. If it parses AND computes AND formats, split it.
-- Specific names: `fetchUserProfile` not `getData`, `delayMs` not `delay`. No `tmp`, `data`, `result`.
-- Booleans as assertions: `isValid`, `hasChildren`. Ranges: `first`/`last` or `begin`/`end`.
-- Complex conditions become named booleans: `const isOwner = req.user.id === doc.ownerId`.
+- Guard clauses, early return. Happy path shallowest. Max 2 levels deep.
+- One task per function. Parses AND computes AND formats → split.
+- Specific names: `fetchUserProfile` not `getData`. No `tmp`/`data`/`result`.
+- Booleans as assertions: `isValid`, `hasChildren`. Ranges: `first`/`last`.
+- Complex conditions → named booleans.
 - `const` by default. Declare close to first use.
-- Comment the "why" (tradeoffs, edge cases), never the "what."
-- Composition over inheritance. Narrow interfaces over full objects.
-- Patterns (Factory, Facade, Adapter) only where they simplify.
+- Comment "why" (tradeoffs, edges), never "what."
+- Composition over inheritance. Narrow interfaces.
 
-Search OV `resources/agents/code-structure-reference` for detailed principles.
+OV `resources/agents/code-structure-reference` for detail.
 
 ## Cost Discipline
 
-Tool calls re-read full conversation context at model price. Heavy loops compound fast.
+Tool calls re-read full conversation context. Heavy loops compound.
 
-**Batch pattern**: before touching N items, propose: one LLM call produces a plan, then a script executes it. Never run same tool 20+ times in a row — propose batch instead.
+- Batch pattern: one LLM call → plan, script applies it. Never run same tool 20+ times.
+- Models: Sonnet default. Haiku for mechanical edits. Opus only for hard architecture.
+- Context hygiene: >70% context or >50 tool calls → propose `/clear` + re-brief.
 
-**Model selection**: Opus for planning/architecture. Sonnet for coding (default). Haiku for mechanical edits.
+## Session Hygiene — turn-cap protocol
 
-**Context hygiene**: At >70% context or >50 tool calls, propose `/clear` + re-brief. Hook at `~/.claude/hooks/tool-loop-warn.sh` warns at 30 same-tool calls or 100 total.
+`turn-cap-warn.sh` fires tiered `systemMessage` warnings at turns 30/50/75/100+. **Honor them.** Past behavior: user habitually ignores soft warns and rides sessions to 600+ turns, where cache_read on the transcript dominates cost. Be the assertive counterweight.
+
+Required response per tier:
+
+- **Turn 30 reminder** — acknowledge once in next reply ("noting turn 30 — we can `/clear` after this chunk if it makes sense"), continue.
+- **Turn 50 warn** — **stop adding new scope this turn.** Finish the in-flight tool chain, then explicitly ask: "We're at 50 turns. `/clear` + re-brief from `~/.claude/plans/<TICKET>.md` now, or push through?" Do not silently proceed past this prompt without an answer.
+- **Turn 75 PAUSE** — finish current tool call, then HALT before any further tool use. Surface to user: "Hit the 75-turn pause. I won't start new tool chains until you `/clear` or explicitly say continue." Single-tool lookups OK, multi-step work blocked until confirmation.
+- **Turn 100+** — same as 75 but louder. Refuse multi-step work without explicit "I know, push through" from user.
+
+`/clear` semantics: user runs `/clear`, then pastes a re-brief that names the ticket, the plan path, and where the previous session left off. Plans live at `~/.claude/plans/<TICKET>.md`. Re-brief from the plan, not from memory of the prior turns.
+
+## Plan Size Cap
+
+Plans at `~/.claude/plans/<TICKET>.md` must be ≤200 lines. `plan-lint` FAILS plans over the cap. Reasoning: longer plans cost more on every lane resume and tend to bury the slice protocol. Trim by moving stable detail to subdir notes or the ticket itself; the plan owns the *slice sequence*, not the surrounding context.
 
 ## Git Workflow
 
-- Feature branches: `feature/`, `fix/`, or `refactor/`. Never `user/` prefix. Main always deployable.
-- Auto-commit after each isolated chunk. Separate commits for schema, backend, frontend.
-- Never push unless explicitly asked.
-- PR: short title (<70 chars), summary + test plan in body. One PR per feature.
-- Squash merge. Delete feature branch after merge.
+- Branches: `feature/`, `fix/`, `refactor/`. Never `user/`. Main always deployable.
+- Auto-commit per isolated chunk. Separate commits: schema, backend, frontend.
+- Never push unless asked. PR title <70 chars. Squash merge.
+- Worktree default for non-trivial. Cleanup only on user-confirmed PR merge.
 
-## Branch Safety
+## Project CLAUDE.md
 
-Worktree by default for non-trivial work. Assume another agent may be active on any branch. Protocol: `~/.claude/worktree-protocol.md`. Cleanup only on user-confirmed PR merge.
+After each chunk: update project `CLAUDE.md` (conventions, decisions, gotchas). Update `README.md` if user-facing behavior changes. Project CLAUDE.md ≤150 lines. Cut anything derivable from code.
 
-## Project Documentation Maintenance
+## OpenViking
 
-After each chunk: update project `CLAUDE.md` (conventions, decisions, gotchas). Update `README.md` if user-facing behavior changes.
+Vector-indexed MCP for cross-project knowledge — external API docs, cross-project decisions, research.
 
-- Global (this file): workflow rules, code quality, tool usage.
-- Project: architecture, gotchas, key patterns, commands, deployment.
-- Project CLAUDE.md: never exceed 150 lines. Cut anything derivable from code.
+**Not for**: per-project context (CLAUDE.md), work summaries (git), user prefs (auto-memory).
 
-## OpenViking — cross-project knowledge base
+**MANDATORY**: Before `WebFetch`/`WebSearch`/`context7` for API docs, `find`/`search` OV first. Not found → fetch externally + `add_resource`.
 
-Vector-indexed MCP for knowledge spanning projects or outside any single repo — external API docs, cross-project decisions, research.
-
-**Not for**: per-project context (CLAUDE.md), work summaries (git), user preferences (auto-memory).
-
-**MANDATORY**: Before `WebFetch`/`WebSearch`/`context7` for API docs, `find`/`search` OV first. If not found, fetch externally and store with `add_resource`.
-
-Use `mcp__openviking__ls` at `resources/` to discover. Use `find`/`search` for keyword queries. Don't assume a path exists — list first.
+`mcp__openviking__ls` at `resources/` to discover. `find`/`search` for keyword queries. List before assuming paths.
 
 Namespaces: `resources/agents/`, `resources/<project>/`, `resources/<api-name>/`.
-
-Read: cross-project patterns, service/API references. Write: external API docs, cross-project decisions. Don't store: per-project conventions, ephemeral context.
-
-Hygiene: descriptive dirs, remove stale entries, fewer high-quality entries.

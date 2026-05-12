@@ -19,7 +19,8 @@
 # Emits one TSV row per slice:
 #   id<TAB>name<TAB>needs(comma)<TAB>touches(comma)<TAB>user-visible<TAB>branch
 #
-# branch = agent/<slug>-<id>, slug = lowercased ticket.
+# branch = <type>/<slug>-<id>, slug = lowercased ticket, type from WT_TYPE
+# env (default: feature).
 #
 # Exit codes:
 #   0  parsed OK, ≥1 slice
@@ -47,6 +48,9 @@ else
 fi
 
 slug=$(printf '%s' "$ticket" | tr '[:upper:]' '[:lower:]')
+type_prefix="${WT_TYPE:-feature}"
+type_prefix=$(printf '%s' "$type_prefix" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9-]//g')
+[ -z "$type_prefix" ] && type_prefix="feature"
 
 if [ ! -f "$plan" ]; then
   printf 'dag-parse: no plan at %s\n' "$plan" >&2
@@ -66,7 +70,7 @@ fi
 
 # Minimal YAML parser: walk lines, track current slice record, flush on
 # new "- id:" or EOF. Bash 3.2 — no associative arrays, just scalars.
-out=$(printf '%s\n' "$block" | awk -v slug="$slug" '
+out=$(printf '%s\n' "$block" | awk -v slug="$slug" -v type_prefix="$type_prefix" '
   function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
   function strip_brackets(s) {
     s = trim(s)
@@ -76,7 +80,7 @@ out=$(printf '%s\n' "$block" | awk -v slug="$slug" '
   }
   function flush() {
     if (id != "") {
-      branch = "agent/" slug "-" id
+      branch = type_prefix "/" slug "-" id
       # Empty fields → "-" sentinel so callers can use whitespace-IFS read.
       printf "%s\t%s\t%s\t%s\t%s\t%s\n", id, name,
         (needs == "" ? "-" : needs),

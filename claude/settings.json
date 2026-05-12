@@ -6,6 +6,7 @@
   "permissions": {
     "defaultMode": "auto"
   },
+  "model": "claude-opus-4-6[1m]",
   "hooks": {
     "Notification": [
       {
@@ -82,10 +83,10 @@
   "enabledPlugins": {
     "context7@claude-plugins-official": true,
     "superpowers@claude-plugins-official": false,
-    "code-review@claude-plugins-official": true,
+    "code-review@claude-plugins-official": false,
     "feature-dev@claude-plugins-official": false,
     "typescript-lsp@claude-plugins-official": true,
-    "pr-review-toolkit@claude-plugins-official": true,
+    "pr-review-toolkit@claude-plugins-official": false,
     "atlassian@claude-plugins-official": false,
     "vercel@claude-plugins-official": false,
     "caveman@caveman": true
@@ -110,8 +111,10 @@
       }
     }
   },
-  "effortLevel": "xhigh",
+  "effortLevel": "high",
+  "fastMode": true,
   "skipDangerousModePermissionPrompt": true,
   "theme": "dark",
+  "fileCheckpointingEnabled": true,
   "skipAutoPermissionPrompt": true
 }

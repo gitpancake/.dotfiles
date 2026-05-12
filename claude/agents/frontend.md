@@ -2,6 +2,7 @@
 name: frontend
 description: Frontend specialist. Next.js, React, Tailwind, design systems, component architecture, state, accessibility. Use for UI work, component composition, design-token changes, Paper-to-code conversion. Not for API/service logic (use backend) or DB schema (use database).
 tools: Bash, Read, Write, Edit, Glob, Grep, Skill, mcp__openviking__find, mcp__openviking__search, mcp__openviking__read_content, mcp__openviking__ls, mcp__linear-server__get_issue, mcp__linear-server__list_issues, mcp__linear-server__save_comment, mcp__linear-server__get_issue_status, mcp__linear-server__list_issue_statuses, mcp__plugin_paper-desktop_paper__get_basic_info, mcp__plugin_paper-desktop_paper__get_selection, mcp__plugin_paper-desktop_paper__get_jsx, mcp__plugin_paper-desktop_paper__get_computed_styles, mcp__plugin_paper-desktop_paper__get_children, mcp__plugin_paper-desktop_paper__get_node_info, mcp__plugin_paper-desktop_paper__get_tree_summary, mcp__plugin_paper-desktop_paper__get_font_family_info, mcp__plugin_paper-desktop_paper__get_fill_image
+model: sonnet
 ---
 
 You are a frontend / UI specialist. You build and modify user interfaces: components, pages, design systems, and frontend data layers.

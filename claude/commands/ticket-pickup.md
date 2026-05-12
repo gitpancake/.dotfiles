@@ -1,6 +1,6 @@
 ---
 description: Scope a Linear ticket into a merge-safe slice plan. Stops before implementation.
-argument-hint: <LINEAR-ID> [base-branch]
+argument-hint: <LINEAR-ID> [base-branch] [--type feature|fix|chore|task|refactor]
 ---
 
 # /ticket-pickup $ARGUMENTS
@@ -9,7 +9,7 @@ Produce a scoping doc at `~/.claude/plans/<TICKET>.md`. Do **not** edit any othe
 
 ## Argument parsing
 
-`$ARGUMENTS` = `<TICKET> [base-branch]`. First token = Linear ticket ID (required). Second = base branch (optional; defaults to cockpit's current branch). Empty first token → ask and stop.
+`$ARGUMENTS` = `<TICKET> [base-branch] [--type <prefix>]`. First positional token = Linear ticket ID (required). Second positional = base branch (optional; defaults to cockpit's current branch). `--type` (optional) = branch type prefix passed through to `wt`; default `feature`. Empty ticket → ask and stop.
 
 ## 1. State check (parallel)
 
@@ -75,7 +75,7 @@ Slice count (1/3/5/8). Comparable prior plan from `~/.claude/plans/` ("M like AE
 
 ## 9. Branch + worktree (planning only)
 
-Branch: `agent/<ticket-id-lower>`. Worktree: `<repo>/.claude/worktrees/agent-<ticket-id-lower>`. Base: `BASE` if passed, else cockpit's current branch. Record base in plan.
+Branch: `<type>/<ticket-id-lower>-<descriptor>` where `<type>` defaults to `feature` (override via `--type`). `<descriptor>` is the slugified ticket title (lowercased, non-alnum → `-`, trimmed, ≤50 chars). Worktree: `<repo>/.claude/worktrees/<ticket-id-lower>-<descriptor>`. Base: `BASE` if passed, else cockpit's current branch. Record branch, worktree, and base in plan.
 
 ## 10. Linear comment
 
@@ -111,7 +111,7 @@ If `BASE` was passed, sync cockpit first (`wt` only ff-merges main/master):
 [ -n "$BASE" ] && git fetch --quiet origin && git checkout "$BASE" && git merge --ff-only "origin/$BASE"
 ```
 
-Then `wt <TICKET>`. `wt` creates the worktree + branch, allocates a per-lane port, opens a new claude lane with autonomous-mode kickoff. Stop after spawning:
+Then `wt [--type <prefix>] <TICKET>`. `wt` creates the worktree + branch (`<type>/<ticket>-<descriptor>`), allocates a per-lane port, opens a new claude lane with autonomous-mode kickoff. Pass `--type` through if user specified one. Stop after spawning:
 
 > Lane spawned. Autonomous dev loop running there. This pane is done.
 

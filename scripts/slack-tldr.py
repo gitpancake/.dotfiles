@@ -475,7 +475,7 @@ def _render_pane(state, out, blink_on=True):
     new_on  = "\033[1;7;31m"   # bold + inverse + red
     new_off = "\033[1;7;33m"   # bold + inverse + yellow
 
-    for i, a in enumerate(active, 1):
+    for a in active:
         ts = float(a.get("ts") or 0)
         hhmm = time.strftime("%H:%M", time.localtime(ts))
         ch = a.get("channel_name") or a.get("channel") or "?"
@@ -484,11 +484,11 @@ def _render_pane(state, out, blink_on=True):
         if is_new:
             sgr = new_on if blink_on else new_off
             out.write(
-                f"{sgr} [{i}] {hhmm} #{ch}  {tldr} \033[0m\n"
+                f"{sgr} {hhmm} #{ch}  {tldr} \033[0m\n"
             )
         else:
             out.write(
-                f"\033[33m[{i}]\033[0m \033[2m{hhmm}\033[0m "
+                f"\033[2m{hhmm}\033[0m "
                 f"\033[36m#{ch}\033[0m  {tldr}\n"
             )
 

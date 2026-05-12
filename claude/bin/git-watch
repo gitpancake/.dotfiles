@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Slack-alerts-style commit feed across $CODE_DIR.
+# PR dashboard across $CODE_DIR repos (uses `gh`).
 #   git-watch          live pane (q to quit, a to ack fresh)
 #   git-watch once     one-shot render
-#   git-watch ack      clear all fresh-on-main markers
+#   git-watch loop     auto-refresh every $GIT_WATCH_POLL seconds (no alt-screen)
+#   git-watch ack      clear all fresh state-change markers
 exec /usr/bin/env python3 "$HOME/.dotfiles/scripts/git-watch.py" "$@"
