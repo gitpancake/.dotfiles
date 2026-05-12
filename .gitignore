@@ -1,3 +1,7 @@
+# Claude Code runtime state — PIDs, session files, agent state.
+# Not the same as claude/ (no dot) which is intentionally tracked config.
+.claude/
+
 # Defense-in-depth: never track Claude Code transcripts or session data.
 # Live transcripts live in ~/.claude/projects/ outside this repo, but in
 # case anyone ever symlinks or copies one in, these patterns block commits.
