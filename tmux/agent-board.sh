@@ -37,16 +37,6 @@ except Exception:
 ' 2>/dev/null
 }
 
-_extract_cwd() {
-  python3 -c '
-import json,sys
-try:
-  d=json.loads(sys.stdin.read())
-  print(d.get("cwd") or "")
-except Exception:
-  print("")
-' 2>/dev/null
-}
 
 now=$(date +%s)
 
@@ -128,34 +118,6 @@ get_ctx_tokens() {
   [[ -n "$latest" ]] || { printf ''; return; }
   cache_file="$lane_dir/.claude/ctx-cache"
   _ctx_from_jsonl "$latest" "$cache_file"
-}
-
-# Live context size for a cockpit session (project session dir, no worktree).
-get_ctx_tokens_session() {
-  local session_dir=$1
-  local latest
-  latest=$(newest_jsonl "$session_dir")
-  [[ -n "$latest" ]] || { printf ''; return; }
-  _ctx_from_jsonl "$latest" "$session_dir/.ctx-cache"
-}
-
-# Pull cwd field from the first jsonl line that carries one (meta/summary
-# lines often lack it). Cached at <session_dir>/.cwd-cache so we don't grep
-# every tick.
-get_cwd_from_jsonl() {
-  local jsonl=$1
-  [[ -f "$jsonl" ]] || { printf ''; return; }
-  local sess_dir cache
-  sess_dir=$(dirname "$jsonl")
-  cache="$sess_dir/.cwd-cache"
-  if [[ -f "$cache" ]]; then
-    cat "$cache"
-    return
-  fi
-  local cwd
-  cwd=$(grep -m1 '"cwd"' "$jsonl" 2>/dev/null | _extract_cwd)
-  [[ -n "$cwd" ]] && printf '%s' "$cwd" > "$cache" 2>/dev/null
-  printf '%s' "$cwd"
 }
 
 fmt_ctx() {
@@ -296,52 +258,27 @@ render_row() {
     "$prio" "$c" "$display" "$state" "$ctx_disp" "$reset"
 }
 
-# Render a cockpit row for an active claude session not under any tracked
-# worktree/main-repo path. Derives state from jsonl mtime when there's no
-# agent-state file (cockpit dirs don't usually run our hooks).
-render_cockpit_row() {
-  local cwd=$1 session_dir=$2
-  local latest age mtime now_local
-  latest=$(newest_jsonl "$session_dir")
-  [[ -n "$latest" ]] || return
-  mtime=$(_stat_mtime "$latest")
-  age=$((now - mtime))
+# Render a cockpit row from session registry data.
+render_session_row() {
+  local cwd=$1 state=$2 ctx_disp=${3:-}
+  local c
+  case "$state" in
+    ACTIVE*)  c=$green ;;
+    WAITING*) c=$red; state="W:input" ;;
+    DONE)     c=$green ;;
+    RUNNING*) c=$yellow ;;
+    FAILED*)  c=$red ;;
+    *)        c=$dim ;;
+  esac
 
-  # Skip cockpit rows that haven't moved in >30 min — they're parked, not live.
-  (( age > 1800 )) && [[ -z "${BOARD_SHOW_ALL:-}" ]] && return
-
-  local state c
-  if [[ -f "$cwd/.claude/agent-state" ]]; then
-    state=$(tail -n1 "$cwd/.claude/agent-state" 2>/dev/null || echo IDLE)
-    case "$state" in
-      ACTIVE*) c=$green ;;
-      WAITING*) c=$red; state="W:input" ;;
-      DONE) c=$green ;;
-      RUNNING*) c=$yellow ;;
-      FAILED*) c=$red ;;
-      *) c=$dim ;;
-    esac
-  else
-    if (( age < 30 )); then state=ACTIVE; c=$green
-    elif (( age < 300 )); then state=RECENT; c=$yellow
-    else state=IDLE; c=$dim
-    fi
-  fi
-
-  local label="$cwd"
-  if [[ "$cwd" == "$HOME"* ]]; then
-    label="~${cwd#$HOME}"
-  fi
-  [[ ${#label} -gt 28 ]] && label="…${label: -27}"
-
-  local ctx ctx_disp
-  ctx=$(get_ctx_tokens_session "$session_dir")
-  ctx_disp=$(fmt_ctx "$ctx")
+  local label
+  label=$(basename "$cwd")
+  [[ ${#label} -gt 28 ]] && label="${label:0:25}..."
 
   local prio
   case "$state" in
     ACTIVE*)  prio=4 ;;
-    RECENT)   prio=5 ;;
+    WAITING*) prio=0 ;;
     *)        prio=6 ;;
   esac
 
@@ -364,16 +301,6 @@ is_covered()   { [[ "$covered_cwds" == *$'\n'"$1"$'\n'* ]]; }
 lane_rows=""
 lane_count=0
 for root in "${ROOTS[@]}"; do
-  for repo_dir in "$root"/*/; do
-    [[ -d "$repo_dir.git" || -f "$repo_dir.git" ]] || continue
-    state_file="$repo_dir.claude/agent-state"
-    [[ -f "$state_file" ]] || continue
-    lane_count=$((lane_count + 1))
-    repo=$(basename "${repo_dir%/}")
-    note_covered "${repo_dir%/}"
-    lane_rows+=$(render_row "$state_file" "$repo/(main)")$'\n'
-  done
-
   for wt in "$root"/*/.claude/worktrees/*/; do
     [[ -d "$wt" ]] || continue
     state_file="$wt.claude/agent-state"
@@ -386,22 +313,55 @@ for root in "${ROOTS[@]}"; do
   done
 done
 
-# Cockpit pass: any active Claude session whose cwd isn't already a tracked
-# lane. Window = jsonl mtime within COCKPIT_ACTIVE_SECS (default 5 min).
-COCKPIT_ACTIVE_SECS=${COCKPIT_ACTIVE_SECS:-300}
 cockpit_rows=""
 cockpit_count=0
-for sess_dir in "$HOME"/.claude/projects/*/; do
-  [[ -d "$sess_dir" ]] || continue
-  latest=$(newest_jsonl "${sess_dir%/}")
-  [[ -n "$latest" ]] || continue
-  mt=$(_stat_mtime "$latest")
-  (( now - mt <= COCKPIT_ACTIVE_SECS )) || continue
-  cwd=$(get_cwd_from_jsonl "$latest")
-  [[ -n "$cwd" ]] || continue
-  is_covered "$cwd" && continue
+
+# Cockpit pass: scan Claude's session registry (~/.claude/sessions/*.json) for
+# every live Claude process. Each entry has pid, cwd, status, sessionId.
+# - Covered cwds (already a lane row): skip the primary agent-pid, show extras.
+# - Uncovered cwds: show all as cockpit rows.
+# This replaces the old jsonl-mtime heuristic with authoritative process data.
+for sess_json in "$HOME"/.claude/sessions/*.json; do
+  [[ -f "$sess_json" ]] || continue
+  spid=$(grep -o '"pid":[0-9]*' "$sess_json" | head -1 | grep -o '[0-9]*')
+  [[ -n "$spid" ]] || continue
+  kill -0 "$spid" 2>/dev/null || continue
+  scwd=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get('cwd',''))" "$sess_json" 2>/dev/null)
+  [[ -n "$scwd" ]] || continue
+
+  if is_covered "$scwd"; then
+    primary=$(cat "$scwd/.claude/agent-pid" 2>/dev/null)
+    [[ "$spid" == "$primary" ]] && continue
+  fi
+
+  # State: prefer hook-written per-session file, then agent-state, then registry.
+  sstate=""
+  [[ -f "$scwd/.claude/sessions/$spid" ]] && sstate=$(cat "$scwd/.claude/sessions/$spid" 2>/dev/null)
+  if [[ -z "$sstate" && -f "$scwd/.claude/agent-state" ]]; then
+    primary=$(cat "$scwd/.claude/agent-pid" 2>/dev/null)
+    [[ "$spid" == "$primary" ]] && sstate=$(tail -n1 "$scwd/.claude/agent-state" 2>/dev/null)
+  fi
+  if [[ -z "$sstate" ]]; then
+    sstatus=$(grep -o '"status":"[^"]*"' "$sess_json" | head -1 | sed 's/"status":"//;s/"//')
+    [[ "$sstatus" == "busy" ]] && sstate="ACTIVE" || sstate="IDLE"
+  fi
+
+  # CTX: map sessionId → jsonl in the encoded project dir.
+  ctx_disp=""
+  sid=$(grep -o '"sessionId":"[^"]*"' "$sess_json" | head -1 | sed 's/"sessionId":"//;s/"//')
+  if [[ -n "$sid" ]]; then
+    enc=${scwd//\//-}
+    enc=${enc//./-}
+    jsonl_path="$HOME/.claude/projects/$enc/$sid.jsonl"
+    if [[ -f "$jsonl_path" ]]; then
+      cache_file="$HOME/.claude/projects/$enc/.ctx-cache-$sid"
+      ctx=$(fmt_ctx "$(_ctx_from_jsonl "$jsonl_path" "$cache_file")")
+      ctx_disp="$ctx"
+    fi
+  fi
+
   cockpit_count=$((cockpit_count + 1))
-  cockpit_rows+=$(render_cockpit_row "$cwd" "${sess_dir%/}")$'\n'
+  cockpit_rows+=$(render_session_row "$scwd" "$sstate" "$ctx_disp")$'\n'
 done
 
 if (( lane_count == 0 && cockpit_count == 0 )); then

@@ -27,6 +27,8 @@ write_state() {
     comm=$(ps -o comm= -p "$pid" 2>/dev/null)
     if [[ "$comm" == *claude* ]]; then
       printf '%s\n' "$pid" > "$dir/.claude/agent-pid"
+      mkdir -p "$dir/.claude/sessions"
+      printf '%s\n' "$state" > "$dir/.claude/sessions/$pid"
       return 0
     fi
   done
