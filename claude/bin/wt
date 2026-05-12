@@ -140,9 +140,10 @@ fi
 layout="${WT_LAYOUT:-window}"
 
 # ---- lane spawn helper -----------------------------------------------------
-# Args: <slug> <branch> <wt_path> <initial-prompt-or-empty>
+# Args: <slug> <branch> <wt_path> <initial-prompt-or-empty> [tmux-label]
 spawn_lane() {
   local s_slug=$1 s_branch=$2 s_wt=$3 s_initial=$4
+  local s_label="${5:-$s_slug}"
 
   if [[ "${WT_DRY_RUN:-}" == "1" ]]; then
     echo "wt[dry-run]: would spawn lane"
@@ -190,14 +191,14 @@ JSON
     case "$layout" in
       pane)
         tmux split-window -h -c "$s_wt" "$claude_cmd"
-        tmux select-pane -T "$s_slug" 2>/dev/null || true
+        tmux select-pane -T "$s_label" 2>/dev/null || true
         ;;
       window)
-        tmux new-window -n "$s_slug" -c "$s_wt" "$claude_cmd"
+        tmux new-window -n "$s_label" -c "$s_wt" "$claude_cmd"
         ;;
       session)
-        tmux new-session -d -s "wt-$s_slug" -c "$s_wt" "$claude_cmd"
-        echo "wt: detached session 'wt-$s_slug'. Attach: tmux attach -t wt-$s_slug"
+        tmux new-session -d -s "wt-$s_label" -c "$s_wt" "$claude_cmd"
+        echo "wt: detached session 'wt-$s_label'. Attach: tmux attach -t wt-$s_label"
         ;;
       *)
         echo "wt: unknown WT_LAYOUT=$layout (expected pane|window|session)" >&2
@@ -230,7 +231,7 @@ if [[ "$mode" == "single" ]]; then
     fi
   fi
 
-  spawn_lane "$slug" "$branch" "$wt_path" "$initial"
+  spawn_lane "$slug" "$branch" "$wt_path" "$initial" "${ticket:-$slug}"
   exit 0
 fi
 
@@ -263,7 +264,7 @@ case "$parse_rc" in
     plan="$HOME/.claude/plans/${plan_slug}.md"
     review_rule="Review findings: apply blocker/major fixes directly in the PR branch (commit + push), do NOT post them as PR comments. Never run \`gh pr comment\`, \`gh pr review --comment\`, or any \`gh\` command that writes to the PR conversation. Minor/NB findings: include in the final report only."
     initial="Autonomous mode. Plan at ${plan}. Read it. Implement every slice end-to-end: per slice run type-check + tests, commit per layer, then move on. After the final slice, run /ship. ${review_rule} Stop only when the PR is open and review-driven fixes are pushed."
-    spawn_lane "$slug" "$branch" "$wt_path" "$initial"
+    spawn_lane "$slug" "$branch" "$wt_path" "$initial" "$ticket"
     exit 0
     ;;
   4)
@@ -285,7 +286,7 @@ if [[ "$slice_count" -le 1 ]]; then
   branch="${type_prefix}/${slug}"
   plan="$HOME/.claude/plans/${plan_slug}.md"
   initial="Autonomous mode. Plan at ${plan}. Single-slice plan. Implement it, run /ship."
-  spawn_lane "$slug" "$branch" "$wt_path" "$initial"
+  spawn_lane "$slug" "$branch" "$wt_path" "$initial" "$ticket"
   exit 0
 fi
 
@@ -407,5 +408,5 @@ for i in "${spawn_idx[@]}"; do
   s_slug="${slug}-${s_id}"
   s_wt="$wt_dir/${s_slug}"
   s_initial="Autonomous mode, DAG slice. Plan at ${plan_path}. Implement slice ${s_id} (${s_name}) only. Per-layer commits, run type-check + tests. After the slice is committed and pushed, STOP — do not run /ship and do not start another slice. The DAG resolver (\`wt --resolve ${ticket}\`) will re-spawn the next ready set after this slice merges. ${review_rule}"
-  spawn_lane "$s_slug" "$s_branch" "$s_wt" "$s_initial"
+  spawn_lane "$s_slug" "$s_branch" "$s_wt" "$s_initial" "${ticket}-${s_id}"
 done
