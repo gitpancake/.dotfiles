@@ -7,7 +7,7 @@ argument-hint: <free-text problem statement>
 
 user's standard ask is "scope this out and pop it into a ticket, ready for engineering." That means: a future agent or human should be able to pick this up without redoing the discovery. The ticket carries the surface area, the mirror reference, and the gotchas. Don't draft a ticket that just restates the request — refine it.
 
-If `$ARGUMENTS` is empty, ask for a problem statement and stop.
+If `$ARGUMENTS` is empty, infer the problem statement from the conversation context — what was just discussed, debugged, or decided. Summarize your interpretation in 1–2 sentences and proceed to §1. If the conversation has no relevant context either, ask for a problem statement and stop.
 
 ## 1. Clarify before exploring
 

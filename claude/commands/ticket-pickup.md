@@ -9,7 +9,7 @@ Produce a scoping doc at `~/.claude/plans/<TICKET>.md`, then spawn an autonomous
 
 ## Argument parsing
 
-`$ARGUMENTS` = `<TICKET> [base-branch] [--type <prefix>]`. First positional token = Linear ticket ID (required). Second positional = base branch (optional; defaults to cockpit's current branch). `--type` (optional) = branch type prefix passed through to `wt`; default `feature`. Empty ticket → ask and stop.
+`$ARGUMENTS` = `<TICKET> [base-branch] [--type <prefix>]`. First positional token = Linear ticket ID (required). Second positional = base branch (optional; defaults to cockpit's current branch). `--type` (optional) = branch type prefix override; empty → auto-detect from labels (§1.5). Empty ticket → ask and stop.
 
 ## 1. State check (parallel)
 
@@ -22,6 +22,19 @@ Linear `attachments[]` already names linked PRs. Fall back to `gh pr list --sear
 
 **Stop conditions** (report and wait): in-progress + assignee not user; open PR exists; `Blocked` label or unresolved blocker comment.
 
+## 1.5. Type detection
+
+If `--type` was passed, use it. Otherwise infer from Linear labels:
+
+| Label contains | Type | Branch prefix |
+|---|---|---|
+| `bug` | fix | `fix/` |
+| `refactor` | refactor | `refactor/` |
+| `chore`, `infra`, `ops` | chore | `chore/` |
+| none of the above | feature | `feature/` |
+
+First match wins. Record `TYPE` for use in §3 and §5. Print detected type so user can override before planning starts.
+
 ## 2. Verbatim extraction
 
 Copy directly, do not paraphrase:
@@ -31,24 +44,74 @@ Copy directly, do not paraphrase:
 - **Linked tickets** — one line each: `ID — title — status`.
 - **Recent comments** — last 5 verbatim if they shift scope/constraints.
 
-## 3. Mirror search (before grep)
+## 2.5. Bug investigation (TYPE=fix only)
 
-Most example-org-agent work is "mirror the X equivalent for Y" shaped. Name the analogous feature first; list its entry points (workflow, route, model, UI). For vendor integrations, search OpenViking `resources/example-org/<vendor>/` first; cite `source_file § section` for any spec claim.
+Skip for feature/refactor/chore. Goal: establish root cause before planning. Do not propose a fix yet.
 
-## 4. Surface area (grounded grep, only after §3)
+### Evidence gathering (parallel)
+
+Run all available sources in parallel. Not every source will exist in every project — skip gracefully.
+
+- **Sentry**: search for recent errors matching ticket description, affected file paths, or error messages quoted in ticket/comments. Note: requires Sentry access — if unavailable, flag and move on.
+- **tracing-tool traces**: search for failing/erroring traces in the affected workflow area. Look for: low scores, error status, unexpected tool calls, hallucinated outputs. Link specific trace IDs.
+- **Git blame + recent commits**: `git log --since="2 weeks ago" -- <affected files>` and `git blame <affected files>` on the lines mentioned in the ticket. Look for recent regressions — the bug may be a side effect of a recent change.
+- **Log search**: grep application logs (Loki, CloudWatch, local) for error patterns, stack traces, or the specific error message from the ticket.
+
+### Root cause summary
+
+After gathering evidence, write a **root cause hypothesis** (2-3 sentences max):
+- What's broken and where (file:line if known).
+- When it started (commit hash or date range if identifiable from blame/logs).
+- Why it breaks (the mechanism, not just the symptom).
+
+If root cause is unclear after investigation, flag it in §6 (Open questions) as a blocker — don't guess.
+
+## 3. Mirror search (TYPE=feature only)
+
+Skip for fix/refactor/chore. Most example-org-agent work is "mirror the X equivalent for Y" shaped. Name the analogous feature first; list its entry points (workflow, route, model, UI). For vendor integrations, search OpenViking `resources/example-org/<vendor>/` first; cite `source_file § section` for any spec claim.
+
+## 4. Surface area (grounded grep, only after §2.5/§3)
 
 Top ≤10 files to read first, each with a one-line reason. Imports/callers of affected types. Quote any project `CLAUDE.md` "Gotchas" entries that apply.
 
 ## 5. Slice plan (trunk-based, merge-safe)
 
-Each slice ships to main on its own. User sees nothing until the final flip.
+Each slice ships to main on its own. Plan structure adapts to `TYPE`:
 
-### 5a. Human table
+### TYPE=feature (default)
+
+Standard multi-slice with flip pattern. User sees nothing until final flip.
 
 | # | Slice | User-visible? | Why safe to merge alone |
 |---|-------|---------------|-------------------------|
 | 1 | … | No | … |
 | N | **Flip** | Yes | One-line registry/endpoint change |
+
+### TYPE=fix
+
+Typically 1-2 slices. Root cause from §2.5 drives the plan. No flip needed — the fix IS the user-visible change.
+
+| # | Slice | What |
+|---|-------|------|
+| 1 | Fix + regression test | Targeted fix at root cause. Test reproduces the bug, then verifies the fix. |
+| 2 | *(optional)* Hardening | Guard clause, validation, or monitoring to prevent recurrence. |
+
+If the fix touches multiple layers (schema + backend + frontend), still split by layer but each slice targets the same root cause.
+
+### TYPE=refactor
+
+No user-visible change. Require test coverage audit before touching code — if existing tests are insufficient, slice 1 adds them.
+
+| # | Slice | What |
+|---|-------|------|
+| 1 | *(if needed)* Test backfill | Add/expand tests covering the code about to change. |
+| 2+ | Refactor chunks | Each chunk passes existing + new tests. |
+
+### TYPE=chore
+
+Lightweight. Often single-slice. Skip DAG. Config, deps, infra — no user-facing flip.
+
+### General rules (all types)
 
 If a slice can't merge alone without breaking main or showing half-finished UI, restructure until it can.
 
@@ -75,7 +138,7 @@ Slice count (1/3/5/8). Comparable prior plan from `~/.claude/plans/` ("M like AE
 
 ## 9. Branch + worktree (planning only)
 
-Branch: `<type>/<ticket-id-lower>-<descriptor>` where `<type>` defaults to `feature` (override via `--type`). `<descriptor>` is the slugified ticket title (lowercased, non-alnum → `-`, trimmed, ≤50 chars). Worktree: `<repo>/.claude/worktrees/<ticket-id-lower>-<descriptor>`. Base: `BASE` if passed, else cockpit's current branch. Record branch, worktree, and base in plan.
+Branch: `<TYPE>/<ticket-id-lower>-<descriptor>` where `<TYPE>` is from §1.5. `<descriptor>` is the slugified ticket title (lowercased, non-alnum → `-`, trimmed, ≤50 chars). Worktree: `<repo>/.claude/worktrees/<ticket-id-lower>-<descriptor>`. Base: `BASE` if passed, else cockpit's current branch. Record branch, worktree, and base in plan.
 
 ## 10. Linear comment
 
@@ -117,7 +180,7 @@ Then spawn the autonomous lane. **You MUST run this command via the Bash tool** 
 wt --type <TYPE_PREFIX> <TICKET>
 ```
 
-Where `<TYPE_PREFIX>` is the branch type (default `feature`; override via `--type` arg) and `<TICKET>` is the uppercase Linear ID (e.g. `TEAM-1609`). `wt` creates the worktree + branch, allocates a per-lane port, and opens a new tmux window running claude with the plan. Stop after spawning:
+Where `<TYPE_PREFIX>` is the `TYPE` from §1.5 and `<TICKET>` is the uppercase Linear ID (e.g. `TEAM-1609`). `wt` creates the worktree + branch, allocates a per-lane port, and opens a new tmux window running claude with the plan. Stop after spawning:
 
 > Lane spawned. Autonomous dev loop running in new tmux window. This pane is done.
 
