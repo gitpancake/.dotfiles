@@ -51,6 +51,7 @@ mkdir -p "$logDir"
 logFile="${logDir}/group-${groupKey}.log"
 warnFile="${logDir}/group-${groupKey}.warned"
 touch "$warnFile"
+source "$(dirname "$0")/_warn-helpers.sh"
 
 echo "$toolName" >> "$logFile"
 
@@ -59,14 +60,7 @@ sameToolCalls=$(grep -cx "$toolName" "$logFile")
 
 warnings=()
 
-shouldFireOnce() {
-  local tag=$1
-  grep -qx "$tag" "$warnFile" && return 1
-  echo "$tag" >> "$warnFile"
-  return 0
-}
-
-if (( sameToolCalls >= 30 )) && shouldFireOnce "sameTool:${toolName}"; then
+if (( sameToolCalls >= 30 )) && shouldFireOnce "sameTool:${toolName}" "$warnFile"; then
   warnings+=(
     "⚠️  CONTEXT ECONOMY: ${toolName} called ${sameToolCalls}× across this session + subagents."
     "   Consider the batch pattern: one LLM call to produce a plan/map, then a"
@@ -74,7 +68,7 @@ if (( sameToolCalls >= 30 )) && shouldFireOnce "sameTool:${toolName}"; then
   )
 fi
 
-if (( totalCalls >= 100 )) && shouldFireOnce "total100"; then
+if (( totalCalls >= 100 )) && shouldFireOnce "total100" "$warnFile"; then
   warnings+=(
     "⚠️  CONTEXT ECONOMY: ${totalCalls} total tool calls across this session + subagents."
     "   Consider /clear between logical batches to reset the baseline."

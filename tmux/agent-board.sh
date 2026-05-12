@@ -20,6 +20,34 @@ yellow=$'\033[33m'
 dim=$'\033[2m'
 bold=$'\033[1m'
 
+# Cross-platform stat helpers (macOS -f vs Linux -c).
+_stat_mtime() { stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || echo 0; }
+_stat_size()  { stat -f %z "$1" 2>/dev/null || stat -c %s "$1" 2>/dev/null || echo 0; }
+
+# Named Python parsers for jsonl extraction.
+_extract_ctx_tokens() {
+  python3 -c '
+import json,sys
+try:
+  d=json.loads(sys.stdin.read())
+  u=(d.get("message") or {}).get("usage") or {}
+  print((u.get("input_tokens") or 0)+(u.get("cache_read_input_tokens") or 0)+(u.get("cache_creation_input_tokens") or 0))
+except Exception:
+  print("")
+' 2>/dev/null
+}
+
+_extract_cwd() {
+  python3 -c '
+import json,sys
+try:
+  d=json.loads(sys.stdin.read())
+  print(d.get("cwd") or "")
+except Exception:
+  print("")
+' 2>/dev/null
+}
+
 now=$(date +%s)
 
 # Reason-code vocab. Mirrors ~/.claude/agent-state-vocab.md.
@@ -70,8 +98,8 @@ _ctx_from_jsonl() {
   local latest=$1 cache_file=$2
   [[ -n "$latest" && -f "$latest" ]] || { printf ''; return; }
   local mtime size
-  mtime=$(stat -f %m "$latest" 2>/dev/null || echo 0)
-  size=$(stat -f %z "$latest" 2>/dev/null || echo 0)
+  mtime=$(_stat_mtime "$latest")
+  size=$(_stat_size "$latest")
   if [[ -f "$cache_file" ]]; then
     local cmtime csize ctokens
     IFS=: read -r cmtime csize ctokens < "$cache_file"
@@ -81,15 +109,7 @@ _ctx_from_jsonl() {
     fi
   fi
   local tokens
-  tokens=$(tail -r "$latest" 2>/dev/null | grep -m1 '"usage"' | python3 -c '
-import json,sys
-try:
-  d=json.loads(sys.stdin.read())
-  u=(d.get("message") or {}).get("usage") or {}
-  print((u.get("input_tokens") or 0)+(u.get("cache_read_input_tokens") or 0)+(u.get("cache_creation_input_tokens") or 0))
-except Exception:
-  print("")
-' 2>/dev/null)
+  tokens=$(tail -r "$latest" 2>/dev/null | grep -m1 '"usage"' | _extract_ctx_tokens)
   [[ -n "$tokens" ]] || tokens=0
   mkdir -p "$(dirname "$cache_file")" 2>/dev/null
   printf '%s:%s:%s\n' "$mtime" "$size" "$tokens" > "$cache_file" 2>/dev/null
@@ -133,14 +153,7 @@ get_cwd_from_jsonl() {
     return
   fi
   local cwd
-  cwd=$(grep -m1 '"cwd"' "$jsonl" 2>/dev/null | python3 -c '
-import json,sys
-try:
-  d=json.loads(sys.stdin.read())
-  print(d.get("cwd") or "")
-except Exception:
-  print("")
-' 2>/dev/null)
+  cwd=$(grep -m1 '"cwd"' "$jsonl" 2>/dev/null | _extract_cwd)
   [[ -n "$cwd" ]] && printf '%s' "$cwd" > "$cache" 2>/dev/null
   printf '%s' "$cwd"
 }
@@ -174,7 +187,7 @@ render_row() {
   pid_file="$lane_dir/.claude/agent-pid"
 
   raw=$(tail -n1 "$state_file" 2>/dev/null || echo "—")
-  state_mtime=$(stat -f %m "$state_file" 2>/dev/null || echo "$now")
+  state_mtime=$(_stat_mtime "$state_file")
   age=$((now - state_mtime))
 
   # Hide stale IDLE rows. Active/waiting/failed/done always render.
@@ -291,7 +304,7 @@ render_cockpit_row() {
   local latest age mtime now_local
   latest=$(newest_jsonl "$session_dir")
   [[ -n "$latest" ]] || return
-  mtime=$(stat -f %m "$latest" 2>/dev/null || echo "$now")
+  mtime=$(_stat_mtime "$latest")
   age=$((now - mtime))
 
   # Skip cockpit rows that haven't moved in >30 min — they're parked, not live.
@@ -382,7 +395,7 @@ for sess_dir in "$HOME"/.claude/projects/*/; do
   [[ -d "$sess_dir" ]] || continue
   latest=$(newest_jsonl "${sess_dir%/}")
   [[ -n "$latest" ]] || continue
-  mt=$(stat -f %m "$latest" 2>/dev/null || echo 0)
+  mt=$(_stat_mtime "$latest")
   (( now - mt <= COCKPIT_ACTIVE_SECS )) || continue
   cwd=$(get_cwd_from_jsonl "$latest")
   [[ -n "$cwd" ]] || continue

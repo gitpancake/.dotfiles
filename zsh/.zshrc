@@ -67,6 +67,15 @@ unalias art 2>/dev/null
 #
 # No-op if the watcher script or config is missing. Logs go to
 # /tmp/commit-watcher.log.
+_kill_and_wait() {
+  local pid=$1
+  kill "$pid" 2>/dev/null || return
+  local i=0
+  while (( i < 10 )) && ps -p "$pid" >/dev/null 2>&1; do
+    sleep 0.1
+    (( i++ ))
+  done
+}
 art_ensure_commit_watcher() {
   local watcher="$HOME/.dotfiles/scripts/commit-watcher.py"
   local config="$HOME/.dotfiles/scripts/commit-watcher.config.local"
@@ -81,13 +90,7 @@ art_ensure_commit_watcher() {
     IFS=$'\t' read -r existing_pid existing_repo < "$lock"
     if [[ -n "$existing_pid" ]] && \
        ps -p "$existing_pid" -o command= 2>/dev/null | grep -q commit-watcher.py; then
-      kill "$existing_pid" 2>/dev/null
-      # Wait briefly for flock release; cap to ~1s.
-      local i=0
-      while (( i < 10 )) && ps -p "$existing_pid" >/dev/null 2>&1; do
-        sleep 0.1
-        (( i++ ))
-      done
+      _kill_and_wait "$existing_pid"
     fi
   fi
 
@@ -109,12 +112,7 @@ art_ensure_audio_watcher() {
     existing_pid=$(head -1 "$lock" | tr -d '[:space:]')
     if [[ -n "$existing_pid" ]] && \
        ps -p "$existing_pid" -o command= 2>/dev/null | grep -q audio-watcher.py; then
-      kill "$existing_pid" 2>/dev/null
-      local i=0
-      while (( i < 10 )) && ps -p "$existing_pid" >/dev/null 2>&1; do
-        sleep 0.1
-        (( i++ ))
-      done
+      _kill_and_wait "$existing_pid"
     fi
   fi
 
@@ -128,7 +126,7 @@ art() {
   local script="$HOME/.local/share/art/${name}.py"
   if [[ ! -f "$script" ]]; then
     echo "Unknown art: $name"
-    echo "Available: $(ls ~/.local/share/art/*.py 2>/dev/null | xargs -n1 basename | sed 's/\.py$//' | tr '\n' ' ')"
+    echo "Available: $(printf '%s\n' ~/.local/share/art/*.py 2>/dev/null | xargs -n1 basename -s .py | tr '\n' ' ')"
     return 1
   fi
   if [[ "$name" == "watch" ]]; then
@@ -168,26 +166,6 @@ export PATH="$BUN_INSTALL/bin:$PATH"
 # Prefix any command with a space to keep it out of history
 setopt HIST_IGNORE_SPACE
 
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
-
 # gcloud
-source "/opt/homebrew/share/google-cloud-sdk/path.zsh.inc"
-source "/opt/homebrew/share/google-cloud-sdk/completion.zsh.inc"
-
-# Push current git branch into the tmux pane title via OSC 2. Replaces
-# the old #() shell-sub in pane-border-format — no fork per redraw, no
-# race-prone cache file. Lanes spawned by `wt` already set their own
-# title via `tmux select-pane -T`, so this only runs in interactive zsh.
-if [[ -n "$TMUX" ]]; then
-  __tmux_pane_title_branch() {
-    local b
-    b=$(git branch --show-current 2>/dev/null)
-    [[ -z "$b" ]] && b='-'
-    printf '\033]2;%s\033\\' "$b"
-  }
-  autoload -Uz add-zsh-hook
-  add-zsh-hook chpwd  __tmux_pane_title_branch
-  add-zsh-hook precmd __tmux_pane_title_branch
-fi
+[[ -f "/opt/homebrew/share/google-cloud-sdk/path.zsh.inc" ]] && source "/opt/homebrew/share/google-cloud-sdk/path.zsh.inc"
+[[ -f "/opt/homebrew/share/google-cloud-sdk/completion.zsh.inc" ]] && source "/opt/homebrew/share/google-cloud-sdk/completion.zsh.inc"

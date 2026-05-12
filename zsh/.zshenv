@@ -5,7 +5,9 @@
 # because .zshrc (where zsh-nvm sets up the lazy wrappers) is never sourced for non-interactive zsh.
 export NVM_DIR="$HOME/.nvm"
 if [[ -s "$NVM_DIR/alias/default" ]]; then
-  export PATH="$NVM_DIR/versions/node/$(cat $NVM_DIR/alias/default)/bin:$PATH"
+  nvm_ver=$(cat "$NVM_DIR/alias/default" 2>/dev/null)
+  [[ -d "$NVM_DIR/versions/node/$nvm_ver/bin" ]] && export PATH="$NVM_DIR/versions/node/$nvm_ver/bin:$PATH"
+  unset nvm_ver
 fi
 
 # Machine-local secrets and env overrides. Lives outside the dotfiles repo so it's

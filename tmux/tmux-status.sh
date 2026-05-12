@@ -15,11 +15,11 @@ if [ "$OS" = "Darwin" ]; then
     fi
   fi
 else
-  BAT_PATH="/sys/class/power_supply/BAT1/capacity"
-  AC_PATH="/sys/class/power_supply/AC1/online"
-  if [ -f "$BAT_PATH" ]; then
+  BAT_PATH=$(ls /sys/class/power_supply/BAT*/capacity 2>/dev/null | head -1)
+  AC_PATH=$(ls /sys/class/power_supply/AC*/online 2>/dev/null | head -1)
+  if [ -n "$BAT_PATH" ] && [ -f "$BAT_PATH" ]; then
     PCT=$(cat "$BAT_PATH")
-    if [ -f "$AC_PATH" ] && [ "$(cat "$AC_PATH")" = "1" ]; then
+    if [ -n "$AC_PATH" ] && [ -f "$AC_PATH" ] && [ "$(cat "$AC_PATH")" = "1" ]; then
       BAT="${PCT}%+"
     else
       BAT="${PCT}%"
@@ -61,24 +61,22 @@ else
   DSK=$(df / | awk 'NR==2{print $5}')
 fi
 
-# Dynamic color: green → yellow → orange → red based on severity
-# For "higher is worse" metrics (CPU, MEM, DSK): low=green, high=red
-# For battery: inverted — high=green, low=red
-severity_color() {
-  local val=$1
-  if [ "$val" -le 25 ]; then echo "colour114"    # green
-  elif [ "$val" -le 50 ]; then echo "colour228"   # yellow
-  elif [ "$val" -le 75 ]; then echo "colour208"   # orange
-  else echo "colour196"                            # red
-  fi
-}
-
-bat_color() {
-  local val=$1
-  if [ "$val" -ge 75 ]; then echo "colour114"     # green
-  elif [ "$val" -ge 50 ]; then echo "colour228"   # yellow
-  elif [ "$val" -ge 25 ]; then echo "colour208"   # orange
-  else echo "colour196"                            # red
+# Dynamic color: green → yellow → orange → red based on severity.
+# Pass invert=1 for battery (high=green) vs the default (low=green).
+_color_for_pct() {
+  local val=$1 invert=${2:-0}
+  if (( invert )); then
+    if [ "$val" -ge 75 ]; then echo "colour114"   # green
+    elif [ "$val" -ge 50 ]; then echo "colour228" # yellow
+    elif [ "$val" -ge 25 ]; then echo "colour208" # orange
+    else echo "colour196"                          # red
+    fi
+  else
+    if [ "$val" -le 25 ]; then echo "colour114"   # green
+    elif [ "$val" -le 50 ]; then echo "colour228" # yellow
+    elif [ "$val" -le 75 ]; then echo "colour208" # orange
+    else echo "colour196"                          # red
+    fi
   fi
 }
 
@@ -87,11 +85,11 @@ SEP=" #[fg=colour241]|#[default] "
 OUT=""
 if [ -n "$BAT" ]; then
   BAT_PCT=${BAT%%%*}
-  OUT+="#[fg=$(bat_color "$BAT_PCT")]BAT ${BAT}${SEP}"
+  OUT+="#[fg=$(_color_for_pct "$BAT_PCT" 1)]BAT ${BAT}${SEP}"
 fi
-OUT+="#[fg=$(severity_color "$CPU_PCT")]CPU ${CPU_LABEL} (${CPU_PCT}%)${SEP}"
-OUT+="#[fg=$(severity_color "$MEM")]MEM ${MEM}%${SEP}"
+OUT+="#[fg=$(_color_for_pct "$CPU_PCT")]CPU ${CPU_LABEL} (${CPU_PCT}%)${SEP}"
+OUT+="#[fg=$(_color_for_pct "$MEM")]MEM ${MEM}%${SEP}"
 DSK_NUM=${DSK%%%}
-OUT+="#[fg=$(severity_color "$DSK_NUM")]DSK ${DSK}"
+OUT+="#[fg=$(_color_for_pct "$DSK_NUM")]DSK ${DSK}"
 
 printf '%s' "$OUT"
