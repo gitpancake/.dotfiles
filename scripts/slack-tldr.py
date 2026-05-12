@@ -53,6 +53,7 @@ DEFAULT_STATE = os.environ.get(
 LOCK_PATH = os.path.expanduser("~/.local/share/slack-tldr/daemon.lock")
 STATE_LOCK_PATH = os.path.expanduser("~/.local/share/slack-tldr/state.lock")
 DEFAULT_MAX_ACTIVE = 50
+DEFAULT_ALERT_CHANNELS = ["alerts-channel-1", "alerts-channel-2", "alerts-channel-4"]
 DISMISSED_RING_SIZE = 500
 SEEN_RING_SIZE = 200
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
@@ -134,6 +135,7 @@ def load_config():
     cfg.setdefault("model", DEFAULT_MODEL)
     cfg.setdefault("max_active", DEFAULT_MAX_ACTIVE)
     cfg.setdefault("backfill_count", DEFAULT_BACKFILL_COUNT)
+    cfg.setdefault("alert_channels", DEFAULT_ALERT_CHANNELS)
     return cfg
 
 
@@ -454,48 +456,115 @@ def cmd_list():
     print(json.dumps(state.get("active", []), indent=2))
 
 
-def _render_pane(state, out, blink_on=True):
-    """Write the numbered alert list to `out`.
+BOLD  = "\033[1m"
+DIM   = "\033[2m"
+RESET = "\033[0m"
+RED   = "\033[31m"
+GREEN = "\033[32m"
+CYAN  = "\033[36m"
+NEW_ON  = "\033[1;7;31m"
+NEW_OFF = "\033[1;7;33m"
 
-    Alerts with ts > ack_ts are drawn in an attention-grabbing style.
-    `blink_on` toggles between two color frames so callers that re-render
-    on a timer get a real flash effect even on terminals (Alacritty) that
-    ignore ANSI slow-blink. Static callers can just leave it True.
-    """
+
+def _render_alert_line(a, ack_ts, out, blink_on):
+    ts = float(a.get("ts") or 0)
+    hhmm = time.strftime("%H:%M", time.localtime(ts))
+    ch = a.get("channel_name") or a.get("channel") or "?"
+    tldr = a.get("tldr") or ""
+    if ts > ack_ts:
+        sgr = NEW_ON if blink_on else NEW_OFF
+        out.write(f"{sgr} {hhmm} #{ch}  {tldr} {RESET}\n")
+    else:
+        out.write(f"{DIM}{hhmm}{RESET} {CYAN}#{ch}{RESET}  {tldr}\n")
+
+
+def _partition_alerts(active, alert_channels):
+    alert_set = set(alert_channels)
+    alerts, monitor = [], []
+    for a in active:
+        ch = a.get("channel_name") or ""
+        if ch in alert_set:
+            alerts.append(a)
+        else:
+            monitor.append(a)
+    return alerts, monitor
+
+
+def _render_section_header(out, title, items, ack_ts, blink_on, show_counts=True):
+    if not show_counts:
+        out.write(f"{BOLD}{title}{RESET}\n")
+        return
+    new_count = sum(1 for a in items if float(a.get("ts") or 0) > ack_ts)
+    if not items:
+        out.write(f"{BOLD}{title}{RESET}  {DIM}clear{RESET}\n")
+    elif new_count:
+        badge = NEW_ON if blink_on else NEW_OFF
+        out.write(f"{BOLD}{title}{RESET}  {badge} {new_count} NEW {RESET} {DIM}({len(items)} total){RESET}\n")
+    else:
+        out.write(f"{BOLD}{title}{RESET}  {RED}{len(items)} active{RESET}\n")
+
+
+VIEW_SPLIT   = 0
+VIEW_ALERTS  = 1
+VIEW_MONITOR = 2
+VIEW_NAMES   = ["split", "alerts", "monitor"]
+VIEW_COUNT   = 3
+MONITOR_CAP_SPLIT = 2
+ALERT_CAP_SPLIT = 10
+SINGLE_VIEW_CAP = 14
+
+
+def _render_section(out, title, items, ack_ts, blink_on, max_rows, show_counts=True):
+    _render_section_header(out, title, items, ack_ts, blink_on, show_counts)
+    out.write("\n")
+    shown = items[-max_rows:] if len(items) > max_rows else items
+    if not shown:
+        out.write(f"{DIM}—{RESET}\n")
+    for a in shown:
+        _render_alert_line(a, ack_ts, out, blink_on)
+
+
+def _render_pane(state, out, blink_on=True, alert_channels=None, view=VIEW_SPLIT):
     active = state.get("active", [])
     ack_ts = float(state.get("ack_ts") or 0.0)
     if not active:
-        out.write("\033[2mno active alerts\033[0m\n")
+        out.write(f"{DIM}no active alerts{RESET}\n")
         return
 
-    # New-alert color frames: bright red inverse vs yellow inverse. Inverse
-    # video (\033[7m) works everywhere, and toggling the foreground color
-    # gives a clear pulse instead of relying on \033[5m (which Alacritty
-    # silently drops).
-    new_on  = "\033[1;7;31m"   # bold + inverse + red
-    new_off = "\033[1;7;33m"   # bold + inverse + yellow
+    if alert_channels is None:
+        alert_channels = DEFAULT_ALERT_CHANNELS
 
-    for a in active:
-        ts = float(a.get("ts") or 0)
-        hhmm = time.strftime("%H:%M", time.localtime(ts))
-        ch = a.get("channel_name") or a.get("channel") or "?"
-        tldr = a.get("tldr") or ""
-        is_new = ts > ack_ts
-        if is_new:
-            sgr = new_on if blink_on else new_off
-            out.write(
-                f"{sgr} {hhmm} #{ch}  {tldr} \033[0m\n"
-            )
-        else:
-            out.write(
-                f"\033[2m{hhmm}\033[0m "
-                f"\033[36m#{ch}\033[0m  {tldr}\n"
-            )
+    alerts, monitor = _partition_alerts(active, alert_channels)
+
+    rows = 24
+    try:
+        rows = os.get_terminal_size().lines
+    except OSError:
+        pass
+    usable = rows - 4  # top header + padding
+
+    if view == VIEW_ALERTS:
+        _render_section(out, "Alerts", alerts, ack_ts, blink_on, SINGLE_VIEW_CAP)
+    elif view == VIEW_MONITOR:
+        _render_section(out, "Monitor", monitor, ack_ts, blink_on, SINGLE_VIEW_CAP)
+    else:
+        alert_max = min(ALERT_CAP_SPLIT, max(3, usable - MONITOR_CAP_SPLIT - 4))
+        _render_section(out, "Alerts", alerts, ack_ts, blink_on, alert_max, show_counts=False)
+        out.write("\n")
+        _render_section(out, "Monitor", monitor, ack_ts, blink_on, MONITOR_CAP_SPLIT, show_counts=False)
+
+
+def _get_alert_channels():
+    try:
+        cfg = load_config()
+        return cfg.get("alert_channels", DEFAULT_ALERT_CHANNELS)
+    except SystemExit:
+        return DEFAULT_ALERT_CHANNELS
 
 
 def cmd_pane():
     """One-shot render for `watch(1)`. ANSI-colored numbered list."""
-    _render_pane(_load_state(), sys.stdout)
+    _render_pane(_load_state(), sys.stdout, alert_channels=_get_alert_channels())
 
 
 def cmd_ack():
@@ -513,11 +582,8 @@ def cmd_ack():
 def cmd_watch():
     """Interactive in-pane viewer.
 
-    - re-renders on state changes (and at least once per second so
-      the clock + freshness stay current);
-    - blinks any alert with ts > ack_ts;
-    - any keypress acks every active alert (stops the blink);
-    - 'q', Ctrl-C, or Ctrl-D exits.
+    Arrow keys cycle views: split ↔ alerts ↔ monitor.
+    Any other key acks alerts. q/Ctrl-C/Ctrl-D exits.
     """
     import select
     import termios
@@ -529,70 +595,89 @@ def cmd_watch():
         sys.exit(2)
 
     old_attr = termios.tcgetattr(fd)
-    frame_s = 0.5  # 2 Hz blink + render cadence
-    last_seen_max_ts = 0.0  # track newest-alert ts to detect arrivals → BEL
+    frame_s = 0.5
+    last_seen_max_ts = 0.0
+    current_view = VIEW_SPLIT
+
+    alert_channels = _get_alert_channels()
+
+    def _view_tabs(blink_on):
+        parts = []
+        for i, name in enumerate(VIEW_NAMES):
+            if i == current_view:
+                parts.append(f"\033[7m {name} {RESET}")
+            else:
+                parts.append(f"{DIM}{name}{RESET}")
+        return " ".join(parts)
 
     def render_frame(blink_on):
-        sys.stdout.write("\033[2J\033[H")  # clear + home
+        sys.stdout.write("\033[2J\033[H")
         state = _load_state()
         active = state.get("active", [])
         ack_ts = float(state.get("ack_ts") or 0.0)
-        new_count = sum(
-            1 for a in active if float(a.get("ts") or 0) > ack_ts
-        )
-        if not active:
-            header = "\033[1mslack alerts\033[0m  \033[32mclear\033[0m"
-        elif new_count:
-            badge_sgr = "\033[1;7;31m" if blink_on else "\033[1;7;33m"
-            header = (
-                f"\033[1mslack alerts\033[0m  "
-                f"{badge_sgr} {new_count} NEW \033[0m "
-                f"\033[2m({len(active)} total) — any key acks, q quits\033[0m"
-            )
-        else:
-            header = (
-                f"\033[1mslack alerts\033[0m  "
-                f"\033[31m{len(active)} active\033[0m "
-                f"\033[2m— q to quit\033[0m"
-            )
-        sys.stdout.write(header + "\n\n")
-        _render_pane(state, sys.stdout, blink_on=blink_on)
+
+        new_count = sum(1 for a in active if float(a.get("ts") or 0) > ack_ts)
+        badge = ""
+        if new_count:
+            b = NEW_ON if blink_on else NEW_OFF
+            badge = f"  {b} {new_count} NEW {RESET}"
+
+        tabs = _view_tabs(blink_on)
+        sys.stdout.write(f"{BOLD}slack{RESET}{badge}  {tabs}  {DIM}◂▸ view  any key acks  q quits{RESET}\n\n")
+
+        _render_pane(state, sys.stdout, blink_on=blink_on,
+                     alert_channels=alert_channels, view=current_view)
         sys.stdout.flush()
         return state, active, ack_ts
 
+    def read_key():
+        b = os.read(fd, 1)
+        if not b:
+            return ""
+        ch = b.decode("utf-8", errors="replace")
+        if ch == "\x1b":
+            ready, _, _ = select.select([fd], [], [], 0.05)
+            if ready:
+                rest = os.read(fd, 2)
+                seq = ch + rest.decode("utf-8", errors="replace")
+                return seq
+            return ch
+        return ch
+
     try:
         tty.setcbreak(fd)
-        sys.stdout.write("\033[?25l")  # hide cursor
+        sys.stdout.write("\033[?25l")
         sys.stdout.flush()
         frame_idx = 0
         while True:
             blink_on = (frame_idx % 2 == 0)
             state, active, ack_ts = render_frame(blink_on)
 
-            # BEL on first detection of an alert newer than what we'd
-            # previously rendered. tmux's monitor-bell highlights the pane
-            # border so an unfocused pane still grabs attention.
             current_max = max(
                 (float(a.get("ts") or 0) for a in active), default=0.0,
             )
             if (
                 current_max > last_seen_max_ts
                 and current_max > ack_ts
-                and last_seen_max_ts > 0.0  # skip first frame to avoid boot-bell
+                and last_seen_max_ts > 0.0
             ):
                 sys.stdout.write("\a")
                 sys.stdout.flush()
             last_seen_max_ts = max(last_seen_max_ts, current_max)
 
-            ready, _, _ = select.select([sys.stdin], [], [], frame_s)
+            ready, _, _ = select.select([fd], [], [], frame_s)
             if ready:
-                ch = sys.stdin.read(1)
-                if ch in ("q", "Q", "\x03", "\x04"):  # q, Ctrl-C, Ctrl-D
+                key = read_key()
+                if key in ("q", "Q", "\x03", "\x04"):
                     break
-                cmd_ack()
+                elif key in ("\x1b[C", "\x1b[D"):  # right / left arrow
+                    delta = 1 if key == "\x1b[C" else -1
+                    current_view = (current_view + delta) % VIEW_COUNT
+                else:
+                    cmd_ack()
             frame_idx += 1
     finally:
-        sys.stdout.write("\033[?25h")  # restore cursor
+        sys.stdout.write("\033[?25h")
         sys.stdout.flush()
         termios.tcsetattr(fd, termios.TCSADRAIN, old_attr)
 
