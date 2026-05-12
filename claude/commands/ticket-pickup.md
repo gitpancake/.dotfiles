@@ -1,11 +1,11 @@
 ---
-description: Scope a Linear ticket into a merge-safe slice plan. Stops before implementation.
+description: Scope a Linear ticket into a merge-safe slice plan, then spawn an autonomous worktree lane.
 argument-hint: <LINEAR-ID> [base-branch] [--type feature|fix|chore|task|refactor]
 ---
 
 # /ticket-pickup $ARGUMENTS
 
-Produce a scoping doc at `~/.claude/plans/<TICKET>.md`. Do **not** edit any other file. Stop after writing the plan and posting the Linear comment.
+Produce a scoping doc at `~/.claude/plans/<TICKET>.md`, then spawn an autonomous worktree lane (§11). Do **not** edit any project source file.
 
 ## Argument parsing
 
@@ -111,9 +111,15 @@ If `BASE` was passed, sync cockpit first (`wt` only ff-merges main/master):
 [ -n "$BASE" ] && git fetch --quiet origin && git checkout "$BASE" && git merge --ff-only "origin/$BASE"
 ```
 
-Then `wt [--type <prefix>] <TICKET>`. `wt` creates the worktree + branch (`<type>/<ticket>-<descriptor>`), allocates a per-lane port, opens a new claude lane with autonomous-mode kickoff. Pass `--type` through if user specified one. Stop after spawning:
+Then spawn the autonomous lane. **You MUST run this command via the Bash tool** — it opens a new tmux window with claude in autonomous mode:
 
-> Lane spawned. Autonomous dev loop running there. This pane is done.
+```bash
+wt --type <TYPE_PREFIX> <TICKET>
+```
+
+Where `<TYPE_PREFIX>` is the branch type (default `feature`; override via `--type` arg) and `<TICKET>` is the uppercase Linear ID (e.g. `TEAM-1609`). `wt` creates the worktree + branch, allocates a per-lane port, and opens a new tmux window running claude with the plan. Stop after spawning:
+
+> Lane spawned. Autonomous dev loop running in new tmux window. This pane is done.
 
 ### Inside a lane (`IN_LANE=1`)
 
