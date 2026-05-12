@@ -53,7 +53,7 @@ DEFAULT_STATE = os.environ.get(
 LOCK_PATH = os.path.expanduser("~/.local/share/slack-tldr/daemon.lock")
 STATE_LOCK_PATH = os.path.expanduser("~/.local/share/slack-tldr/state.lock")
 DEFAULT_MAX_ACTIVE = 50
-DEFAULT_ALERT_CHANNELS = ["alerts-channel-1", "alerts-channel-2", "alerts-channel-4"]
+DEFAULT_ALERT_CHANNELS = ["alerts-channel-1", "alerts-channel-2", "alerts-channel-4", "test-channel"]
 DISMISSED_RING_SIZE = 500
 SEEN_RING_SIZE = 200
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
@@ -653,17 +653,18 @@ def cmd_watch():
             blink_on = (frame_idx % 2 == 0)
             state, active, ack_ts = render_frame(blink_on)
 
-            current_max = max(
-                (float(a.get("ts") or 0) for a in active), default=0.0,
+            alerts_only, _ = _partition_alerts(active, alert_channels)
+            alert_max_ts = max(
+                (float(a.get("ts") or 0) for a in alerts_only), default=0.0,
             )
             if (
-                current_max > last_seen_max_ts
-                and current_max > ack_ts
+                alert_max_ts > last_seen_max_ts
+                and alert_max_ts > ack_ts
                 and last_seen_max_ts > 0.0
             ):
                 sys.stdout.write("\a")
                 sys.stdout.flush()
-            last_seen_max_ts = max(last_seen_max_ts, current_max)
+            last_seen_max_ts = max(last_seen_max_ts, alert_max_ts)
 
             ready, _, _ = select.select([fd], [], [], frame_s)
             if ready:
