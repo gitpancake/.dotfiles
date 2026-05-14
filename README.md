@@ -29,15 +29,18 @@ dotfiles/
 │   │                                 #   database, fullstack, platform, infra, deploy,
 │   │                                 #   bugfinder, plan-lint, verifier
 │   ├── commands/                     # Slash commands — /scope, /rescope, /read-ticket,
-│   │                                 #   /ticket-pickup, /ship, /linear-review, /simplify
+│   │                                 #   /ticket-pickup, /ship, /linear-review,
+│   │                                 #   /simplify, /retrospective
 │   ├── hooks/                        # Session/tool hooks
 │   │   ├── tmux-bell.sh              #   Notification → tmux bell
 │   │   ├── tool-loop-warn.sh         #   PostToolUse warning at 30× same / 100 total
 │   │   ├── _state-write.sh           #   Shared writer for agent-state file
+│   │   ├── _warn-helpers.sh          #   Shared helpers for warning hooks
 │   │   ├── agent-state-active.sh     #   PreToolUse → ACTIVE
 │   │   ├── agent-state-idle.sh       #   Stop → IDLE
 │   │   ├── agent-state-waiting.sh    #   Notification → WAITING:<code>
-│   │   └── precheck-stop.sh          #   Stop → fork .claude/precheck.sh
+│   │   ├── precheck-stop.sh          #   Stop → fork .claude/precheck.sh
+│   │   └── turn-cap-warn.sh          #   Tiered warnings at 30/50/75/100 turns
 │   ├── scripts/                      # Helpers called by commands / hooks
 │   │   ├── lane-pause.sh             #   Tag lane WAITING with reason code
 │   │   ├── lane-summary.sh           #   LLM 1-line summary of HEAD per lane
@@ -48,10 +51,9 @@ dotfiles/
 │   ├── bin/                          # PATH-exposed lane primitives
 │   │   ├── wt                        #   Spawn parallel worktree lane (Linear-aware)
 │   │   ├── wt-gc                     #   Reap dead lanes
-│   │   ├── git-watch                 #   Watch repo HEAD, drive matrix.py state
+│   │   ├── git-watch                 #   Watch repo HEAD, write art state
 │   │   ├── slack-tldr                #   CLI ack/dismiss for Slack TLDR daemon
 │   │   └── slack-watch               #   Interactive tmux pane renderer
-│   ├── templates/                    # File scaffolds (plans, etc)
 │   ├── local.claude-plan-prune.plist     # launchd: prune ~/.claude/plans/
 │   ├── local.claude-transcript-prune.plist # launchd: prune ~/.claude/projects/*/
 │   ├── local.claude-wt-gc.plist          # launchd: reap orphan worktrees
@@ -73,7 +75,6 @@ dotfiles/
 │   └── local.focus-{guard,nginx}.plist
 ├── scripts/
 │   ├── city.py / hologram.py         # Terminal toys
-│   ├── matrix.py                     # Reactive falling-glyph rain (state-driven)
 │   ├── commit-watcher.py             # Drives matrix state from git commits
 │   ├── audio-watcher.py              # Audio-event watcher daemon
 │   ├── git-watch.py                  # Lightweight git HEAD watcher
@@ -245,11 +246,11 @@ Daemon subscribes to specific Slack channels via Socket Mode, runs each new mess
 1. Create a Slack app at <https://api.slack.com/apps> → *From scratch*.
 2. **Socket Mode** → enable → generate App-Level Token (`xapp-…`) with scope `connections:write`.
 3. **OAuth & Permissions** → Bot Token Scopes: `channels:history`, `groups:history`, `im:history`, `mpim:history`, `channels:read`.
-4. **Event Subscriptions** → enable → subscribe bot to `message.channels`, `member_joined_channel` (+ `message.groups` / `message.im` if private channels / DMs).
+4. **Event Subscriptions** → enable → subscribe bot to `message.channels` (+ `message.groups` / `message.im` if private channels / DMs).
 5. *Install to Workspace* → copy Bot Token (`xoxb-…`).
-6. `/invite @your-bot` in each alerts channel. Daemon auto-discovers every channel the bot is a member of — set `channel_ids` in config only for a strict allow-list.
-7. `cp scripts/slack-tldr.config.example.json scripts/slack-tldr.config.local`, fill in tokens.
-8. Re-run `./install-mac.sh` (or `./rewire-symlinks.sh`) to load the launchd agent.
+6. `cp scripts/slack-tldr.config.example.json scripts/slack-tldr.config.local` — fill in tokens and the `channels` dict (maps channel names → IDs, split into `alerts` and `monitor` tabs).
+7. `/invite @your-bot` in each configured channel. Daemon verifies membership on startup and exits with an error if the bot is missing from any channel.
+8. Re-run `./install-mac.sh` (or `./rewire-symlinks.sh`) to install the launchd agent.
 
 **Auth:** API calls use Claude Code OAuth token from macOS keychain (service `Claude Code-credentials`). Falls back to `ANTHROPIC_API_KEY` if missing.
 
@@ -280,7 +281,7 @@ slack-tldr dismiss-all   # clear everything
 
 ## Reactive Matrix (commit-driven art)
 
-`scripts/matrix.py` is a `curses` glyph rain that polls `~/.local/share/art/state.json`. `commit-watcher.py` watches a git remote and pushes palette / intensity / commit log into that state file. Drop `matrix.py` into multiple tmux panes — they all wave together.
+`commit-watcher.py` watches a git remote and pushes palette / intensity / commit log into `~/.local/share/art/state.json`. Any compatible curses renderer can poll that file for coordinated animation.
 
 ```bash
 cp scripts/commit-watcher.config.example.json scripts/commit-watcher.config.local
