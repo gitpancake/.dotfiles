@@ -22,13 +22,16 @@ Subagents and slash commands self-describe via Agent/skills schemas — don't li
 
 ## Ticket Lifecycle
 
-`/scope` → draft → `/read-ticket` → `/rescope` → `/ticket-pickup` (writes `~/.claude/plans/<ID>.md`, spawns autonomous `wt` lane) → lane runs slice→slice with type-check + test + commit per layer → `/ship`.
+`/sync-from-linear` (batch-pull tickets to `~/.claude/tickets/<PARENT>/<TICKET>.md`) → work locally → `/ship` (PR + review) → `/sync-to-linear` (push completed work back). Linear is a boundary touched twice — no live MCP read/write inside the work loop.
 
-**Autonomous semantics.** `wt` and `/ticket-pickup` fire-and-forget. Lane stops only on: (1) PR open + review posted, (2) genuine blocker (ambiguity not in plan, repeated test failure same root cause, missing credential). `wt <slug-or-ID>` auto-resumes from existing plan or invokes `/ticket-pickup`. Slice protocol + parallel-lane gotchas: `~/.dotfiles/CLAUDE.md`.
+- **Regular ticket** → `wt <TICKET>` spawns an autonomous lane that reads the synced brief, plans slices inline, leans on the `grill-with-docs` / `tdd` / `handoff` skills, commits per layer, `/ship` at the end.
+- **Epic** → `wt --ralph <EPIC>` runs the Ralph autonomous loop in the lane: one story per fresh-context iteration, memory via git + `progress.txt` + `prd.json`.
 
-## Planning — Linear First
+**Autonomous semantics.** `wt` lanes fire-and-forget. A lane stops only on: (1) PR open + review triggered, (2) genuine blocker (ambiguity not in the brief, repeated test failure same root cause, missing credential). Brief missing → lane asks for `/sync-from-linear` first. Slice protocol + parallel-lane gotchas: `~/.dotfiles/CLAUDE.md`.
 
-Non-trivial tasks: resolve Linear ID, fetch via `mcp__linear-server__get_issue`. MCP unavailable → warn once, proceed on confirmation.
+## Planning — local-first
+
+The source of truth for in-flight work is the local file system: `~/.claude/tickets/<PARENT>/<TICKET>.md` for briefs, handoff docs for session state, `prd.json` for Ralph epics. Linear is downstream — synced in via `/sync-from-linear` (occasional batch), out via `/sync-to-linear` (end of day). Never live-fetch a ticket per pickup; brief missing → run `/sync-from-linear`.
 
 ## Session Start
 
@@ -55,25 +58,27 @@ OV `resources/agents/code-structure-reference` for detail.
 Tool calls re-read full conversation context. Heavy loops compound.
 
 - Batch pattern: one LLM call → plan, script applies it. Never run same tool 20+ times.
-- Models: Sonnet default. Haiku for mechanical edits. Opus only for hard architecture.
-- Context hygiene: >70% context or >50 tool calls → propose `/clear` + re-brief.
+- Models: Opus for everything — the workflow is context-efficient enough that the sonnet-for-execution hack is retired. Haiku only for bulk mechanical edits (20+ identical changes).
+- Context hygiene: >70% context or >50 tool calls → `/handoff` + `/clear`.
 
 ## Session Hygiene — turn-cap protocol
 
 `turn-cap-warn.sh` fires tiered `systemMessage` warnings at turns 30/50/75/100+. **Honor them.** Past behavior: user habitually ignores soft warns and rides sessions to 600+ turns, where cache_read on the transcript dominates cost. Be the assertive counterweight.
 
+Preferred response is `/handoff` (capture state to a doc the fresh session reads) then `/clear` — more context-efficient than riding the transcript into compaction.
+
 Required response per tier:
 
-- **Turn 30 reminder** — acknowledge once in next reply ("noting turn 30 — we can `/clear` after this chunk if it makes sense"), continue.
-- **Turn 50 warn** — **stop adding new scope this turn.** Finish the in-flight tool chain, then explicitly ask: "We're at 50 turns. `/clear` + re-brief from `~/.claude/plans/<TICKET>.md` now, or push through?" Do not silently proceed past this prompt without an answer.
-- **Turn 75 PAUSE** — finish current tool call, then HALT before any further tool use. Surface to user: "Hit the 75-turn pause. I won't start new tool chains until you `/clear` or explicitly say continue." Single-tool lookups OK, multi-step work blocked until confirmation.
+- **Turn 30 reminder** — acknowledge once in next reply ("noting turn 30 — we can `/handoff` + `/clear` after this chunk"), continue.
+- **Turn 50 warn** — **stop adding new scope this turn.** Finish the in-flight tool chain, then explicitly ask: "We're at 50 turns. `/handoff` + `/clear` now, or push through?" Do not silently proceed past this prompt without an answer.
+- **Turn 75 PAUSE** — finish current tool call, then HALT before any further tool use. Surface to user: "Hit the 75-turn pause. I won't start new tool chains until you `/handoff` + `/clear` or explicitly say continue." Single-tool lookups OK, multi-step work blocked until confirmation. An autonomous lane self-invokes `/handoff` here.
 - **Turn 100+** — same as 75 but louder. Refuse multi-step work without explicit "I know, push through" from user.
 
-`/clear` semantics: user runs `/clear`, then pastes a re-brief that names the ticket, the plan path, and where the previous session left off. Plans live at `~/.claude/plans/<TICKET>.md`. Re-brief from the plan, not from memory of the prior turns.
+`/handoff` writes a handoff doc; the fresh session reads it instead of re-briefing from memory. For ticket work the synced brief at `~/.claude/tickets/<PARENT>/<TICKET>.md` is the durable anchor.
 
-## Plan Size Cap
+## Briefs & PRDs — keep them tight
 
-Plans at `~/.claude/plans/<TICKET>.md` must be ≤200 lines. `plan-lint` FAILS plans over the cap. Reasoning: longer plans cost more on every lane resume and tend to bury the slice protocol. Trim by moving stable detail to subdir notes or the ticket itself; the plan owns the *slice sequence*, not the surrounding context.
+Synced briefs (`~/.claude/tickets/<PARENT>/<TICKET>.md`) and Ralph PRDs (`prd.json`) are re-read on every lane resume / loop iteration — cost compounds. Keep a brief to context + acceptance criteria; keep `## Local notes` to decisions, not narration. Right-size Ralph stories to one context window each.
 
 ## Git Workflow
 

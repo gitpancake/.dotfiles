@@ -5,7 +5,7 @@ argument-hint: <LINEAR-ID>
 
 # /read-ticket $ARGUMENTS
 
-Pure read. No edits. No Linear comments. No `/ticket-pickup` follow-on. Just print the ticket so user can review it before deciding what to do next (`/rescope`, `/ticket-pickup`, or close it out).
+Pure read. No edits. No Linear comments. No follow-on. Just print the ticket so user can review it before deciding what to do next (`/sync-from-linear` to pull it local, `/rescope`, or close it out).
 
 If `$ARGUMENTS` is empty, ask for a Linear ID and stop.
 
@@ -45,6 +45,6 @@ Trim long bodies if needed but never paraphrase. Whole point is user reads the s
 
 ## 3. Stop
 
-After rendering, say one line: `Ready. /rescope or /ticket-pickup next.`
+After rendering, say one line: `Ready. /sync-from-linear to pull it local, then /rescope or wt <ID>.`
 
 No suggestions, no summaries, no "should we...". The whole command is read-only.

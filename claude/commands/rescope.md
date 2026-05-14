@@ -1,84 +1,77 @@
 ---
-description: Adjust an existing Linear ticket with user's recommendations and update it. Mirrors /scope's house style; codebase exploration only if structural change needed.
+description: Refine a synced ticket brief locally with user's recommendations. Edits ~/.claude/tickets/<PARENT>/<TICKET>.md only — never writes to Linear.
 argument-hint: <LINEAR-ID> [free-text adjustments]
 ---
 
 # /rescope $ARGUMENTS
 
-`$ARGUMENTS` is `<LINEAR-ID> [optional adjustments]`. Two-arg parsing: first whitespace-separated token = ticket ID, rest = adjustment text.
+`$ARGUMENTS` is `<LINEAR-ID> [optional adjustments]`. First whitespace-separated token =
+ticket ID, rest = adjustment text.
 
-If only the ticket ID is given, fetch the ticket then **ask** for adjustments and stop. If both are given, proceed.
+Refinement is **local**. This command edits the synced brief on disk; it never touches
+Linear. The refined brief reaches Linear later via `/sync-to-linear` (once the work ships)
+or is reconciled on the next `/sync-from-linear`.
 
-## 1. Fetch + show
+If only the ticket ID is given, show the brief then **ask** for adjustments and stop.
 
-- `mcp__linear-server__get_issue <ID>` — current full body.
-- Render the **current title + body** (verbatim, no paraphrase) so user sees what's about to change.
+## 1. Locate + show
+
+Find the brief: `find ~/.claude/tickets -name "<ID>.md" -type f`.
+- **Not found** → tell user to run `/sync-from-linear` first, stop.
+- **Found** → render the current frontmatter + body verbatim so user sees what changes.
 
 ## 2. Decide depth
 
-Inspect user's adjustments against the ticket. Pick one:
+- **Surface edit** — wording, acceptance-criteria additions, scope clarification. Skip §3.
+- **Structural change** — new surface area (new vendor / layer / mechanism). Run §3.
 
-- **Surface edit** — wording, acceptance-criteria additions, label/project change, scope clarification. Skip §3 codebase work.
-- **Structural change** — new surface area introduced (new vendor / new layer / new mechanism). Run §3.
-
-If unsure, treat as structural.
+Unsure → treat as structural.
 
 ## 3. Codebase exploration (only if structural)
 
-Same shape as `/scope` §3:
 - **Mirror search** — find the structural twin file/feature; cite paths.
 - **Surface area** — top ≤8 files to start in, each with a one-line reason.
 - **Mechanism honesty** — env vars, vendor accounts, infra prereqs.
-- For vendor work: search OpenViking first (`mcp__openviking__search resources/example-org/<vendor>`); cite source files or note "no docs indexed."
+- Vendor work → search OpenViking first (`mcp__openviking__search resources/example-org/<vendor>`);
+  cite source files or note "no docs indexed."
+- For deeper stress-testing against the project's domain model, hand off to the
+  `grill-with-docs` skill.
 
 Never invent paths/symbols/env vars. "TBD — needs investigation" beats a guess.
 
-## 4. Compose new ticket — house style
+## 4. Compose the refined brief
 
-Sections in order (mirror `/scope` §4):
-- Context
-- Acceptance criteria
-- **Surface area** — Mirror, Files to start in (≤8), Gotchas (CLAUDE.md quotes)
-- Out of scope
-- Open questions — Ambiguous / Risky split
-- Prerequisites
-- References
+Rewrite the `## Context` and `## Acceptance criteria` sections of the brief. If structural,
+add or update a `## Surface area` section (Mirror / Files to start in / Gotchas). **Preserve
+`## Local notes` and everything below it verbatim** — that's lane/agent scratch.
 
-Apply `/scope` §5 example-org risk callouts where they apply (Voicebot prompts, Sentry threshold, object-params, Trigger.dev pair, `bun test`, vendor calls through llm-gateway).
+Apply example-org risk callouts where they apply (Voicebot prompts → llm-vendor cache, Sentry
+threshold 0, object-params, Trigger.dev `TaskRegistry` + `TASK_ROUTES_ENV` pair, `bun test`,
+vendor calls through llm-gateway).
 
 ## 5. Show the diff. Stop.
 
-Render in this shape:
-
 ```
-[<ID>] <Old title>
+[<ID>] <current title>
             ↓
-[<ID>] <New title>            # only if title changed
+[<ID>] <new title>            # only if title changed
 
 DIFF:
 - <removed line>
 + <added line>
-- <removed section header>
-+ <added section header>
 …
-
-LABELS: <added, removed>
-PROJECT: <old → new>           # only if changed
-STATE: <old → new>             # only if changed
 ```
 
-**Stop.** Wait for "go" or further edits. Don't update yet.
+**Stop.** Wait for "go" or further edits. Don't write yet.
 
-## 6. On "go": update
+## 6. On "go": write the local brief
 
-`mcp__linear-server__update_issue` with the agreed body / title / labels / project / state.
-
-Post a Linear comment summarizing the change in one sentence: "Refined: <one-line summary>." (via `mcp__linear-server__save_comment`).
-
-Return: ticket URL.
+Write the refined sections back to `~/.claude/tickets/<PARENT>/<TICKET>.md`. Update the
+frontmatter `title:` if it changed. **Do not call any `mcp__linear-server__*` tool** — Linear
+is downstream. Return the file path.
 
 ## 7. Stop conditions
 
-- After fetch in §1 if no adjustments given — ask once, stop.
+- After §1 if no adjustments given — ask once, stop.
 - After diff in §5 — wait for "go".
-- After update in §6 — done. Do not start `/ticket-pickup`. user runs that next if he wants the slice plan.
+- After write in §6 — done. The brief is ready for `wt <ID>` to pick up.

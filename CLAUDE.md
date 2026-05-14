@@ -20,7 +20,7 @@ This file is the project memory layer for Claude — it captures the gotchas and
 
 - `~/.zshrc`, `~/.zshenv` → `zsh/.zshrc`, `zsh/.zshenv`
 - `~/.tmux.conf`, `~/.tmux/agent-board.sh`, `~/.tmux/tmux-status.sh` → `tmux/`
-- `~/.claude/CLAUDE.md`, `settings.json`, `agents/`, `commands/`, `hooks/`, `scripts/`, `bin/` → `claude/`
+- `~/.claude/CLAUDE.md`, `settings.json`, `agents/`, `commands/`, `hooks/`, `scripts/`, `skills/`, `bin/` → `claude/`
 - `~/.dotfiles/scripts/*` is on PATH via `.zshenv` so `slack-watch`, `slack-tldr` etc. resolve from any cwd
 - `~/Library/LaunchAgents/local.*.plist` → `claude/local.*.plist`, `focus-guard/local.*.plist`
 
@@ -31,9 +31,14 @@ This file is the project memory layer for Claude — it captures the gotchas and
 Easy to confuse — they're different things:
 
 - `claude/agents/*.md` are **subagents** dispatched via the Agent tool with `subagent_type: "<name>"`. Available: `backend`, `frontend`, `database`, `fullstack`, `platform`, `infra`, `deploy`, `bugfinder`, `plan-lint`, `verifier`.
-- `claude/commands/*.md` are **slash commands** typed by the user. Available: `/scope`, `/rescope`, `/read-ticket`, `/ticket-pickup`, `/ship`, `/linear-review`, `/simplify`.
+- `claude/commands/*.md` are **slash commands** typed by the user. Available: `/sync-from-linear`, `/sync-to-linear`, `/rescope`, `/read-ticket`, `/ship`, `/address-feedback`, `/linear-review`, `/simplify`, `/retrospective`.
+- `claude/skills/*/SKILL.md` are **skills** — cherry-picked from `mattpocock/skills`, symlinked into `~/.claude/skills/`. Available: `grill-with-docs`, `to-prd`, `to-issues`, `tdd`, `diagnose`, `handoff`.
 
 Slash commands often dispatch subagents internally, but they aren't the same registry.
+
+## Ralph autonomous loop
+
+`claude/ralph/` holds the vendored `ralph.sh` orchestrator + `CLAUDE.md.template` (Ralph's per-iteration prompt). It is **not** symlinked — `claude/bin/ralph-bootstrap` copies it into a target repo/worktree's `scripts/ralph/` and excludes that dir from git so the loop's runtime churn (`prd.json`, `progress.txt`, `archive/`) never lands on the feature branch. `wt --ralph <EPIC>` runs the bootstrap + loop inside a lane. The `snarktank/ralph` marketplace plugin (in `settings.json`) provides the `/prd` and `/ralph` skills the loop uses.
 
 ## Lane state machine
 

@@ -20,7 +20,7 @@ dotfiles/
 ├── claude/
 │   ├── settings.json                 # Claude Code settings + plugins
 │   ├── CLAUDE.md                     # Global instructions (workflow, cost discipline,
-│   │                                 #   subagent routing, slice protocol, OV)
+│   │                                 #   subagent routing, local-first planning, OV)
 │   ├── statusline-command.sh         # Bottom status: context bar + 5h/7d usage alerts
 │   ├── transcript-costs.sh           # Post-mortem: rank sessions by $ cost
 │   ├── worktree-protocol.md          # Multi-agent worktree safety rules
@@ -28,9 +28,13 @@ dotfiles/
 │   ├── agents/                       # Specialist subagents — backend, frontend,
 │   │                                 #   database, fullstack, platform, infra, deploy,
 │   │                                 #   bugfinder, plan-lint, verifier
-│   ├── commands/                     # Slash commands — /scope, /rescope, /read-ticket,
-│   │                                 #   /ticket-pickup, /ship, /linear-review,
-│   │                                 #   /simplify, /retrospective
+│   ├── commands/                     # Slash commands — /sync-from-linear, /sync-to-linear,
+│   │                                 #   /rescope, /read-ticket, /ship, /address-feedback,
+│   │                                 #   /linear-review, /simplify, /retrospective
+│   ├── skills/                       # Cherry-picked mattpocock skills — grill-with-docs,
+│   │                                 #   to-prd, to-issues, tdd, diagnose, handoff
+│   ├── ralph/                        # Vendored Ralph loop — ralph.sh + CLAUDE.md.template
+│   │                                 #   (copied into target repos by ralph-bootstrap)
 │   ├── hooks/                        # Session/tool hooks
 │   │   ├── tmux-bell.sh              #   Notification → tmux bell
 │   │   ├── tool-loop-warn.sh         #   PostToolUse warning at 30× same / 100 total
@@ -51,6 +55,7 @@ dotfiles/
 │   ├── bin/                          # PATH-exposed lane primitives
 │   │   ├── wt                        #   Spawn parallel worktree lane (Linear-aware)
 │   │   ├── wt-gc                     #   Reap dead lanes
+│   │   ├── ralph-bootstrap           #   Drop the Ralph loop into a repo/worktree
 │   │   ├── git-watch                 #   Watch repo HEAD, write art state
 │   │   ├── slack-tldr                #   CLI ack/dismiss for Slack TLDR daemon
 │   │   └── slack-watch               #   Interactive tmux pane renderer
@@ -162,39 +167,39 @@ Stale `IDLE` rows hide after 30 min (`BOARD_HIDE_IDLE_AFTER` to override; `BOARD
 
 ## Claude Code: Parallel Worktree Lanes
 
-`claude/bin/wt <slug-or-TICKET-ID>` spawns one parallel lane per Linear ticket. Each lane is fire-and-forget: it works through the slice plan to a PR, then stops.
+`claude/bin/wt <slug-or-TICKET-ID>` spawns one parallel lane per Linear ticket. Each lane is fire-and-forget: it works the synced brief through to a PR, then stops.
 
 What `wt` produces:
 
-- worktree at `<repo>/.claude/worktrees/agent-<slug>`
-- branch `agent/<slug>` off current HEAD
-- per-lane port stamped in `.env.local.port` (3100 + lane index)
+- worktree at `<repo>/.claude/worktrees/<slug>`
+- branch `<type>/<slug>` off current HEAD
+- per-lane port stamped in `.env.local.port` (3099 + lane index)
 - `.claude/agent-state` seeded to `IDLE` (visible to `agent-board.sh`)
-- new tmux window running `claude --dangerously-skip-permissions` (override with `WT_CLAUDE='claude' wt …`)
-- For Linear-style IDs (`TEAM-1530`): auto-resumes from `~/.claude/plans/<ID>.md` if it exists, else auto-invokes `/ticket-pickup` first.
+- new tmux window running `claude --dangerously-skip-permissions --model opus` (override with `WT_CLAUDE=…` or `WT_MODEL=…`)
+- For Linear-style IDs (`TEAM-1530`): the lane reads the synced brief at `~/.claude/tickets/<PARENT>/<ID>.md`. Missing → it asks you to run `/sync-from-linear` first.
+
+`wt --ralph <EPIC>` runs the Ralph autonomous loop inside the lane instead — `ralph-bootstrap` drops `scripts/ralph/` in, then `ralph.sh` grinds one story per fresh-context iteration (memory via git + `progress.txt` + `prd.json`).
 
 Layout default = new tmux window; override with `WT_LAYOUT=pane|session`.
 
 `wt-gc` reaps lanes whose worktree is gone or whose claude PID is dead.
 
-## Claude Code: Slice Protocol
+## Claude Code: Workflow
 
-Trunk-based, per-slice PRs. Each slice merges to main on its own and leaves main shippable. Lifecycle:
+Linear is a boundary touched twice — pull briefs in, push completed work out. Everything between is local file system.
 
 ```
-/scope <problem>          → drafts ticket from free text, creates on go
-/read-ticket <ID>         → pulls ticket + comments + linked PRs into terminal
-/rescope <ID> <edits>     → applies your recs, diffs, updates Linear on go
-/ticket-pickup <ID>       → writes plan to ~/.claude/plans/<ID>.md, comments on Linear,
-                            spawns an autonomous worktree lane via `wt`
-# spawned lane runs end-to-end, no babysitting:
-slice 1 → type-check + test + commit per layer
-slice 2 → …
-slice N → final flip
-/ship                     → opens PR, runs full review
+/sync-from-linear            → batch-pull your tickets to ~/.claude/tickets/<PARENT>/<ID>.md
+                               (morning / when taking on new work — not per pickup)
+wt <ID>                      → autonomous lane: reads the brief, plans slices inline,
+                               leans on grill-with-docs / tdd / handoff, commits per layer
+wt --ralph <EPIC>            → Ralph loop in a lane: one story per fresh-context iteration
+/ship                        → commit + push + PR + @claude review
+/sync-to-linear <branch|PR#> → push completed work back as a Done ticket (end of day)
+/address-feedback <PR#>      → harvests + triages PR comments, spawns a lane on the PR's branch
 ```
 
-Lane stops only on PR + review report (success) or genuine blocker. Watch `agent-board.sh` — red row → look. Otherwise leave it alone.
+Lane stops only on PR + review triggered (success) or genuine blocker. Watch `agent-board.sh` — red row → look. Otherwise leave it alone. At the context threshold, `/handoff` to a fresh session instead of compacting.
 
 ## Claude Code: Cost Awareness
 
@@ -217,10 +222,9 @@ Ranks sessions by estimated API-equivalent cost using Anthropic list prices per 
 ### Preventive — CLAUDE.md rule + PostToolUse hook
 The `Cost Discipline` section in `claude/CLAUDE.md` instructs Claude to propose the **batch pattern** (one LLM call produces a plan, a script applies it) before any N-item operation.
 
-Typical model selection:
-- **Opus** — project planning, architecture, ambiguous work
-- **Sonnet** — coding (default), reviews, most reasoning
-- **Haiku** — mechanical edits, renames, simple greps
+Model selection:
+- **Opus** — everything. The workflow (local briefs, fresh-context Ralph loops, `/handoff`) is context-efficient enough that the sonnet-for-execution hack is retired.
+- **Haiku** — bulk mechanical edits only (20+ identical changes).
 
 `claude/hooks/tool-loop-warn.sh` fires a one-time warning per session when the same tool has been called ≥30× or total tool calls cross 100.
 

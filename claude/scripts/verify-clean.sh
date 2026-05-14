@@ -2,7 +2,7 @@
 # verify-clean.sh [<wt-path>]
 #
 # Remove the verify gate state (verify.ok and verify.log) for a lane,
-# forcing /ship's §0.5 to re-run the verifier subagent.
+# so the next verifier subagent run starts clean.
 #
 # Default target: $PWD. Pass an explicit worktree root to clean a different lane.
 

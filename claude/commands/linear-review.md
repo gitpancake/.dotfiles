@@ -5,7 +5,7 @@ argument-hint: [optional: team slug, e.g. AE or AUT]
 
 # /linear-review $ARGUMENTS
 
-user creates a lot of Linear tickets (`/scope`, ad-hoc, follow-ups from PRs). This drifts. Goal: surface what should be closed, deduped, marked done, or revisited — backed by signal, not vibes.
+user creates a lot of Linear tickets (`/sync-to-linear`, ad-hoc, follow-ups from PRs). This drifts. Goal: surface what should be closed, deduped, marked done, or revisited — backed by signal, not vibes.
 
 This command is **read-only by default**. It produces a proposed action plan in §6 and stops. Only on user's "go" does it execute mutations in §7 — and even then, batched and confirmable.
 

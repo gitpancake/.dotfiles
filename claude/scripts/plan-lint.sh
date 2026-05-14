@@ -18,7 +18,7 @@ VERDICT_PATH="$HOME/.claude/plans/${TICKET}.lint.md"
 
 if [ ! -f "$PLAN_PATH" ]; then
   printf 'plan-lint: no plan at %s\n' "$PLAN_PATH" >&2
-  printf 'run /ticket-pickup %s first\n' "$TICKET" >&2
+  printf '(plan-lint is dormant under the sync/Ralph workflow — write a plan there to use it)\n' >&2
   exit 2
 fi
 
