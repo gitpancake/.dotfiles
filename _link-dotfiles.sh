@@ -10,7 +10,7 @@ mkdir -p ~/.oh-my-zsh/custom/themes
 ln -sf "$DOTFILES_DIR/zsh/robbyrussell-bar.zsh-theme" ~/.oh-my-zsh/custom/themes/robbyrussell-bar.zsh-theme
 
 # Claude Code
-mkdir -p ~/.claude ~/.claude/hooks ~/.claude/commands ~/.claude/agents ~/.claude/logs
+mkdir -p ~/.claude ~/.claude/hooks ~/.claude/commands ~/.claude/agents ~/.claude/skills ~/.claude/logs
 ln -sf "$DOTFILES_DIR/claude/statusline-command.sh" ~/.claude/statusline-command.sh
 ln -sf "$DOTFILES_DIR/claude/transcript-costs.sh" ~/.claude/transcript-costs.sh
 ln -sf "$DOTFILES_DIR/claude/settings.json" ~/.claude/settings.json
@@ -25,6 +25,11 @@ for f in "$DOTFILES_DIR/claude/commands/"*.md; do
 done
 for f in "$DOTFILES_DIR/claude/agents/"*.md; do
   ln -sf "$f" ~/.claude/agents/"$(basename "$f")"
+done
+# skills are directories (SKILL.md + supporting files) — link each dir
+for d in "$DOTFILES_DIR/claude/skills/"*/; do
+  [ -d "$d" ] || continue
+  ln -sfn "${d%/}" ~/.claude/skills/"$(basename "$d")"
 done
 # bin scripts → ~/.local/bin (on PATH via .zshenv)
 mkdir -p ~/.local/bin
