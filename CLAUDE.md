@@ -31,7 +31,7 @@ This file is the project memory layer for Claude — it captures the gotchas and
 Easy to confuse — they're different things:
 
 - `claude/agents/*.md` are **subagents** dispatched via the Agent tool with `subagent_type: "<name>"`. Available: `backend`, `frontend`, `database`, `fullstack`, `platform`, `infra`, `deploy`, `bugfinder`, `plan-lint`, `verifier`.
-- `claude/commands/*.md` are **slash commands** typed by the user. Available: `/sync-from-linear`, `/sync-to-linear`, `/scope`, `/rescope`, `/read-ticket`, `/ship`, `/address-feedback`, `/linear-review`, `/simplify`, `/retrospective`.
+- `claude/commands/*.md` are **slash commands** typed by the user. Available: `/sync-from-linear`, `/sync-to-linear`, `/scope`, `/rescope`, `/pickup`, `/read-ticket`, `/ship`, `/address-feedback`, `/linear-review`, `/simplify`, `/retrospective`.
 - `claude/skills/*/SKILL.md` are **skills** — cherry-picked from `mattpocock/skills`, symlinked into `~/.claude/skills/`. Available: `grill-with-docs`, `to-prd`, `to-issues`, `tdd`, `diagnose`, `handoff`.
 
 Slash commands often dispatch subagents internally, but they aren't the same registry.

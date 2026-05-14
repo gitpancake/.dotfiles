@@ -29,7 +29,7 @@ dotfiles/
 │   │                                 #   database, fullstack, platform, infra, deploy,
 │   │                                 #   bugfinder, plan-lint, verifier
 │   ├── commands/                     # Slash commands — /sync-from-linear, /sync-to-linear,
-│   │                                 #   /scope, /rescope, /read-ticket, /ship,
+│   │                                 #   /scope, /rescope, /pickup, /read-ticket, /ship,
 │   │                                 #   /address-feedback, /linear-review, /simplify,
 │   │                                 #   /retrospective
 │   ├── skills/                       # Cherry-picked mattpocock skills — grill-with-docs,
@@ -196,6 +196,8 @@ Linear is a boundary touched twice — pull briefs in, push completed work out. 
                                (fresh idea with no Linear ticket yet — no Linear write)
 wt <ID>                      → autonomous lane: reads the brief, plans slices inline,
                                leans on grill-with-docs / tdd / handoff, commits per layer
+/pickup <ID> <BASE> [ctx]    → wt wrapper: sync cockpit to a base branch + fold in extra
+                               context, then spawn the lane
 wt --ralph <EPIC>            → Ralph loop in a lane: one story per fresh-context iteration
 /ship                        → commit + push + PR + @claude review
 /sync-to-linear <branch|PR#> → push completed work back as a Done ticket (end of day)

@@ -24,7 +24,7 @@ Subagents and slash commands self-describe via Agent/skills schemas — don't li
 
 `/sync-from-linear` (batch-pull tickets to `~/.claude/tickets/<PARENT>/<TICKET>.md`) → work locally → `/ship` (PR + review) → `/sync-to-linear` (push completed work back). Linear is a boundary touched twice — no live MCP read/write inside the work loop.
 
-- **Regular ticket** → `wt <TICKET>` spawns an autonomous lane that reads the synced brief, plans slices inline, leans on the `grill-with-docs` / `tdd` / `handoff` skills, commits per layer, `/ship` at the end.
+- **Regular ticket** → `wt <TICKET>` (or `/pickup <TICKET> <BASE> [context]` to sync the cockpit to a base branch + fold in extra context first) spawns an autonomous lane that reads the synced brief, plans slices inline, leans on the `grill-with-docs` / `tdd` / `handoff` skills, commits per layer, `/ship` at the end.
 - **Epic** → `wt --ralph <EPIC>` runs the Ralph autonomous loop in the lane: one story per fresh-context iteration, memory via git + `progress.txt` + `prd.json`.
 - **Fresh idea, no ticket** → `/scope <free text>` engineers a local brief at `~/.claude/tickets/_loose/DRAFT-<N>.md` (no Linear write); `wt DRAFT-<N>` picks it up.
 
