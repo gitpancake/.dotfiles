@@ -21,7 +21,7 @@ No relevant context either → ask for a problem statement and stop.
 If `$ARGUMENTS` is under ~15 words **or** missing any of the below, ask up to 3 questions and
 stop. Skip what you can already answer.
 
-- **Who hits this**: customer / Voicebot / AO / engineer?
+- **Who hits this**: customer / internal user / engineer?
 - **End state** in one sentence.
 - **Surface area hint**: workflow / vendor / UI / infra / prompt — even rough.
 - **Epic or single ticket?**
@@ -32,10 +32,10 @@ This is the part that makes the brief pickable rather than a wishlist.
 
 ### 2a. Mirror search (before grep)
 
-Most example-org-agent work is "mirror Slack for Teams" / "mirror Relay for CarrierB" shaped. Find
+A lot of work is "mirror an existing integration for a new vendor" shaped. Find
 the structural twin first — name it, and for each layer it touches (workflow / route / model
 / UI / task / tool def) name the mirror's entry-point file, path + one-line reason. Vendor
-work → search OpenViking first (`mcp__openviking__search resources/example-org/<vendor>`); cite
+work → search OpenViking first (`mcp__openviking__search resources/<org>/<vendor>`); cite
 `source_file § section` or note "no docs indexed."
 
 ### 2b. Surface area (grounded grep)
@@ -46,13 +46,13 @@ work → search OpenViking first (`mcp__openviking__search resources/example-org
 
 ### 2c. Mechanism honesty
 
-Env vars / secrets, external setup (vendor account, webhook, OAuth app), new infra (Trigger.dev
+Env vars / secrets, external setup (vendor account, webhook, OAuth app), new infra (background
 task, endpoint, collection) — list as prerequisites, flag anything unconfirmed. Never invent
 paths, symbols, or env vars. "TBD — needs investigation" beats a guess.
 
-Apply example-org risk callouts where they fit: Voicebot prompts → llm-vendor 95% cache bar; error
-handling → Sentry threshold 0; multi-primitive signatures → object-params; Trigger.dev →
-`TaskRegistry` + `TASK_ROUTES_ENV` pair; tests → `bun test`; vendor calls → through llm-gateway.
+Apply your org's risk callouts where they fit — see `~/.claude/org/<org>/preamble.md` for the
+per-org checklist (LLM-cache thresholds, error-budget gates, infra-pairing rules, the project
+test command, vendor-proxy routing). Org-specific specifics live in that gitignored file, not here.
 
 ## 3. Allocate a draft ID
 
@@ -83,7 +83,7 @@ synced: <ISO-8601 now>
 ---
 
 ## Context
-<2–4 sentences — why this exists. Quote slack / email / customer / tracing-tool if available.>
+<2–4 sentences — why this exists. Quote slack / email / customer / tracing tool if available.>
 
 ## Acceptance criteria
 - <bulleted, each independently verifiable>
@@ -97,7 +97,7 @@ synced: <ISO-8601 now>
 - <explicit — better to over-list>
 
 ## Open questions
-- **Ambiguous**: <question + who to ask: Alex / Sam / customer / #eng-chat>
+- **Ambiguous**: <question + who to ask: teammate / customer / #eng-chat>
 - **Risky**: <blast radius + rollback path>
 
 ## Prerequisites

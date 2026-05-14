@@ -92,7 +92,7 @@ $ <command>
 
 #### Pure refactor
 
-1. Run the full test suite. ExampleCorp convention: `bun test`. Other projects: read `CLAUDE.md` or `package.json`.
+1. Run the full test suite. Read the project's test command from `CLAUDE.md` or `package.json`.
 2. Diff-review for unintended scope creep — anything outside renames / extracts / reorders is **not** pure refactor and should be re-classified.
 3. PASS iff the suite is green and the diff really is behavior-preserving.
 

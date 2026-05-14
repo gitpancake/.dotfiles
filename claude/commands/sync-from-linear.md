@@ -29,13 +29,24 @@ deliberate trade: pay it here, never in the work loop.
 
 ## 4. Resolve `<PARENT>`
 
-Per ticket, in order:
-1. Linear `parent` issue ID, lowercased (e.g. `team-1600`) — if the ticket has a parent.
-2. Else the Linear project slug (lowercased, non-alnum → `-`).
-3. Else `_loose`.
+Epic dirs are **human-readable slugs**, not raw IDs — the mapping lives in
+`~/.claude/tickets/.epics.json` (`{ "TEAM-1589": "some-epic-slug", ... }`), keyed by
+Linear epic ID (upper-case, as in frontmatter).
 
-An epic itself has no parent → it lands at `<EPIC-ID>/<EPIC-ID>.md`, so its sub-issues sit
-beside it under `<EPIC-ID>/`.
+Per ticket, in order:
+1. **This ticket is itself an epic** (its ID is a key in `.epics.json`, i.e. other synced
+   tickets parent to it) → use its own mapped slug, so the epic file sits beside its
+   sub-issues at `<slug>/<EPIC-ID>.md`.
+2. **This ticket has a Linear `parent`** → look the parent ID up in `.epics.json`.
+   - Hit → use the mapped slug.
+   - Miss → generate a short human-readable kebab slug from the parent epic's title
+     (≤4 words, e.g. `some-epic-slug`), append `"<PARENT-ID>": "<slug>"` to
+     `.epics.json`, then use it. **Never fall back to the raw `team-1600`-style ID.**
+3. Else the Linear project slug (lowercased, non-alnum → `-`).
+4. Else `_loose`.
+
+`.epics.json` is the durable name map — read it at the start of the sync, write any new
+entries back at the end.
 
 ## 5. Write `~/.claude/tickets/<PARENT>/<TICKET>.md`
 
@@ -45,8 +56,8 @@ id: TEAM-1692
 parent: TEAM-1600
 title: <ticket title>
 status: In Progress
-project: project-slug
-labels: [teams, feature]
+project: <project-slug>
+labels: [<label>, feature]
 url: https://linear.app/...
 synced: <ISO-8601 now>
 ---
@@ -67,9 +78,9 @@ synced: <ISO-8601 now>
 
 - **Existing file**: regenerate everything from the frontmatter through the end of
   `## Acceptance criteria`. **Preserve `## Local notes` and everything below it verbatim.**
-- **Parent changed** (frontmatter `parent` differs from the new resolution): write the file
-  at the new path, then replace the old file with a one-line tombstone:
-  `moved → ~/.claude/tickets/<NEW-PARENT>/<TICKET>.md`.
+- **Parent changed** (the §4-resolved `<PARENT>` slug differs from the dir the file
+  currently sits in): write the file at the new path, then replace the old file with a
+  one-line tombstone: `moved → ~/.claude/tickets/<NEW-PARENT>/<TICKET>.md`.
 - **Ticket no longer in the index** (closed/cancelled/reassigned since last sync): leave the
   local file untouched — don't delete. List it under "stale" in the report so user decides.
 
@@ -80,9 +91,9 @@ Group by parent:
 ```
 synced 14 tickets → ~/.claude/tickets/
 
-TEAM-1600/  (project-slug epic)
-  TEAM-1692  In Progress  Teams send-message adapter
-  TEAM-1693  Todo         Teams debounce wiring
+some-epic-slug/  (epic TEAM-1589)
+  TEAM-1692  In Progress  <ticket title>
+  TEAM-1693  Todo         <ticket title>
 _loose/
   TEAM-1710  Backlog      Fix statusline color threshold
 

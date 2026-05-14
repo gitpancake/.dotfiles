@@ -4,7 +4,7 @@
 #
 # KNOWN GAP: PostToolUse does NOT fire for subagent tool calls — only for the
 # top-level session. So heavy subagent fan-out (the workflow shape that
-# actually blows up ExampleCorp bills) is invisible to this hook. The groupKey
+# actually blows up the token bill) is invisible to this hook. The groupKey
 # logic below remains wired in case CLAUDE_PARENT_SESSION_ID lands upstream;
 # until then this only catches loops in the parent session.
 #

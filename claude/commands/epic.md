@@ -8,7 +8,7 @@ argument-hint: <EPIC|EPIC-FOLDER> <BASE-BRANCH> [extra context...]
 Spawns `wt --ralph` — a lane running the Ralph autonomous loop. Two epic shapes:
 
 - **Single-brief epic** — one brief at `~/.claude/tickets/**/<EPIC>.md`. The lane runs `/prd` → `/ralph` to synthesize its own story list.
-- **Folder epic** — a directory `~/.claude/tickets/<EPIC>/` of child ticket `.md` files (e.g. `billing-epic/` with 36 tickets). The decomposition already happened in Linear, so `/epic` runs **one planning pass** to order the children into a `_prd.json` story list — then the lane consumes it directly, no `/prd` / `/ralph` re-synthesis.
+- **Folder epic** — a directory `~/.claude/tickets/<EPIC>/` of child ticket `.md` files (e.g. `billing-epic/` with a couple dozen tickets). The decomposition already happened in Linear, so `/epic` runs **one planning pass** to order the children into a `_prd.json` story list — then the lane consumes it directly, no `/prd` / `/ralph` re-synthesis.
 
 Syncs the cockpit to a base branch, folds in any extra context, spawns the lane. Do **not** edit
 project source — this command only prepares and spawns.

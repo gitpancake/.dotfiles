@@ -6,7 +6,7 @@
 #   #!/usr/bin/env bash
 #   set -e
 #   bun type-check     # fast; fine to run every turn
-#   # bun test     # SLOW — do NOT add unless you really want every turn to wait
+#   # bun test         # SLOW — do NOT add unless you really want every turn to wait
 #
 # Behavior:
 #   - The check runs in the BACKGROUND so it never blocks an agent turn.

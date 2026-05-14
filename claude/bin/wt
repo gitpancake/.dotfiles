@@ -9,26 +9,26 @@
 #   wt --resolve [--type <prefix>] <TICKET>        # re-spawn ready-set after slices merged (dormant)
 #
 # Single-lane behavior:
-#   wt team-1530                    # raw slug → worktree only, no auto-kickoff
-#   wt TEAM-1530                    # bare Linear ticket → reads the synced brief at
-#                                   ~/.claude/tickets/<PARENT>/TEAM-1530.md and works it
+#   wt team-1234                    # raw slug → worktree only, no auto-kickoff
+#   wt TEAM-1234                    # bare Linear ticket → reads the synced brief at
+#                                   ~/.claude/tickets/<PARENT>/TEAM-1234.md and works it
 #                                   (run /sync-from-linear first if the brief is missing)
 #   wt --ralph TEAM-1600            # single-brief epic → lane runs /prd + /ralph, then the loop
 #   wt --ralph billing-epic        # folder epic → consumes ~/.claude/tickets/<slug>/_prd.json
 #                                   (built by /epic); lane skips /prd + /ralph
-#   wt TEAM-1530-pr-feedback        # explicit descriptor
-#   wt --type fix TEAM-1530-bug-x   # branch fix/team-1530-bug-x
+#   wt TEAM-1234-pr-feedback        # explicit descriptor
+#   wt --type fix TEAM-1234-bug-x   # branch fix/team-1234-bug-x
 #
 # Type prefix defaults to `feature`. Override with --type or WT_TYPE env.
 # Common values: feature, fix, chore, task, refactor.
 #
 # DAG mode:
-#   wt --dag TEAM-1530  → reads ~/.claude/plans/TEAM-1530.md slice-dag block,
+#   wt --dag TEAM-1234  → reads ~/.claude/plans/TEAM-1234.md slice-dag block,
 #                       spawns lanes only for slices whose `needs` are merged
 #                       and whose `touches` don't conflict with already-ready
 #                       siblings. No DAG block / single slice → falls back to
 #                       single-lane.
-#   wt --resolve TEAM-1530 → after some slices merge, re-compute ready set and
+#   wt --resolve TEAM-1234 → after some slices merge, re-compute ready set and
 #                       spawn newly-unblocked lanes. Skips slices already in
 #                       flight (worktree exists).
 #
@@ -90,7 +90,7 @@ raw=${1:-}
 [[ -z "$raw" ]] && { echo "usage: wt [--ralph|--dag|--resolve] [--type <prefix>] <task-slug-or-ticket>" >&2; exit 1; }
 
 # Derive a slug descriptor from the plan's first heading.
-#   '# TEAM-1530 — Add foo bar' → 'add-foo-bar'
+#   '# TEAM-1234 — Add foo bar' → 'add-foo-bar'
 derive_descriptor_from_plan() {
   local plan_file=$1 ticket_upper=$2 title desc
   [[ -f "$plan_file" ]] || return 1
@@ -128,9 +128,9 @@ derive_descriptor_from_ticket() {
 }
 
 # Detect Linear-style ticket: TEAM-NNNN, optionally with -descriptor suffix.
-#   TEAM-1530              → ticket=TEAM-1530, slug=team-1530-<derived>, plan=TEAM-1530.md
-#   TEAM-1530-pr-feedback  → ticket=TEAM-1530, slug=team-1530-pr-feedback,
-#                          plan=TEAM-1530-pr-feedback.md
+#   TEAM-1234              → ticket=TEAM-1234, slug=team-1234-<derived>, plan=TEAM-1234.md
+#   TEAM-1234-pr-feedback  → ticket=TEAM-1234, slug=team-1234-pr-feedback,
+#                          plan=TEAM-1234-pr-feedback.md
 #   raw-feature-x        → no ticket, slug=raw-feature-x
 ticket=""
 plan_slug=""
@@ -296,7 +296,7 @@ if [[ "$mode" == "single" || "$mode" == "ralph" ]]; then
     fi
   elif [[ -n "$ticket" ]]; then
     if [[ -n "$ticket_file" ]]; then
-      initial="Autonomous mode. Brief at ${ticket_file}. Read it. Plan slices inline — no separate scoping pass. Use /grill-with-docs if the brief is thin, /tdd for the change loop, /handoff at the context threshold instead of compacting. Per slice: type-check + tests (use \`bun test\` in example-org-agent), commit per layer (schema → backend → frontend). After the final slice, run /ship to open the PR and trigger review. ${review_rule} Stop only when the PR is open and review-driven fixes are pushed. Genuine blocker (ambiguity not in the brief, repeated test failure same root cause, missing credential) → stop and report. No inter-slice confirmation."
+      initial="Autonomous mode. Brief at ${ticket_file}. Read it. Plan slices inline — no separate scoping pass. Use /grill-with-docs if the brief is thin, /tdd for the change loop, /handoff at the context threshold instead of compacting. Per slice: type-check + tests (use the project's test command), commit per layer (schema → backend → frontend). After the final slice, run /ship to open the PR and trigger review. ${review_rule} Stop only when the PR is open and review-driven fixes are pushed. Genuine blocker (ambiguity not in the brief, repeated test failure same root cause, missing credential) → stop and report. No inter-slice confirmation."
     else
       initial="Autonomous mode. No synced brief found at ~/.claude/tickets/**/${ticket}.md — run /sync-from-linear first to pull it locally. Then read the brief, plan slices inline, /tdd loop, commit per layer, /handoff at context threshold, /ship at the end. ${review_rule} Stop only when the PR is open and review-driven fixes are pushed."
     fi

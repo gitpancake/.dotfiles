@@ -32,7 +32,7 @@ Unsure → treat as structural.
 - **Mirror search** — find the structural twin file/feature; cite paths.
 - **Surface area** — top ≤8 files to start in, each with a one-line reason.
 - **Mechanism honesty** — env vars, vendor accounts, infra prereqs.
-- Vendor work → search OpenViking first (`mcp__openviking__search resources/example-org/<vendor>`);
+- Vendor work → search OpenViking first (`mcp__openviking__search resources/<org>/<vendor>`);
   cite source files or note "no docs indexed."
 - For deeper stress-testing against the project's domain model, hand off to the
   `grill-with-docs` skill.
@@ -45,9 +45,9 @@ Rewrite the `## Context` and `## Acceptance criteria` sections of the brief. If 
 add or update a `## Surface area` section (Mirror / Files to start in / Gotchas). **Preserve
 `## Local notes` and everything below it verbatim** — that's lane/agent scratch.
 
-Apply example-org risk callouts where they apply (Voicebot prompts → llm-vendor cache, Sentry
-threshold 0, object-params, Trigger.dev `TaskRegistry` + `TASK_ROUTES_ENV` pair, `bun test`,
-vendor calls through llm-gateway).
+Apply your org's risk callouts where they apply — see `~/.claude/org/<org>/preamble.md` for the
+per-org checklist (LLM-cache thresholds, error-budget gates, infra-pairing rules, the project
+test command, vendor-proxy routing). Org-specific specifics live in that gitignored file.
 
 ## 5. Show the diff. Stop.
 

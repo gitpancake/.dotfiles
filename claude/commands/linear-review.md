@@ -1,6 +1,6 @@
 ---
 description: Audit user's Linear tickets — cross-reference GitHub PRs, flag stale / duplicate / forgotten / irrelevant tickets, propose state cleanups. Read-only by default; mutations only on explicit go.
-argument-hint: [optional: team slug, e.g. AE or AUT]
+argument-hint: [optional: team slug, e.g. TEAM]
 ---
 
 # /linear-review $ARGUMENTS
@@ -9,7 +9,7 @@ user creates a lot of Linear tickets (`/sync-to-linear`, ad-hoc, follow-ups from
 
 This command is **read-only by default**. It produces a proposed action plan in §6 and stops. Only on user's "go" does it execute mutations in §7 — and even then, batched and confirmable.
 
-If `$ARGUMENTS` is given, scope to that team (`AE`, `AUT`, etc.). Otherwise scope to all teams user is assigned in.
+If `$ARGUMENTS` is given, scope to that team (your ticket prefix, e.g. `TEAM`). Otherwise scope to all teams user is assigned in.
 
 ## 1. Pull state (parallel)
 
@@ -25,13 +25,13 @@ Run in parallel. Cap each list at 200 to keep this cheap.
 ## 2. Cross-reference PRs ↔ tickets
 
 For each PR, extract ticket IDs from:
-- Branch name (`agent/team-1530`, `feature/team-1450-…`, `henry/team-1462-…`).
+- Branch name (`agent/team-1530`, `feature/team-1450-…`).
 - PR title (`[TEAM-1530] …`).
 - PR body (URLs / IDs anywhere).
 
 Build a map: `{ticketId → [pr1, pr2, …]}` and `{prNumber → [ticketId, …]}`.
 
-Note: example-org uses prefixes `AE`, `AUT`, `ENG`, `PRO`. Match them all. Lowercase variants too (branch names).
+Note: match all of your team's ticket prefixes. Lowercase variants too (branch names).
 
 ## 3. Categorize
 
@@ -72,7 +72,7 @@ For each open ticket, assign to **at most one** category. Earlier categories tak
 
 ### G. `irrelevant`
 - Heuristic only — flag for human review:
-  - Title mentions a project/vendor that's been sunset (llm-observability, cloud task queue, sandbox-vendor for new work).
+  - Title mentions a project/vendor that's been sunset or migrated away from.
   - Or title references a customer user no longer owns.
 - → Propose: flag for review, optional comment from user.
 
@@ -104,7 +104,7 @@ For dup-match borderline cases:
 
 Trigger an interactive question when **any** of:
 - State = In Progress AND no comments AND no PR AND age > 14 days.
-- Title matches a current focus area (Shopify, Teams, CarrierA) AND status is Backlog AND age > 14 days — user should at least see it.
+- Title matches a current focus area AND status is Backlog AND age > 14 days — user should at least see it.
 - Dup-match similarity is between 60% and 90% (above 90% → confidently propose; below 60% → don't even raise).
 - Last comment is from user himself but contains "?" or "TODO" — he was thinking about it.
 
@@ -138,14 +138,14 @@ Tickets scanned: <N>     Open PRs scanned: <M>     Cross-ref matches: <K>     In
 
 A. Merged-but-not-done  (state → Done)
 | Title | ID | PR | Confirmed by |
-| "Refactor Shopify webhook for isTestEnv" | TEAM-1530 | #3142 merged 2026-04-29 | merged-PR |
+| "<ticket title>" | TEAM-1530 | #3142 merged 2026-04-29 | merged-PR |
 
 B. PR closed, not reopened  (comment + state → Backlog)
 | Title | ID | PR | Closed | Last user-comment |
 
 C. In-progress stale  (state → Backlog)
 | Title | ID | Days idle | Confirmed by |
-| "Telegram org-resolution" | TEAM-518 | 23 | user-confirmed-inactive |
+| "<ticket title>" | TEAM-518 | 23 | user-confirmed-inactive |
 
 D. Duplicates  (keep earlier, mark others Duplicate)
 | Canonical title (ID) | Duplicate title (ID) | Confirmed by |
@@ -201,7 +201,7 @@ Print a transaction log:
 ```
 [DONE]  TEAM-1234  state: In Progress → Done    reason: PR #3142 merged
 [DONE]  TEAM-1235  state: Backlog → Cancelled    reason: 73 days idle, no PR, no priority
-[SKIP]  TEAM-1236  reason: comment within 7 days mentioned "waiting on Alex"
+[SKIP]  TEAM-1236  reason: comment within 7 days mentioned "waiting on a teammate"
 …
 ```
 
