@@ -33,7 +33,7 @@ dotfiles/
 │   │                                 #   /address-feedback, /linear-review, /simplify,
 │   │                                 #   /retrospective
 │   ├── skills/                       # Cherry-picked mattpocock skills — grill-with-docs,
-│   │                                 #   to-prd, to-issues, tdd, diagnose, handoff
+│   │                                 #   to-issues, tdd, diagnose, handoff
 │   ├── ralph/                        # Vendored Ralph loop — ralph.sh + CLAUDE.md.template
 │   │                                 #   (copied into target repos by ralph-bootstrap)
 │   ├── hooks/                        # Session/tool hooks
