@@ -15,8 +15,20 @@ from pathlib import Path
 
 TICKETS_DIR = Path(os.environ.get("TICKETS_DIR", Path.home() / ".claude" / "tickets"))
 
-# status label -> (icon, color name, sort rank)
+# Linear workspace slug — used to derive a ticket URL from its `linear:` id.
+# Override with LINEAR_WORKSPACE if the workspace ever changes.
+LINEAR_WORKSPACE = os.environ.get("LINEAR_WORKSPACE", "<org>")
+
+# Files under TICKETS_DIR that are not tickets — skipped by the loader.
+META_FILES = {"README.md", "_TEMPLATE.md", "_EPIC-TEMPLATE.md", "_CHILD-TEMPLATE.md"}
+
+# status label -> (icon, color name, sort rank). Lowercase keys are the current
+# schema (~/.claude/tickets/README.md); title-case keys are legacy (pre-migration).
 STATUS_META = {
+    "active":      ("◐", "inprogress", 0),
+    "open":        ("○", "todo", 1),
+    "draft":       ("◌", "backlog", 2),
+    "done":        ("●", "done", 3),
     "In Progress": ("◐", "inprogress", 0),
     "In Review":   ("◑", "inreview", 1),
     "Todo":        ("○", "todo", 2),
@@ -26,7 +38,8 @@ STATUS_META = {
     "Cancelled":   ("✕", "muted", 5),
 }
 DEFAULT_STATUS_META = ("·", "muted", 9)
-FILTER_ORDER = ["In Progress", "In Review", "Todo", "Backlog", "Done"]
+FILTER_ORDER = ["active", "open", "draft", "done",
+                "In Progress", "In Review", "Todo", "Backlog"]
 
 
 def parse_frontmatter(path):
@@ -58,16 +71,27 @@ class Ticket:
     def __init__(self, path):
         fm = parse_frontmatter(path)
         self.path = path
-        self.id = fm.get("id") or path.stem
-        self.parent = fm.get("parent", "none")
-        self.status = fm.get("status", "") or "Unknown"
-        self.project = fm.get("project", "") or ""
-        self.url = fm.get("url", "")
-        self.title = clean_title(fm.get("title", self.id), self.id)
+        self.is_epic = path.name == "_epic.md"
+        # Legacy = pre-migration schema: carried `id:`, no `linear:`/`area:`.
+        self.legacy = "id" in fm and "linear" not in fm and "area" not in fm
+        # An _epic.md represents its folder; everything else is its own slug.
+        self.slug = path.parent.name if self.is_epic else path.stem
+        self.linear = fm.get("linear", "").strip()
+        # Display identifier: Linear id if synced, else the slug (legacy: `id:`).
+        self.id = self.linear or fm.get("id") or self.slug
+        self.epic = fm.get("epic", "") or fm.get("parent", "")
+        self.area = fm.get("area", "")
+        self.status = fm.get("status", "").strip() or ("open" if self.is_epic else "")
+        # URL is derived from `linear:`; a legacy stored `url:` is the fallback.
+        self.url = (f"https://linear.app/{LINEAR_WORKSPACE}/issue/{self.linear}"
+                    if self.linear else fm.get("url", ""))
+        self.title = clean_title(fm.get("title", self.slug), self.slug)
         self.group = path.parent.name
 
     @property
     def meta(self):
+        if self.is_epic:
+            return ("▸", "accent", -1)
         return STATUS_META.get(self.status, DEFAULT_STATUS_META)
 
 
@@ -75,6 +99,11 @@ def load_tickets():
     tickets = []
     if TICKETS_DIR.is_dir():
         for path in sorted(TICKETS_DIR.rglob("*.md")):
+            if path.name in META_FILES:
+                continue
+            # Skip other _*.md meta files, but keep _epic.md (the epic PRD).
+            if path.name.startswith("_") and path.name != "_epic.md":
+                continue
             try:
                 tickets.append(Ticket(path))
             except Exception:
@@ -120,7 +149,7 @@ class App:
             return False
         if self.query:
             q = self.query.lower()
-            hay = (t.id + " " + t.title + " " + t.group).lower()
+            hay = (t.id + " " + t.title + " " + t.group + " " + t.area).lower()
             if q not in hay:
                 return False
         return True
@@ -233,7 +262,9 @@ class App:
         t = row["ticket"]
         icon, color, _ = t.meta
         status = t.status
-        id_col = f"{t.id:<9}"
+        # Legacy tickets get a `~` marker; slugs are wider than Linear ids.
+        disp_id = (t.id + "~") if t.legacy else t.id
+        id_col = f"{disp_id[:16]:<16}"
         if selected:
             self._put(stdscr, y, 0, " " * (w - 1), curses.A_REVERSE)
             base = curses.A_REVERSE
