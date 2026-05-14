@@ -25,7 +25,7 @@ Subagents and slash commands self-describe via Agent/skills schemas — don't li
 `/sync-from-linear` (batch-pull tickets to `~/.claude/tickets/<PARENT>/<TICKET>.md`) → work locally → `/ship` (PR + review) → `/sync-to-linear` (push completed work back). Linear is a boundary touched twice — no live MCP read/write inside the work loop.
 
 - **Regular ticket** → `wt <TICKET>` (or `/pickup <TICKET> <BASE> [context]` to sync the cockpit to a base branch + fold in extra context first) spawns an autonomous lane that reads the synced brief, plans slices inline, leans on the `grill-with-docs` / `tdd` / `handoff` skills, commits per layer, `/ship` at the end.
-- **Epic** → `wt --ralph <EPIC>` runs the Ralph autonomous loop in the lane: one story per fresh-context iteration, memory via git + `progress.txt` + `prd.json`.
+- **Epic** → `/epic <EPIC> <BASE> [context]` then `wt --ralph` runs the Ralph autonomous loop in the lane: one story per fresh-context iteration, memory via git + `progress.txt` + `prd.json`. Two shapes — a single epic brief (`<EPIC>.md`; lane synthesizes its story list via `/prd` + `/ralph`), or a folder of synced child tickets (`~/.claude/tickets/<slug>/`; `/epic` runs one planning pass to order them into `_prd.json`, lane consumes it directly).
 - **Fresh idea, no ticket** → `/scope <free text>` engineers a local brief at `~/.claude/tickets/_loose/DRAFT-<N>.md` (no Linear write); `wt DRAFT-<N>` picks it up.
 
 **Autonomous semantics.** `wt` lanes fire-and-forget. A lane stops only on: (1) PR open + review triggered, (2) genuine blocker (ambiguity not in the brief, repeated test failure same root cause, missing credential). Brief missing → lane asks for `/sync-from-linear` first. Slice protocol + parallel-lane gotchas: `~/.dotfiles/CLAUDE.md`.

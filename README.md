@@ -179,7 +179,7 @@ What `wt` produces:
 - new tmux window running `claude --dangerously-skip-permissions --model opus` (override with `WT_CLAUDE=…` or `WT_MODEL=…`)
 - For Linear-style IDs (`TEAM-1530`): the lane reads the synced brief at `~/.claude/tickets/<PARENT>/<ID>.md`. Missing → it asks you to run `/sync-from-linear` first.
 
-`wt --ralph <EPIC>` runs the Ralph autonomous loop inside the lane instead — `ralph-bootstrap` drops `scripts/ralph/` in, then `ralph.sh` grinds one story per fresh-context iteration (memory via git + `progress.txt` + `prd.json`).
+`wt --ralph` runs the Ralph autonomous loop inside the lane instead — `ralph-bootstrap` drops `scripts/ralph/` in, then `ralph.sh` grinds one story per fresh-context iteration (memory via git + `progress.txt` + `prd.json`). It takes either a single epic brief by Linear ID (`wt --ralph TEAM-1600` — lane synthesizes its story list via `/prd` + `/ralph`) or a folder-epic slug (`wt --ralph billing-epic` — consumes the ordered `~/.claude/tickets/<slug>/_prd.json` that `/epic` built from the folder's child tickets). Use `/epic <EPIC> <BASE>` to prep + spawn either shape.
 
 Layout default = new tmux window; override with `WT_LAYOUT=pane|session`.
 
@@ -198,7 +198,9 @@ wt <ID>                      → autonomous lane: reads the brief, plans slices 
                                leans on grill-with-docs / tdd / handoff, commits per layer
 /pickup <ID> <BASE> [ctx]    → wt wrapper: sync cockpit to a base branch + fold in extra
                                context, then spawn the lane
-wt --ralph <EPIC>            → Ralph loop in a lane: one story per fresh-context iteration
+/epic <EPIC> <BASE> [ctx]    → prep + spawn a Ralph lane: single epic brief, or a folder of
+                               child tickets ordered into a story list by a planning pass
+wt --ralph <EPIC|slug>       → Ralph loop in a lane: one story per fresh-context iteration
 /ship                        → commit + push + PR + @claude review
 /sync-to-linear <branch|PR#> → push completed work back as a Done ticket (end of day)
 /address-feedback <PR#>      → harvests + triages PR comments, spawns a lane on the PR's branch

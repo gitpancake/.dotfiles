@@ -38,7 +38,9 @@ Slash commands often dispatch subagents internally, but they aren't the same reg
 
 ## Ralph autonomous loop
 
-`claude/ralph/` holds the vendored `ralph.sh` orchestrator + `CLAUDE.md.template` (Ralph's per-iteration prompt). It is **not** symlinked — `claude/bin/ralph-bootstrap` copies it into a target repo/worktree's `scripts/ralph/` and excludes that dir from git so the loop's runtime churn (`prd.json`, `progress.txt`, `archive/`) never lands on the feature branch. `wt --ralph <EPIC>` runs the bootstrap + loop inside a lane. The `snarktank/ralph` marketplace plugin (in `settings.json`) provides the `/prd` and `/ralph` skills the loop uses.
+`claude/ralph/` holds the vendored `ralph.sh` orchestrator + `CLAUDE.md.template` (Ralph's per-iteration prompt). It is **not** symlinked — `claude/bin/ralph-bootstrap` copies it into a target repo/worktree's `scripts/ralph/` and excludes that dir from git so the loop's runtime churn (`prd.json`, `progress.txt`, `archive/`) never lands on the feature branch. `wt --ralph` runs the bootstrap + loop inside a lane. The `snarktank/ralph` marketplace plugin (in `settings.json`) provides the `/prd` and `/ralph` skills the loop uses.
+
+Two epic shapes feed the loop. A **single-brief epic** (`wt --ralph TEAM-1600` — a Linear ID) → the lane runs `/prd` + `/ralph` to synthesize its own story list. A **folder epic** (`wt --ralph billing-epic` — a bare slug) → `/epic` has already run a planning pass over the folder's child tickets and written an ordered `~/.claude/tickets/<slug>/_prd.json`; the lane copies that straight to `scripts/ralph/prd.json` and skips `/prd` + `/ralph`. The folder path exists because a folder of synced child tickets *is* the decomposition — re-synthesizing it would be lossy.
 
 ## Lane state machine
 
