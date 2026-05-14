@@ -1,7 +1,8 @@
 {
   "env": {
     "MCP_TIMEOUT": "10000",
-    "MCP_TOOL_TIMEOUT": "20000"
+    "MCP_TOOL_TIMEOUT": "20000",
+    "CAVEMAN_DEFAULT_MODE": "ultra"
   },
   "permissions": {
     "defaultMode": "auto"

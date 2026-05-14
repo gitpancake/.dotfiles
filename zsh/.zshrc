@@ -59,6 +59,7 @@ alias reload="source ~/.zshrc"
 alias ll="ls -la"
 alias cdsp="claude --dangerously-skip-permissions"
 alias cls="clear"
+alias agent-watch="watch -tcn2 ~/.tmux/agent-board.sh"
 unalias art 2>/dev/null
 # Start (or hand off) the commit-watcher daemon so reactive `art watch`
 # panes pick up new merges to the current repo's main branch. The
