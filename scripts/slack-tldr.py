@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Slack alerts → Haiku TLDR → tmux pane.
+"""Slack alerts → tmux pane.
 
 Subcommands:
   daemon       — run the Socket Mode listener (long-lived process)
@@ -20,7 +20,6 @@ via $SLACK_TLDR_CONFIG):
       "monitor": {"name": "C_ID", …}  # monitor-tab channels
     },
     "backfill_hours": 24,              # backfill window on startup
-    "model":          "claude-haiku-4-5-20251001",
     "max_active":     50
   }
 
@@ -42,9 +41,6 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from claude_oauth import call_messages, extract_text  # noqa: E402
-
 DEFAULT_CONFIG = os.environ.get(
     "SLACK_TLDR_CONFIG",
     os.path.expanduser("~/.dotfiles/scripts/slack-tldr.config.local"),
@@ -59,7 +55,6 @@ DEFAULT_MAX_ACTIVE = 50
 DEFAULT_ALERT_CHANNELS = ["alerts-channel-1", "alerts-channel-2", "alerts-channel-4"]
 DISMISSED_RING_SIZE = 500
 SEEN_RING_SIZE = 200
-DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 BACKFILL_STAGGER_MS = 500
 
 
@@ -144,13 +139,12 @@ def load_config():
     cfg["_channel_ids"] = list(alert_map.values()) + list(monitor_map.values())
     cfg["_id_to_name"] = {v: k for m in (alert_map, monitor_map) for k, v in m.items()}
 
-    cfg.setdefault("model", DEFAULT_MODEL)
     cfg.setdefault("max_active", DEFAULT_MAX_ACTIVE)
     return cfg
 
 
 # ----------------------------------------------------------------------
-# Slack message text extraction + TLDR
+# Slack message text extraction
 # ----------------------------------------------------------------------
 
 MENTION_RE = re.compile(r"<@([A-Z0-9]+)(?:\|[^>]+)?>")
@@ -160,7 +154,7 @@ LINK_RE = re.compile(r"<(https?://[^|>]+)(?:\|([^>]+))?>")
 
 def flatten_message_text(event):
     """Pull plain text from a Slack message event (root + attachments + blocks).
-    Strips Slack-specific markup so the LLM sees clean prose.
+    Strips Slack-specific markup so the rendered text is clean prose.
     """
     parts = []
     if event.get("text"):
@@ -193,37 +187,9 @@ def flatten_message_text(event):
     return raw.strip()
 
 
-def haiku_tldr(text, model):
-    """One-line TLDR ≤15 words. Falls back to truncated raw on auth failure."""
-    clean = text.replace("\n", " ").strip()
-    if len(clean) <= 80:
-        return clean
-    snippet = text[:4000]
-    prompt = (
-        "Summarize this Slack alert in ONE line, max 15 words. "
-        "No filler, no quotes, no trailing period. "
-        "Preserve identifiers (service names, error codes, hostnames). "
-        "If the message is unclear, summarize what you can see literally.\n\n"
-        f"---\n{snippet}\n---"
-    )
-    response = call_messages(
-        model,
-        [{"role": "user", "content": prompt}],
-        max_tokens=80,
-        timeout=15,
-    )
-    out = extract_text(response).strip()
-    if not out:
-        return text.replace("\n", " ")[:120]
-    out = out.splitlines()[0].strip().strip("\"'")
-    bail_phrases = ("unable to summarize", "i don't see", "insufficient data",
-                    "not enough information", "cannot summarize",
-                    "no actionable alert", "no alert content",
-                    "please provide the alert", "please provide",
-                    "not an actual alert", "no alert provided")
-    if any(p in out.lower() for p in bail_phrases):
-        return text.replace("\n", " ")[:120]
-    return out[:200]
+def tldr_line(text):
+    """One-line digest of a Slack message — newlines flattened, truncated."""
+    return text.replace("\n", " ").strip()[:120]
 
 
 # ----------------------------------------------------------------------
@@ -296,7 +262,7 @@ def discover_member_channels(web_client):
     return ids
 
 
-def backfill_channel(web, channel_id, name_cache, model, max_active):
+def backfill_channel(web, channel_id, name_cache, max_active):
     """Pull all messages from the last 24h and add as alerts."""
     cutoff = time.time() - 24 * 3600
     name = get_channel_name(web, channel_id, name_cache)
@@ -330,12 +296,7 @@ def backfill_channel(web, channel_id, name_cache, model, max_active):
         f"slack-tldr: backfill #{name} → {len(picked)} message(s)\n"
     )
     for ts, text in picked:
-        try:
-            tldr = haiku_tldr(text, model)
-        except Exception as e:
-            sys.stderr.write(f"slack-tldr: tldr failed: {e}\n")
-            tldr = text.replace("\n", " ")[:120]
-        add_alert(channel_id, name, ts, tldr, text, max_active)
+        add_alert(channel_id, name, ts, tldr_line(text), text, max_active)
         time.sleep(BACKFILL_STAGGER_MS / 1000.0)
 
 
@@ -405,10 +366,7 @@ def run_daemon():
     # Backfill last 24h from alert channels only (monitor is live-only).
     alert_ids = set(cfg.get("channels", {}).get("alerts", {}).values())
     for ch in sorted(channel_set & alert_ids):
-        backfill_channel(
-            web, ch,
-            name_cache, cfg["model"], cfg["max_active"],
-        )
+        backfill_channel(web, ch, name_cache, cfg["max_active"])
 
     def handle(client_, req):
         client_.send_socket_mode_response(
@@ -437,11 +395,7 @@ def run_daemon():
         text = flatten_message_text(event)
         if not text:
             return
-        try:
-            tldr = haiku_tldr(text, cfg["model"])
-        except Exception as e:
-            sys.stderr.write(f"slack-tldr: tldr failed: {e}\n")
-            tldr = text.replace("\n", " ")[:120]
+        tldr = tldr_line(text)
         channel_name = get_channel_name(web, channel, name_cache)
         sys.stderr.write(
             f"slack-tldr: +{channel_name} {ts} → {tldr[:80]}\n"
