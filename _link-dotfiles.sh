@@ -10,7 +10,7 @@ mkdir -p ~/.oh-my-zsh/custom/themes
 ln -sf "$DOTFILES_DIR/zsh/robbyrussell-bar.zsh-theme" ~/.oh-my-zsh/custom/themes/robbyrussell-bar.zsh-theme
 
 # Claude Code
-mkdir -p ~/.claude ~/.claude/hooks ~/.claude/commands ~/.claude/agents ~/.claude/skills ~/.claude/logs
+mkdir -p ~/.claude ~/.claude/hooks ~/.claude/commands ~/.claude/agents ~/.claude/skills ~/.claude/scripts ~/.claude/logs
 ln -sf "$DOTFILES_DIR/claude/statusline-command.sh" ~/.claude/statusline-command.sh
 ln -sf "$DOTFILES_DIR/claude/transcript-costs.sh" ~/.claude/transcript-costs.sh
 ln -sf "$DOTFILES_DIR/claude/settings.json" ~/.claude/settings.json
@@ -37,6 +37,14 @@ for f in "$DOTFILES_DIR/claude/bin/"*; do
   [ -e "$f" ] || continue
   chmod +x "$f"
   ln -sf "$f" ~/.local/bin/"$(basename "$f")"
+done
+# claude/scripts → ~/.claude/scripts — referenced by absolute path from wt,
+# hooks, and tix (e.g. epic-parse.sh, ticket-status-sync.py), so they must
+# resolve at a stable location.
+for f in "$DOTFILES_DIR/claude/scripts/"*; do
+  [ -e "$f" ] || continue
+  case "$f" in *.sh|*.py) chmod +x "$f" ;; esac
+  ln -sf "$f" ~/.claude/scripts/"$(basename "$f")"
 done
 
 # tmux

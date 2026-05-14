@@ -325,6 +325,13 @@ spawn_lane() {
   mkdir -p "$s_wt/.claude"
   echo "IDLE" > "$s_wt/.claude/agent-state"
 
+  # Flip the ticket's status: → active. ticket-status-sync owns `status:`;
+  # this is its cheap single-slug fast path. Detached + silenced so it never
+  # slows the spawn. No-ops cleanly when the slug has no ticket file (DAG
+  # slices, --branch PR-pickup lanes).
+  ( python3 "$HOME/.claude/scripts/ticket-status-sync.py" "$s_slug" \
+      >/dev/null 2>&1 & )
+
   if [[ ! -f "$s_wt/.claude/settings.local.json" ]]; then
     cat > "$s_wt/.claude/settings.local.json" <<'JSON'
 {

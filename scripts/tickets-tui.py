@@ -453,10 +453,28 @@ class App:
             self.rebuild_rows()
 
 
+def reconcile_status():
+    """Refresh every ticket's `status:` from filesystem + git before loading.
+    tix is a read-only view; ticket-status-sync is the one writer of `status:`,
+    and a tix launch is its full-sweep trigger. Best-effort — tix must still
+    open if the reconciler is missing or errors. Output is captured: tix is
+    about to take the screen with curses, so the fresh statuses *are* the
+    feedback, not the printed diff."""
+    script = Path.home() / ".claude" / "scripts" / "ticket-status-sync.py"
+    if not script.exists():
+        return
+    try:
+        subprocess.run([sys.executable, str(script)],
+                       capture_output=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
 def main():
     if not TICKETS_DIR.is_dir():
         print(f"tix: no ticket directory at {TICKETS_DIR}", file=sys.stderr)
         return 1
+    reconcile_status()
     app = App()
     if not app.tickets:
         print(f"tix: no tickets found under {TICKETS_DIR}", file=sys.stderr)
