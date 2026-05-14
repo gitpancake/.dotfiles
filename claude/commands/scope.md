@@ -9,8 +9,9 @@ user's standard ask: "scope this out, ready for engineering." Output is a **loca
 `wt` lane can pick up without redoing discovery — it carries the surface area, the mirror
 reference, the gotchas. Refine the request, don't restate it.
 
-**Never touches Linear.** Briefs become Linear tickets later via `/sync-to-linear`, after the
-work ships. This command only writes markdown under `~/.claude/tickets/`.
+Contract + templates: `~/.claude/tickets/README.md`. This command writes only markdown under
+`~/.claude/tickets/` — **never touches Linear.** Briefs become Linear tickets later via
+`/sync-to-linear`, after the work ships.
 
 If `$ARGUMENTS` is empty, infer the problem from conversation context — what was just
 discussed, debugged, or decided. Summarize your interpretation in 1–2 sentences and proceed.
@@ -54,58 +55,44 @@ Apply your org's risk callouts where they fit — see `~/.claude/org/<org>/pream
 per-org checklist (LLM-cache thresholds, error-budget gates, infra-pairing rules, the project
 test command, vendor-proxy routing). Org-specific specifics live in that gitignored file, not here.
 
-## 3. Allocate a draft ID
+## 3. Name it — slug, area, shape
 
-Scan `~/.claude/tickets/` for `DRAFT-*.md`, take the max N, use `DRAFT-<N+1>`.
+No counter, no `DRAFT-N`. **The filename is the handle.**
 
-- **Single ticket** → `~/.claude/tickets/_loose/DRAFT-<N>.md`.
-- **Epic** → `~/.claude/tickets/DRAFT-<N>/DRAFT-<N>.md` (the epic) plus
-  `~/.claude/tickets/DRAFT-<N>/DRAFT-<N+k>.md` for each sub-issue, so they nest like synced
-  tickets do.
+- **Slug** — kebab-case, ≤40 chars, descriptive. Derive it from the end state:
+  `teams-error-mapping`, not `draft-7`.
+- **Area** — one of the buckets in `~/.claude/tickets/` (`integrations`, `platform`, `ops`,
+  `tooling`, `spikes`). Pick the closest; ask only if genuinely ambiguous.
+- **Shape** — single ticket or epic (from §1).
 
-Draft IDs match `wt`'s ticket pattern, so `wt DRAFT-<N>` spawns a lane exactly like a real ID.
-When the work ships, `/sync-to-linear` creates the real Linear ticket.
+Target path — drafts stay in `_drafts/` until the work syncs out:
+
+- **Single ticket** → `~/.claude/tickets/_drafts/<slug>.md`
+- **Epic** → `~/.claude/tickets/_drafts/<epic-slug>/_epic.md` (the PRD) plus
+  `~/.claude/tickets/_drafts/<epic-slug>/NN-<child-slug>.md` for each sub-issue, `NN` =
+  execution order.
+
+Promotion — `git mv` into an `<area>/` and fill `linear:` — happens at `/sync-to-linear`
+time, not here. Slug and epic-folder name both match `wt`'s resolver, so `wt <slug>` spawns a
+lane exactly like a real Linear ID would.
 
 ## 4. Brief — house style
 
-Same shape `/sync-from-linear` writes, so lanes read it identically.
+Copy the templates. Do not freehand the frontmatter.
 
-```
----
-id: DRAFT-7
-parent: _loose            # or DRAFT-<N> if this is a sub-issue
-title: <≤80 chars, action-oriented, no fluff>
-status: Draft
-project: <best-guess project slug, or TBD>
-labels: [<best-guess labels>]
-url:
-synced: <ISO-8601 now>
----
+- Single ticket → `~/.claude/tickets/_TEMPLATE.md`
+- Epic root → `~/.claude/tickets/_EPIC-TEMPLATE.md`
+- Epic child → `~/.claude/tickets/_CHILD-TEMPLATE.md`
 
-## Context
-<2–4 sentences — why this exists. Quote slack / email / customer / tracing tool if available.>
+Same shape `/sync-from-linear` writes, so lanes read it identically. Set `created` to now,
+`status: draft`, `linear:` empty.
 
-## Acceptance criteria
-- <bulleted, each independently verifiable>
-
-## Surface area
-- **Mirror**: `<feature/file>` — one-line why it's the structural twin.
-- **Files to start in** (≤8): `path:reason`.
-- **Gotchas**: quoted CLAUDE.md rules that apply.
-
-## Out of scope
-- <explicit — better to over-list>
-
-## Open questions
-- **Ambiguous**: <question + who to ask: teammate / customer / #eng-chat>
-- **Risky**: <blast radius + rollback path>
-
-## Prerequisites
-<env vars to set, accounts to provision, infra to stand up. None → "none.">
-
-## Local notes
-<!-- lane / agent scratch — preserved across any later /sync-from-linear -->
-```
+**For an epic:** `_epic.md` carries the `<!-- epic-stories:start -->` block — the
+authoritative ordered story list plus dependency DAG. Each story's `context:` points at its
+`NN-<child>.md`. The children carry the deep per-story detail; `_epic.md` carries
+context / goal / constraints / story-list. Ralph reads `_epic.md` to start and opens a child
+when it picks that story — so the block must be complete and correctly ordered before any
+lane spawns.
 
 ## 5. Show the draft. Stop.
 
@@ -116,10 +103,16 @@ write yet.
 
 `mkdir -p` the parent dir, write the markdown file(s). Return:
 
-> Brief at `~/.claude/tickets/_loose/DRAFT-7.md`. Run `wt DRAFT-7` to start a lane.
+> Brief at `~/.claude/tickets/_drafts/<slug>.md`. Run `wt <slug>` to start a lane.
+
+For an epic:
+
+> Epic at `~/.claude/tickets/_drafts/<epic-slug>/`. Run `/epic <epic-slug> <base>` to review
+> the story order and spawn the Ralph lane.
 
 ## Stop conditions
 
 - After §1 clarifying questions — wait for answers.
 - After §5 draft — wait for "go".
-- After §6 write — done. user runs `wt DRAFT-<N>` next. Never edit code from this command.
+- After §6 write — done. user runs `wt <slug>` (or `/epic <epic-slug>`) next. Never edit
+  code from this command.
