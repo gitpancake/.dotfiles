@@ -28,12 +28,11 @@ dotfiles/
 │   ├── agents/                       # Specialist subagents — backend, frontend,
 │   │                                 #   database, fullstack, platform, infra, deploy,
 │   │                                 #   bugfinder, plan-lint, verifier
-│   ├── commands/                     # Slash commands — /sync-from-linear, /sync-to-linear,
-│   │                                 #   /scope, /rescope, /pickup, /read-ticket, /ship,
-│   │                                 #   /address-feedback, /linear-review, /simplify,
+│   ├── commands/                     # Slash commands — /scope, /rescope, /pickup, /epic,
+│   │                                 #   /ship, /address-feedback, /resume, /simplify,
 │   │                                 #   /retrospective
-│   ├── skills/                       # Cherry-picked mattpocock skills — grill-with-docs,
-│   │                                 #   to-issues, tdd, diagnose, handoff
+│   ├── skills/                       # Project skills — grill-with-docs, to-issues,
+│   │                                 #   tdd, diagnose, handoff
 │   ├── ralph/                        # Vendored Ralph loop — ralph.sh + CLAUDE.md.template
 │   │                                 #   (copied into target repos by ralph-bootstrap)
 │   ├── hooks/                        # Session/tool hooks
@@ -49,12 +48,12 @@ dotfiles/
 │   ├── scripts/                      # Helpers called by commands / hooks
 │   │   ├── lane-pause.sh             #   Tag lane WAITING with reason code
 │   │   ├── lane-summary.sh           #   LLM 1-line summary of HEAD per lane
-│   │   ├── plan-lint.sh              #   Plan-vs-Linear coverage gate
+│   │   ├── plan-lint.sh              #   Plan-vs-ticket coverage gate
 │   │   ├── verify-clean.sh           #   Pre-ship verification entry point
 │   │   ├── dag-parse.sh              #   Parse plan slice DAG
 │   │   └── prune-plans.sh            #   GC stale ~/.claude/plans/<ID>.md
 │   ├── bin/                          # PATH-exposed lane primitives
-│   │   ├── wt                        #   Spawn parallel worktree lane (Linear-aware)
+│   │   ├── wt                        #   Spawn parallel worktree lane (slug / epic resolver)
 │   │   ├── wt-gc                     #   Reap dead lanes
 │   │   ├── ralph-bootstrap           #   Drop the Ralph loop into a repo/worktree
 │   │   ├── tix                       #   Terminal ticket explorer (~/.claude/tickets)
@@ -170,7 +169,7 @@ Stale `IDLE` rows hide after 30 min (`BOARD_HIDE_IDLE_AFTER` to override; `BOARD
 
 ## Claude Code: Parallel Worktree Lanes
 
-`claude/bin/wt <slug-or-TICKET-ID>` spawns one parallel lane per Linear ticket. Each lane is fire-and-forget: it works the synced brief through to a PR, then stops.
+`claude/bin/wt <slug-or-epic>` spawns one parallel lane per ticket. Each lane is fire-and-forget: it reads the local brief, works it through to a PR, then stops.
 
 What `wt` produces:
 
@@ -179,9 +178,9 @@ What `wt` produces:
 - per-lane port stamped in `.env.local.port` (3099 + lane index)
 - `.claude/agent-state` seeded to `IDLE` (visible to `agent-board.sh`)
 - new tmux window running `claude --dangerously-skip-permissions --model opus` (override with `WT_CLAUDE=…` or `WT_MODEL=…`)
-- For Linear-style IDs (`TEAM-1530`): the lane reads the synced brief at `~/.claude/tickets/<PARENT>/<ID>.md`. Missing → it asks you to run `/sync-from-linear` first.
+- `wt` resolves its arg against `~/.claude/tickets/` as a filename slug, a `linear:` breadcrumb, or an epic folder name (in that order). Brief missing → the lane asks you to `/scope` it first.
 
-`wt --ralph` runs the Ralph autonomous loop inside the lane instead — `ralph-bootstrap` drops `scripts/ralph/` in, then `ralph.sh` grinds one story per fresh-context iteration (memory via git + `progress.txt` + `prd.json`). It takes either a single epic brief by Linear ID (`wt --ralph TEAM-1600` — lane synthesizes its story list via `/prd` + `/ralph`) or a folder-epic slug (`wt --ralph billing-epic` — consumes the ordered `~/.claude/tickets/<slug>/_prd.json` that `/epic` built from the folder's child tickets). Use `/epic <EPIC> <BASE>` to prep + spawn either shape.
+`wt --ralph <epic-slug>` runs the Ralph autonomous loop inside the lane instead — `ralph-bootstrap` drops `scripts/ralph/` in, `epic-parse.sh` projects the epic's `_epic.md` into `scripts/ralph/prd.json`, then `ralph.sh` grinds one story per fresh-context iteration (memory via git + `progress.txt` + `prd.json`). An epic is a folder with an `_epic.md` carrying a human-confirmed ordered story list; Ralph executes that list and never decomposes. Use `/epic <epic-slug> <BASE>` to confirm the story order and spawn the lane.
 
 Layout default = new tmux window; override with `WT_LAYOUT=pane|session`.
 
@@ -189,25 +188,22 @@ Layout default = new tmux window; override with `WT_LAYOUT=pane|session`.
 
 ## Claude Code: Workflow
 
-Linear is a boundary touched twice — pull briefs in, push completed work out. Everything between is local file system.
+The filesystem is the database — there is no external tracker. Briefs live in `~/.claude/tickets/<area>/`; a single ticket is a `<slug>.md`, an epic is a folder with an `_epic.md`. The whole workflow is local.
 
 ```
-/sync-from-linear            → batch-pull your tickets to ~/.claude/tickets/<PARENT>/<ID>.md
-                               (morning / when taking on new work — not per pickup)
-tix                          → terminal ticket explorer: browse the synced briefs by
-                               keyboard, read them full-screen in glow
-/scope <free text>           → engineer a local brief at ~/.claude/tickets/_loose/DRAFT-<N>.md
-                               (fresh idea with no Linear ticket yet — no Linear write)
-wt <ID>                      → autonomous lane: reads the brief, plans slices inline,
+/scope <free text>           → engineer a local brief at ~/.claude/tickets/<area>/<slug>.md
+                               (single ticket, or an _epic.md + NN-<child>.md folder)
+tix                          → terminal ticket explorer: browse briefs by keyboard,
+                               read them full-screen in glow
+wt <slug>                    → autonomous lane: reads the brief, plans slices inline,
                                leans on grill-with-docs / tdd / handoff, commits per layer
-/pickup <ID> <BASE> [ctx]    → wt wrapper: sync cockpit to a base branch + fold in extra
+/pickup <slug> <BASE> [ctx]  → wt wrapper: sync cockpit to a base branch + fold in extra
                                context, then spawn the lane
-/epic <EPIC> <BASE> [ctx]    → prep + spawn a Ralph lane: single epic brief, or a folder of
-                               child tickets ordered into a story list by a planning pass
-wt --ralph <EPIC|slug>       → Ralph loop in a lane: one story per fresh-context iteration
+/epic <epic-slug> <BASE>     → confirm an epic's ordered story list, then spawn a Ralph lane
+wt --ralph <epic-slug>       → Ralph loop in a lane: one story per fresh-context iteration
 /ship                        → commit + push + PR + @claude review
-/sync-to-linear <branch|PR#> → push completed work back as a Done ticket (end of day)
 /address-feedback <PR#>      → harvests + triages PR comments, spawns a lane on the PR's branch
+/resume [desc]               → resume work from the most recent handoff doc
 ```
 
 Lane stops only on PR + review triggered (success) or genuine blocker. Watch `agent-board.sh` — red row → look. Otherwise leave it alone. At the context threshold, `/handoff` to a fresh session instead of compacting.

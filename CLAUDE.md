@@ -31,16 +31,16 @@ This file is the project memory layer for Claude — it captures the gotchas and
 Easy to confuse — they're different things:
 
 - `claude/agents/*.md` are **subagents** dispatched via the Agent tool with `subagent_type: "<name>"`. Available: `backend`, `frontend`, `database`, `fullstack`, `platform`, `infra`, `deploy`, `bugfinder`, `plan-lint`, `verifier`.
-- `claude/commands/*.md` are **slash commands** typed by the user. Available: `/sync-from-linear`, `/sync-to-linear`, `/scope`, `/rescope`, `/pickup`, `/read-ticket`, `/ship`, `/address-feedback`, `/linear-review`, `/simplify`, `/retrospective`.
-- `claude/skills/*/SKILL.md` are **skills** — cherry-picked from `mattpocock/skills`, symlinked into `~/.claude/skills/`. Available: `grill-with-docs`, `to-issues`, `tdd`, `diagnose`, `handoff`.
+- `claude/commands/*.md` are **slash commands** typed by the user. Available: `/scope`, `/rescope`, `/pickup`, `/epic`, `/ship`, `/address-feedback`, `/resume`, `/simplify`, `/retrospective`.
+- `claude/skills/*/SKILL.md` are **skills** — symlinked into `~/.claude/skills/`. Available: `grill-with-docs`, `to-issues`, `tdd`, `diagnose`, `handoff`.
 
 Slash commands often dispatch subagents internally, but they aren't the same registry.
 
 ## Ralph autonomous loop
 
-`claude/ralph/` holds the vendored `ralph.sh` orchestrator + `CLAUDE.md.template` (Ralph's per-iteration prompt). It is **not** symlinked — `claude/bin/ralph-bootstrap` copies it into a target repo/worktree's `scripts/ralph/` and excludes that dir from git so the loop's runtime churn (`prd.json`, `progress.txt`, `archive/`) never lands on the feature branch. `wt --ralph` runs the bootstrap + loop inside a lane. The `snarktank/ralph` marketplace plugin (in `settings.json`) provides the `/prd` and `/ralph` skills the loop uses.
+`claude/ralph/` holds the vendored `ralph.sh` orchestrator + `CLAUDE.md.template` (Ralph's per-iteration prompt). It is **not** symlinked — `claude/bin/ralph-bootstrap` copies it into a target repo/worktree's `scripts/ralph/` and excludes that dir from git so the loop's runtime churn (`prd.json`, `progress.txt`, `archive/`) never lands on the feature branch. `wt --ralph` runs the bootstrap + loop inside a lane.
 
-Two epic shapes feed the loop. A **single-brief epic** (`wt --ralph TEAM-1600` — a Linear ID) → the lane runs `/prd` + `/ralph` to synthesize its own story list. A **folder epic** (`wt --ralph billing-epic` — a bare slug) → `/epic` has already run a planning pass over the folder's child tickets and written an ordered `~/.claude/tickets/<slug>/_prd.json`; the lane copies that straight to `scripts/ralph/prd.json` and skips `/prd` + `/ralph`. The folder path exists because a folder of synced child tickets *is* the decomposition — re-synthesizing it would be lossy.
+One epic shape feeds the loop. An epic is a folder with an `_epic.md`; its `<!-- epic-stories -->` block carries the authoritative, human-confirmed ordered story list. `/epic <epic-slug> <BASE>` confirms that list and spawns the lane — at spawn, `claude/scripts/epic-parse.sh` projects `_epic.md` into `scripts/ralph/prd.json` inside the worktree. `ralph.sh` then grinds one story per fresh-context iteration (memory via git + `progress.txt` + `prd.json`), executing the confirmed list — it never decomposes.
 
 ## Lane state machine
 

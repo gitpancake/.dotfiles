@@ -20,9 +20,9 @@ Configuration, hooks, agents, and tooling for [Claude Code](https://claude.com/c
 | --- | --- |
 | `agents/` | Specialist subagent profiles — `backend`, `frontend`, `database`, `fullstack`, `platform`, `infra`, `deploy`, `bugfinder`, `plan-lint`, `verifier`. Dispatched via the Agent tool. |
 | `commands/` | Global slash commands available in every project (e.g. `/scope`, `/ship`, `/simplify`). |
-| `skills/` | Cherry-picked `mattpocock/skills` — `grill-with-docs`, `to-issues`, `tdd`, `diagnose`, `handoff`. Each is a dir with `SKILL.md`; symlinked into `~/.claude/skills/`. |
+| `skills/` | Project skills — `grill-with-docs`, `to-issues`, `tdd`, `diagnose`, `handoff`. Each is a dir with `SKILL.md`; symlinked into `~/.claude/skills/`. |
 | `hooks/` | Shell hooks invoked by Claude Code on session events (notifications, tool use, etc.). |
-| `scripts/` | Helper scripts called by hooks / commands. |
+| `scripts/` | Helper scripts called by hooks / commands — incl. `epic-parse.sh` (projects an epic's `_epic.md` → worktree `prd.json`) and `ticket-status-sync.py` (the one writer of ticket `status:`). |
 | `ralph/` | Vendored Ralph loop — see Files table above. |
 
 ## Org Context (not committed)
