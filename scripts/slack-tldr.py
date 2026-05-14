@@ -15,7 +15,10 @@ via $SLACK_TLDR_CONFIG):
   {
     "app_token":      "xapp-…",        # Socket Mode app-level token
     "bot_token":      "xoxb-…",        # bot user OAuth token
-    "channel_ids":    ["C0123"],       # empty/omitted → auto-discover via membership
+    "channels": {                      # required — source of truth for watched channels
+      "alerts":  {"name": "C_ID", …}, # alert-tab channels
+      "monitor": {"name": "C_ID", …}  # monitor-tab channels
+    },
     "backfill_count": 2,               # last N messages to TLDR on startup / new join
     "model":          "claude-haiku-4-5-20251001",
     "max_active":     50
@@ -53,7 +56,7 @@ DEFAULT_STATE = os.environ.get(
 LOCK_PATH = os.path.expanduser("~/.local/share/slack-tldr/daemon.lock")
 STATE_LOCK_PATH = os.path.expanduser("~/.local/share/slack-tldr/state.lock")
 DEFAULT_MAX_ACTIVE = 50
-DEFAULT_ALERT_CHANNELS = ["alerts-channel-1", "alerts-channel-2", "alerts-channel-4", "test-channel"]
+DEFAULT_ALERT_CHANNELS = ["alerts-channel-1", "alerts-channel-2", "alerts-channel-4"]
 DISMISSED_RING_SIZE = 500
 SEEN_RING_SIZE = 200
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
@@ -130,12 +133,24 @@ def load_config():
         if not cfg.get(key):
             sys.stderr.write(f"slack-tldr: config missing '{key}'\n")
             sys.exit(1)
-    # channel_ids is optional — empty/missing means auto-discover from bot membership.
-    cfg.setdefault("channel_ids", [])
+
+    channels = cfg.get("channels")
+    if not channels or not isinstance(channels, dict):
+        sys.stderr.write(
+            "slack-tldr: config missing 'channels' dict — "
+            "see slack-tldr.config.example.json\n"
+        )
+        sys.exit(1)
+
+    alert_map = channels.get("alerts") or {}
+    monitor_map = channels.get("monitor") or {}
+    cfg["_alert_names"] = list(alert_map.keys())
+    cfg["_channel_ids"] = list(alert_map.values()) + list(monitor_map.values())
+    cfg["_id_to_name"] = {v: k for m in (alert_map, monitor_map) for k, v in m.items()}
+
     cfg.setdefault("model", DEFAULT_MODEL)
     cfg.setdefault("max_active", DEFAULT_MAX_ACTIVE)
     cfg.setdefault("backfill_count", DEFAULT_BACKFILL_COUNT)
-    cfg.setdefault("alert_channels", DEFAULT_ALERT_CHANNELS)
     return cfg
 
 
@@ -358,23 +373,28 @@ def run_daemon():
     web = WebClient(token=cfg["bot_token"])
     client = SocketModeClient(app_token=cfg["app_token"], web_client=web)
 
-    name_cache = {}
+    name_cache = dict(cfg["_id_to_name"])
     state = _load_state()
     name_cache.update(state.get("channel_names", {}))
+    name_cache.update(cfg["_id_to_name"])
 
-    # channel_set is the live allow-list. Empty config → discover from
-    # membership; otherwise use the config list verbatim.
-    explicit_ids = set(cfg.get("channel_ids") or [])
-    if explicit_ids:
-        channel_set = set(explicit_ids)
+    channel_set = set(cfg["_channel_ids"])
+    sys.stderr.write(
+        f"slack-tldr: {len(channel_set)} configured channel(s)\n"
+    )
+
+    member_ids = discover_member_channels(web)
+    missing = channel_set - member_ids
+    if missing:
+        for ch_id in sorted(missing):
+            name = cfg["_id_to_name"].get(ch_id, ch_id)
+            sys.stderr.write(
+                f"slack-tldr: ERROR — bot not a member of #{name} ({ch_id})\n"
+            )
         sys.stderr.write(
-            f"slack-tldr: using {len(channel_set)} configured channel(s)\n"
+            "slack-tldr: invite the bot to these channels and restart\n"
         )
-    else:
-        channel_set = discover_member_channels(web)
-        sys.stderr.write(
-            f"slack-tldr: discovered {len(channel_set)} member channel(s)\n"
-        )
+        sys.exit(1)
 
     # Backfill last N from each known channel before live listening starts.
     for ch in sorted(channel_set):
@@ -392,24 +412,7 @@ def run_daemon():
         event = req.payload.get("event", {}) or {}
         ev_type = event.get("type")
 
-        # Newly invited to a channel → backfill last N if discovery mode is on.
         if ev_type == "member_joined_channel":
-            joined_user = event.get("user")
-            channel = event.get("channel")
-            try:
-                bot_id = (web.auth_test() or {}).get("user_id")
-            except Exception:
-                bot_id = None
-            if joined_user and bot_id and joined_user == bot_id and channel:
-                if not explicit_ids:
-                    channel_set.add(channel)
-                    sys.stderr.write(
-                        f"slack-tldr: joined {channel}, backfilling\n"
-                    )
-                    backfill_channel(
-                        web, channel, cfg["backfill_count"],
-                        name_cache, cfg["model"], cfg["max_active"],
-                    )
             return
 
         if ev_type != "message":
@@ -462,18 +465,21 @@ RESET = "\033[0m"
 RED   = "\033[31m"
 GREEN = "\033[32m"
 CYAN  = "\033[36m"
-NEW_ON  = "\033[1;7;31m"
-NEW_OFF = "\033[1;7;33m"
+ALERT_NEW_ON   = "\033[1;7;31m"
+ALERT_NEW_OFF  = "\033[1;7;33m"
 
 
-def _render_alert_line(a, ack_ts, out, blink_on):
+def _render_alert_line(a, ack_ts, out, blink_on, is_monitor=False):
     ts = float(a.get("ts") or 0)
     hhmm = time.strftime("%H:%M", time.localtime(ts))
     ch = a.get("channel_name") or a.get("channel") or "?"
     tldr = a.get("tldr") or ""
     if ts > ack_ts:
-        sgr = NEW_ON if blink_on else NEW_OFF
-        out.write(f"{sgr} {hhmm} #{ch}  {tldr} {RESET}\n")
+        if is_monitor:
+            out.write(f"{GREEN}{hhmm} #{ch}{RESET}  {tldr}\n")
+        else:
+            sgr = ALERT_NEW_ON if blink_on else ALERT_NEW_OFF
+            out.write(f"{sgr} {hhmm} #{ch}  {tldr} {RESET}\n")
     else:
         out.write(f"{DIM}{hhmm}{RESET} {CYAN}#{ch}{RESET}  {tldr}\n")
 
@@ -490,7 +496,7 @@ def _partition_alerts(active, alert_channels):
     return alerts, monitor
 
 
-def _render_section_header(out, title, items, ack_ts, blink_on, show_counts=True):
+def _render_section_header(out, title, items, ack_ts, blink_on, show_counts=True, is_monitor=False):
     if not show_counts:
         out.write(f"{BOLD}{title}{RESET}\n")
         return
@@ -498,8 +504,11 @@ def _render_section_header(out, title, items, ack_ts, blink_on, show_counts=True
     if not items:
         out.write(f"{BOLD}{title}{RESET}  {DIM}clear{RESET}\n")
     elif new_count:
-        badge = NEW_ON if blink_on else NEW_OFF
-        out.write(f"{BOLD}{title}{RESET}  {badge} {new_count} NEW {RESET} {DIM}({len(items)} total){RESET}\n")
+        if is_monitor:
+            out.write(f"{BOLD}{title}{RESET}  {GREEN}{new_count} new{RESET} {DIM}({len(items)} total){RESET}\n")
+        else:
+            badge = ALERT_NEW_ON if blink_on else ALERT_NEW_OFF
+            out.write(f"{BOLD}{title}{RESET}  {badge} {new_count} NEW {RESET} {DIM}({len(items)} total){RESET}\n")
     else:
         out.write(f"{BOLD}{title}{RESET}  {RED}{len(items)} active{RESET}\n")
 
@@ -514,14 +523,14 @@ ALERT_CAP_SPLIT = 10
 SINGLE_VIEW_CAP = 14
 
 
-def _render_section(out, title, items, ack_ts, blink_on, max_rows, show_counts=True):
-    _render_section_header(out, title, items, ack_ts, blink_on, show_counts)
+def _render_section(out, title, items, ack_ts, blink_on, max_rows, show_counts=True, is_monitor=False):
+    _render_section_header(out, title, items, ack_ts, blink_on, show_counts, is_monitor=is_monitor)
     out.write("\n")
     shown = items[-max_rows:] if len(items) > max_rows else items
     if not shown:
         out.write(f"{DIM}—{RESET}\n")
     for a in shown:
-        _render_alert_line(a, ack_ts, out, blink_on)
+        _render_alert_line(a, ack_ts, out, blink_on, is_monitor=is_monitor)
 
 
 def _render_pane(state, out, blink_on=True, alert_channels=None, view=VIEW_SPLIT):
@@ -546,18 +555,18 @@ def _render_pane(state, out, blink_on=True, alert_channels=None, view=VIEW_SPLIT
     if view == VIEW_ALERTS:
         _render_section(out, "Alerts", alerts, ack_ts, blink_on, SINGLE_VIEW_CAP)
     elif view == VIEW_MONITOR:
-        _render_section(out, "Monitor", monitor, ack_ts, blink_on, SINGLE_VIEW_CAP)
+        _render_section(out, "Monitor", monitor, ack_ts, blink_on, SINGLE_VIEW_CAP, is_monitor=True)
     else:
         alert_max = min(ALERT_CAP_SPLIT, max(3, usable - MONITOR_CAP_SPLIT - 4))
         _render_section(out, "Alerts", alerts, ack_ts, blink_on, alert_max, show_counts=False)
         out.write("\n")
-        _render_section(out, "Monitor", monitor, ack_ts, blink_on, MONITOR_CAP_SPLIT, show_counts=False)
+        _render_section(out, "Monitor", monitor, ack_ts, blink_on, MONITOR_CAP_SPLIT, show_counts=False, is_monitor=True)
 
 
 def _get_alert_channels():
     try:
         cfg = load_config()
-        return cfg.get("alert_channels", DEFAULT_ALERT_CHANNELS)
+        return cfg.get("_alert_names", DEFAULT_ALERT_CHANNELS)
     except SystemExit:
         return DEFAULT_ALERT_CHANNELS
 
@@ -616,10 +625,11 @@ def cmd_watch():
         active = state.get("active", [])
         ack_ts = float(state.get("ack_ts") or 0.0)
 
-        new_count = sum(1 for a in active if float(a.get("ts") or 0) > ack_ts)
+        alerts_in_frame, _ = _partition_alerts(active, alert_channels)
+        new_count = sum(1 for a in alerts_in_frame if float(a.get("ts") or 0) > ack_ts)
         badge = ""
         if new_count:
-            b = NEW_ON if blink_on else NEW_OFF
+            b = ALERT_NEW_ON if blink_on else ALERT_NEW_OFF
             badge = f"  {b} {new_count} NEW {RESET}"
 
         tabs = _view_tabs(blink_on)

@@ -1,8 +1,18 @@
 {
   "app_token": "xapp-REPLACE-WITH-APP-LEVEL-TOKEN",
   "bot_token": "xoxb-REPLACE-WITH-BOT-OAUTH-TOKEN",
-  "channel_ids": [],
-  "alert_channels": ["alerts-channel-1", "alerts-channel-2", "alerts-channel-4", "test-channel"],
+  "channels": {
+    "alerts": {
+      "alerts-channel-1": "CXXXXXXXXXX",
+      "alerts-channel-3": "CXXXXXXXXXX",
+      "alerts-channel-2": "CXXXXXXXXXX",
+      "alerts-channel-4": "CXXXXXXXXXX",
+      "alerts-channel-5": "CXXXXXXXXXX"
+    },
+    "monitor": {
+      "monitor-channel-2": "CXXXXXXXXXX"
+    }
+  },
   "backfill_count": 5,
   "model": "claude-haiku-4-5-20251001",
   "max_active": 50
