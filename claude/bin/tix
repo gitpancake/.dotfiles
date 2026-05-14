@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# tix — terminal ticket explorer for ~/.claude/tickets.
+#   tix          launch the keyboard-driven TUI (q to quit)
+# Set TICKETS_DIR to point at a different briefs root.
+exec /usr/bin/env python3 "$HOME/.dotfiles/scripts/tickets-tui.py" "$@"

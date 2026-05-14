@@ -57,6 +57,7 @@ dotfiles/
 │   │   ├── wt                        #   Spawn parallel worktree lane (Linear-aware)
 │   │   ├── wt-gc                     #   Reap dead lanes
 │   │   ├── ralph-bootstrap           #   Drop the Ralph loop into a repo/worktree
+│   │   ├── tix                       #   Terminal ticket explorer (~/.claude/tickets)
 │   │   ├── git-watch                 #   Watch repo HEAD, write art state
 │   │   ├── slack-tldr                #   CLI ack/dismiss for Slack TLDR daemon
 │   │   └── slack-watch               #   Interactive tmux pane renderer
@@ -81,6 +82,7 @@ dotfiles/
 │   └── local.focus-{guard,nginx}.plist
 ├── scripts/
 │   ├── city.py / hologram.py         # Terminal toys
+│   ├── tickets-tui.py                # `tix` — keyboard ticket explorer + glow viewer
 │   ├── commit-watcher.py             # Drives matrix state from git commits
 │   ├── audio-watcher.py              # Audio-event watcher daemon
 │   ├── git-watch.py                  # Lightweight git HEAD watcher
@@ -192,6 +194,8 @@ Linear is a boundary touched twice — pull briefs in, push completed work out. 
 ```
 /sync-from-linear            → batch-pull your tickets to ~/.claude/tickets/<PARENT>/<ID>.md
                                (morning / when taking on new work — not per pickup)
+tix                          → terminal ticket explorer: browse the synced briefs by
+                               keyboard, read them full-screen in glow
 /scope <free text>           → engineer a local brief at ~/.claude/tickets/_loose/DRAFT-<N>.md
                                (fresh idea with no Linear ticket yet — no Linear write)
 wt <ID>                      → autonomous lane: reads the brief, plans slices inline,
