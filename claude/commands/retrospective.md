@@ -154,7 +154,7 @@ If Notion MCP is unavailable, warn once and offer to write the retro to a local 
 
 ## §6. Save to memory
 
-After publishing, save a reference so future `/sync-from-linear` or planning runs can find this:
+After publishing, save a reference so future planning runs can find this:
 
 ```
 Retro: <Integration Name>

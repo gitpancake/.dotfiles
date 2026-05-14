@@ -22,8 +22,7 @@ command only prepares and spawns.
 
 `wt --print-brief <TICKET>` → `BRIEF`. This is the one resolver `wt` itself uses (Linear id →
 slug → epic folder name) — do **not** re-implement the lookup here.
-- **Non-zero exit / no path printed** → stop. Tell user: `/sync-from-linear` (real Linear
-  ticket) or `/scope` (fresh idea) first.
+- **Non-zero exit / no path printed** → stop. Tell user to `/scope` it first.
 
 ## 3. Fold in context — only if `CONTEXT` non-empty
 

@@ -62,13 +62,9 @@ The plan filename uses pseudo-ticket `PR-<PR_NUM>` so `wt` treats the slug as ti
 
 ## 6. Coverage self-check
 
-Confirm every **actionable** row in §3 maps to a slice in §5. Any unmapped → fix the plan before spawning. (No `plan-lint` here — that gate compares against a Linear ticket; this plan is PR-driven.)
+Confirm every **actionable** row in §3 maps to a slice in §5. Any unmapped → fix the plan before spawning. (No `plan-lint` here — that gate compares against a ticket brief; this plan is PR-driven.)
 
-## 7. Linear sync (only if PR carries a Linear ID)
-
-Derive a Linear ID from `headRefName` or the PR title (`[a-z]+-[0-9]+`). Found → `mcp__linear-server__save_comment`: "Addressing PR review feedback — plan at `~/.claude/plans/PR-<PR_NUM>-feedback.md`." No ID → skip silently. The slug stays `PR-<PR_NUM>-feedback` regardless.
-
-## 8. Spawn the lane
+## 7. Spawn the lane
 
 Detect lane:
 

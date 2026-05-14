@@ -1,5 +1,5 @@
 ---
-description: Turn a free-text problem into an engineered local ticket brief under ~/.claude/tickets/. Includes codebase exploration. Writes the markdown on "go" — never touches Linear.
+description: Turn a free-text problem into an engineered local ticket brief under ~/.claude/tickets/. Includes codebase exploration. Writes the markdown on "go".
 argument-hint: <free-text problem statement>
 ---
 
@@ -10,8 +10,7 @@ user's standard ask: "scope this out, ready for engineering." Output is a **loca
 reference, the gotchas. Refine the request, don't restate it.
 
 Contract + templates: `~/.claude/tickets/README.md`. This command writes only markdown under
-`~/.claude/tickets/` — **never touches Linear.** Briefs become Linear tickets later via
-`/sync-to-linear`, after the work ships.
+`~/.claude/tickets/` — the brief *is* the ticket. There is no upstream tracker.
 
 If `$ARGUMENTS` is empty, infer the problem from conversation context — what was just
 discussed, debugged, or decided. Summarize your interpretation in 1–2 sentences and proceed.
@@ -65,16 +64,15 @@ No counter, no `DRAFT-N`. **The filename is the handle.**
   `tooling`, `spikes`). Pick the closest; ask only if genuinely ambiguous.
 - **Shape** — single ticket or epic (from §1).
 
-Target path — drafts stay in `_drafts/` until the work syncs out:
+Target path — a ticket lives in its area from creation; `status: draft` marks it unrefined
+(there is no `_drafts/` staging folder — "draft" is a state, not a location):
 
-- **Single ticket** → `~/.claude/tickets/_drafts/<slug>.md`
-- **Epic** → `~/.claude/tickets/_drafts/<epic-slug>/_epic.md` (the PRD) plus
-  `~/.claude/tickets/_drafts/<epic-slug>/NN-<child-slug>.md` for each sub-issue, `NN` =
+- **Single ticket** → `~/.claude/tickets/<area>/<slug>.md`
+- **Epic** → `~/.claude/tickets/<area>/<epic-slug>/_epic.md` (the PRD) plus
+  `~/.claude/tickets/<area>/<epic-slug>/NN-<child-slug>.md` for each sub-issue, `NN` =
   execution order.
 
-Promotion — `git mv` into an `<area>/` and fill `linear:` — happens at `/sync-to-linear`
-time, not here. Slug and epic-folder name both match `wt`'s resolver, so `wt <slug>` spawns a
-lane exactly like a real Linear ID would.
+Slug and epic-folder name both match `wt`'s resolver, so `wt <slug>` spawns a lane.
 
 ## 4. Brief — house style
 
@@ -84,8 +82,9 @@ Copy the templates. Do not freehand the frontmatter.
 - Epic root → `~/.claude/tickets/_EPIC-TEMPLATE.md`
 - Epic child → `~/.claude/tickets/_CHILD-TEMPLATE.md`
 
-Same shape `/sync-from-linear` writes, so lanes read it identically. Set `created` to now,
-`status: draft`, `linear:` empty.
+Every ticket uses the same shape, so lanes read it identically. Set `created` to now,
+`status: draft`. Leave `linear:` empty — it's only a breadcrumb on tickets that predate the
+local-only move.
 
 **For an epic:** `_epic.md` carries the `<!-- epic-stories:start -->` block — the
 authoritative ordered story list plus dependency DAG. Each story's `context:` points at its
@@ -103,11 +102,11 @@ write yet.
 
 `mkdir -p` the parent dir, write the markdown file(s). Return:
 
-> Brief at `~/.claude/tickets/_drafts/<slug>.md`. Run `wt <slug>` to start a lane.
+> Brief at `~/.claude/tickets/<area>/<slug>.md`. Run `wt <slug>` to start a lane.
 
 For an epic:
 
-> Epic at `~/.claude/tickets/_drafts/<epic-slug>/`. Run `/epic <epic-slug> <base>` to review
+> Epic at `~/.claude/tickets/<area>/<epic-slug>/`. Run `/epic <epic-slug> <base>` to review
 > the story order and spawn the Ralph lane.
 
 ## Stop conditions

@@ -1,23 +1,23 @@
 ---
-description: Refine a synced ticket brief locally with user's recommendations. Edits ~/.claude/tickets/<PARENT>/<TICKET>.md only — never writes to Linear.
-argument-hint: <LINEAR-ID> [free-text adjustments]
+description: Refine a local ticket brief with user's recommendations. Edits the brief file under ~/.claude/tickets/ — nothing else.
+argument-hint: <ticket> [free-text adjustments]
 ---
 
 # /rescope $ARGUMENTS
 
-`$ARGUMENTS` is `<LINEAR-ID> [optional adjustments]`. First whitespace-separated token =
-ticket ID, rest = adjustment text.
+`$ARGUMENTS` is `<ticket> [optional adjustments]`. First whitespace-separated token = the
+ticket (a slug, a Linear id, or an epic folder name), rest = adjustment text.
 
-Refinement is **local**. This command edits the synced brief on disk; it never touches
-Linear. The refined brief reaches Linear later via `/sync-to-linear` (once the work ships)
-or is reconciled on the next `/sync-from-linear`.
+Refinement is **local**. This command edits the brief on disk — the file *is* the ticket,
+there is no upstream to reconcile with.
 
-If only the ticket ID is given, show the brief then **ask** for adjustments and stop.
+If only the ticket is given, show the brief then **ask** for adjustments and stop.
 
 ## 1. Locate + show
 
-Find the brief: `find ~/.claude/tickets -name "<ID>.md" -type f`.
-- **Not found** → tell user to run `/sync-from-linear` first, stop.
+`wt --print-brief <ticket>` → the brief path (the one resolver `wt` uses — do not
+re-implement the lookup).
+- **Non-zero exit / no path** → tell user to `/scope` it first, stop.
 - **Found** → render the current frontmatter + body verbatim so user sees what changes.
 
 ## 2. Decide depth
@@ -52,9 +52,9 @@ test command, vendor-proxy routing). Org-specific specifics live in that gitigno
 ## 5. Show the diff. Stop.
 
 ```
-[<ID>] <current title>
-            ↓
-[<ID>] <new title>            # only if title changed
+<current title>
+       ↓
+<new title>            # only if title changed
 
 DIFF:
 - <removed line>
@@ -64,14 +64,13 @@ DIFF:
 
 **Stop.** Wait for "go" or further edits. Don't write yet.
 
-## 6. On "go": write the local brief
+## 6. On "go": write the brief
 
-Write the refined sections back to `~/.claude/tickets/<PARENT>/<TICKET>.md`. Update the
-frontmatter `title:` if it changed. **Do not call any `mcp__linear-server__*` tool** — Linear
-is downstream. Return the file path.
+Write the refined sections back to the brief file. Update the frontmatter `title:` if it
+changed. Return the file path.
 
 ## 7. Stop conditions
 
 - After §1 if no adjustments given — ask once, stop.
 - After diff in §5 — wait for "go".
-- After write in §6 — done. The brief is ready for `wt <ID>` to pick up.
+- After write in §6 — done. The brief is ready for `wt <slug>` to pick up.

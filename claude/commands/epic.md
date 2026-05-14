@@ -28,8 +28,7 @@ edit project source — this command only prepares and spawns.
 ## 2. Resolve the epic
 
 `wt --print-brief <EPIC>` → `EPIC_MD`.
-- **Non-zero exit / no path** → stop. Tell user: `/sync-from-linear` (real Linear epic) or
-  `/scope` (fresh idea) first.
+- **Non-zero exit / no path** → stop. Tell user to `/scope` it into an epic first.
 - **Resolved, but the path is not an `_epic.md`** → it's a single ticket, not an epic. Stop.
   Tell user: `/scope` it into an epic folder first (an `_epic.md` + `NN-<child>.md`
   children), or `wt <EPIC>` to work it as a single ticket.

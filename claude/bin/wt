@@ -14,7 +14,7 @@
 #   then slug (filename), then epic folder name. Contract: ~/.claude/tickets/README.md.
 #   wt auth-refactor                # slug → ~/.claude/tickets/<area>/auth-refactor.md
 #   wt TEAM-1234                    # Linear id → brief whose frontmatter `linear:` matches
-#                                   (run /sync-from-linear first if the brief is missing)
+#                                   (the brief must already exist locally — /scope it if not)
 #   wt raw-throwaway-slug           # slug with no brief → worktree only, no auto-kickoff
 #   wt --ralph billing-epic         # epic (folder with _epic.md) → lane runs epic-parse.sh
 #                                   then ralph.sh; /epic confirms the story order first
@@ -389,7 +389,7 @@ if [[ "$mode" == "single" || "$mode" == "ralph" ]]; then
   elif [[ -n "$ticket_file" ]]; then
     initial="Autonomous mode. Brief at ${ticket_file}. Read it. Plan slices inline — no separate scoping pass. Use /grill-with-docs if the brief is thin, /tdd for the change loop, /handoff at the context threshold instead of compacting. Per slice: type-check + tests (use the project's test command), commit per layer (schema → backend → frontend). After the final slice, run /ship to open the PR and trigger review. ${review_rule} Stop only when the PR is open and review-driven fixes are pushed. Genuine blocker (ambiguity not in the brief, repeated test failure same root cause, missing credential) → stop and report. No inter-slice confirmation."
   elif [[ -n "$ticket" ]]; then
-    initial="Autonomous mode. No synced brief found for ${ticket} — run /sync-from-linear first to pull it locally. Then read the brief, plan slices inline, /tdd loop, commit per layer, /handoff at context threshold, /ship at the end. ${review_rule} Stop only when the PR is open and review-driven fixes are pushed."
+    initial="Autonomous mode. No brief found for ${ticket} — there is no local ticket file for it. Tell user to /scope it first, then stop. Do not invent a brief."
   fi
 
   spawn_lane "$slug" "$branch" "$wt_path" "$initial" "${ticket:-$slug}"

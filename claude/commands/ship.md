@@ -6,8 +6,8 @@ argument-hint: [optional: PR number or URL to skip create and review-only]
 # /ship $ARGUMENTS
 
 Commit → push → PR → trigger review. Body is **two bullet lists** (Changed / Preserved)
-plus a test plan. No editorializing. Linear is not touched here — completed work reaches
-Linear at end of day via `/sync-to-linear`.
+plus a test plan. No editorializing. Work lives entirely in the repo + the local ticket
+tree — nothing syncs anywhere.
 
 ## 0. Pre-flight (parallel)
 
@@ -61,8 +61,7 @@ is small. No emoji, no generated-with footer unless repo convention. Derive bull
 don't restate.
 
 Then `gh pr create`:
-- `--title` ≤70 chars, action-oriented. Prefix the Linear ID if the branch matches
-  `^[a-z]+/[a-z]+-\d+` (e.g. `[TEAM-1530] Refactor Shopify webhook`).
+- `--title` ≤70 chars, action-oriented — derive it from the slug + the work, no ID prefix.
 - `--body` from the shape above via heredoc.
 - `--base` usually `main`; for `*/slice-N` branches infer the parent from `git log`,
   confirm if ambiguous.
