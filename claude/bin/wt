@@ -3,15 +3,18 @@
 #
 # Usage:
 #   wt [--type <prefix>] <task-slug-or-ticket>     # single lane (default)
-#   wt --dag [--type <prefix>] <TICKET>            # parse plan DAG, spawn ready-set lanes
-#   wt --resolve [--type <prefix>] <TICKET>        # re-spawn ready-set after slices merged
+#   wt --ralph [--type <prefix>] <EPIC>            # single lane running the Ralph autonomous loop
+#   wt --branch <name> [--type ...] <slug>         # single lane on an existing branch (e.g. a PR head)
+#   wt --dag [--type <prefix>] <TICKET>            # parse plan DAG, spawn ready-set lanes (dormant)
+#   wt --resolve [--type <prefix>] <TICKET>        # re-spawn ready-set after slices merged (dormant)
 #
 # Single-lane behavior:
 #   wt team-1530                    # raw slug → worktree only, no auto-kickoff
-#   wt TEAM-1530                    # bare Linear ticket → descriptor pulled from
-#                                   ~/.claude/plans/TEAM-1530.md heading; kicks off
-#                                   /ticket-pickup if no plan yet
-#   wt TEAM-1530-pr-feedback        # explicit descriptor; plan file matches slug
+#   wt TEAM-1530                    # bare Linear ticket → reads the synced brief at
+#                                   ~/.claude/tickets/<PARENT>/TEAM-1530.md and works it
+#                                   (run /sync-from-linear first if the brief is missing)
+#   wt --ralph TEAM-1600            # epic → bootstraps scripts/ralph/, runs the Ralph loop
+#   wt TEAM-1530-pr-feedback        # explicit descriptor
 #   wt --type fix TEAM-1530-bug-x   # branch fix/team-1530-bug-x
 #
 # Type prefix defaults to `feature`. Override with --type or WT_TYPE env.
@@ -32,7 +35,7 @@
 #   WT_NO_FETCH=1     skip pre-spawn fetch + ff
 #   WT_LAYOUT=        pane|window|session (default: window)
 #   WT_CLAUDE='claude'  full bypass of model/permission flags
-#   WT_MODEL=opus     model override (default: sonnet)
+#   WT_MODEL=sonnet   model override (default: opus)
 #   WT_DRY_RUN=1      DAG mode only — print what would spawn, don't actually
 #   WT_DAG=1          equivalent to --dag flag
 #
@@ -50,15 +53,21 @@ set -euo pipefail
 
 mode="single"
 type_prefix="${WT_TYPE:-feature}"
+branch_override=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dag)     mode="dag";     shift ;;
     --resolve) mode="resolve"; shift ;;
+    --ralph)   mode="ralph";   shift ;;
     --type)
       [[ -z "${2:-}" ]] && { echo "wt: --type requires an argument" >&2; exit 1; }
       type_prefix="$2"; shift 2 ;;
     --type=*)  type_prefix="${1#--type=}"; shift ;;
+    --branch)
+      [[ -z "${2:-}" ]] && { echo "wt: --branch requires an argument" >&2; exit 1; }
+      branch_override="$2"; shift 2 ;;
+    --branch=*) branch_override="${1#--branch=}"; shift ;;
     -h|--help) sed -n '2,/^$/{ s/^# \?//; p; }' "$0"; exit 0 ;;
     --)        shift; break ;;
     -*)        echo "wt: unknown flag $1 (try --help)" >&2; exit 1 ;;
@@ -66,6 +75,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 [[ "${WT_DAG:-}" == "1" && "$mode" == "single" ]] && mode="dag"
+
+# --branch only makes sense for a single lane on a pre-existing branch.
+[[ -n "$branch_override" && "$mode" != "single" ]] \
+  && { echo "wt: --branch is single-lane only (not valid with --dag/--resolve)" >&2; exit 1; }
 
 # Sanitize type prefix: lowercase, alnum + dash only.
 type_prefix=$(printf '%s' "$type_prefix" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9-]//g')
@@ -92,6 +105,26 @@ derive_descriptor_from_plan() {
   printf '%s' "$desc"
 }
 
+# Find a synced ticket file by ID anywhere under ~/.claude/tickets/ (nested by parent).
+find_ticket_file() {
+  find "$HOME/.claude/tickets" -name "$1.md" -type f 2>/dev/null | head -1
+}
+
+# Derive a slug descriptor from a synced ticket file's frontmatter `title:`.
+derive_descriptor_from_ticket() {
+  local ticket_file=$1 title desc
+  [[ -f "$ticket_file" ]] || return 1
+  title=$(awk '/^title:/{ sub(/^title:[[:space:]]*/, ""); print; exit }' "$ticket_file")
+  [[ -z "$title" ]] && return 1
+  desc=$(printf '%s' "$title" \
+    | tr '[:upper:]' '[:lower:]' \
+    | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' \
+    | cut -c1-50 \
+    | sed -E 's/-+$//')
+  [[ -z "$desc" ]] && return 1
+  printf '%s' "$desc"
+}
+
 # Detect Linear-style ticket: TEAM-NNNN, optionally with -descriptor suffix.
 #   TEAM-1530              → ticket=TEAM-1530, slug=team-1530-<derived>, plan=TEAM-1530.md
 #   TEAM-1530-pr-feedback  → ticket=TEAM-1530, slug=team-1530-pr-feedback,
@@ -99,9 +132,11 @@ derive_descriptor_from_plan() {
 #   raw-feature-x        → no ticket, slug=raw-feature-x
 ticket=""
 plan_slug=""
+ticket_file=""
 if [[ "$raw" =~ ^([A-Za-z]+-[0-9]+)(-.+)?$ ]]; then
   ticket=$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:lower:]' '[:upper:]')
   ticket_lower=$(printf '%s' "$ticket" | tr '[:upper:]' '[:lower:]')
+  ticket_file=$(find_ticket_file "$ticket")
   tail="${BASH_REMATCH[2]:-}"
   if [[ -n "$tail" ]]; then
     descriptor="${tail#-}"
@@ -109,8 +144,7 @@ if [[ "$raw" =~ ^([A-Za-z]+-[0-9]+)(-.+)?$ ]]; then
     plan_slug="${ticket}${tail}"
   else
     plan_slug="$ticket"
-    plan_file="$HOME/.claude/plans/${ticket}.md"
-    descriptor=$(derive_descriptor_from_plan "$plan_file" "$ticket" || true)
+    descriptor=$(derive_descriptor_from_ticket "$ticket_file" || true)
     if [[ -z "$descriptor" ]]; then
       slug="$ticket_lower"
     else
@@ -156,18 +190,36 @@ spawn_lane() {
     return 0
   fi
 
-  if [[ ! -d "$s_wt" ]]; then
-    if git -C "$repo" rev-parse --verify "$s_branch" >/dev/null 2>&1; then
+  # If the branch is already checked out in an existing worktree, reuse it —
+  # git forbids a second checkout of the same branch (common when picking up
+  # feedback on a PR whose lane worktree is still around).
+  local existing_wt
+  existing_wt=$(git -C "$repo" worktree list --porcelain \
+    | awk -v b="refs/heads/$s_branch" '
+        /^worktree /{ wt = substr($0, 10) }
+        /^branch /{ if ($2 == b) { print wt; exit } }')
+  if [[ -n "$existing_wt" ]]; then
+    echo "wt: branch '$s_branch' already checked out at $existing_wt — reusing it"
+    s_wt="$existing_wt"
+  elif [[ ! -d "$s_wt" ]]; then
+    # Local branch or remote-only branch (e.g. a PR head fetched into origin/*)
+    # → check it out as-is; git DWIMs a tracking branch from origin/<name>.
+    # Otherwise create a fresh branch off HEAD.
+    if git -C "$repo" rev-parse --verify "$s_branch" >/dev/null 2>&1 \
+       || git -C "$repo" rev-parse --verify "origin/$s_branch" >/dev/null 2>&1; then
       git -C "$repo" worktree add "$s_wt" "$s_branch"
     else
       git -C "$repo" worktree add "$s_wt" -b "$s_branch"
     fi
   fi
 
-  local existing port
-  existing=$(find "$wt_dir" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
-  port=$((3099 + existing))
-  printf 'PORT=%s\n' "$port" > "$s_wt/.env.local.port"
+  # Per-lane port: stamp once. A reused worktree keeps the port it already has.
+  if [[ ! -f "$s_wt/.env.local.port" ]]; then
+    local existing port
+    existing=$(find "$wt_dir" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | wc -l | tr -d ' ')
+    port=$((3099 + existing))
+    printf 'PORT=%s\n' "$port" > "$s_wt/.env.local.port"
+  fi
 
   mkdir -p "$s_wt/.claude"
   echo "IDLE" > "$s_wt/.claude/agent-state"
@@ -185,7 +237,7 @@ JSON
   fi
 
   local claude_bin claude_cmd
-  claude_bin="${WT_CLAUDE:-claude --dangerously-skip-permissions --model ${WT_MODEL:-sonnet}}"
+  claude_bin="${WT_CLAUDE:-claude --dangerously-skip-permissions --model ${WT_MODEL:-opus}}"
   claude_cmd="$claude_bin"
   [[ -n "$s_initial" ]] && claude_cmd="$claude_bin $(printf '%q' "$s_initial")"
 
@@ -216,20 +268,28 @@ JSON
   fi
 }
 
-# ---- single-lane mode (default, unchanged behavior) -----------------------
+# ---- single-lane + ralph modes --------------------------------------------
 
-if [[ "$mode" == "single" ]]; then
+if [[ "$mode" == "single" || "$mode" == "ralph" ]]; then
+  if [[ "$mode" == "ralph" && -z "$ticket" ]]; then
+    echo "wt: --ralph requires a Linear-style epic ID (e.g. wt --ralph TEAM-1600)" >&2
+    exit 1
+  fi
+
   wt_path="$wt_dir/$slug"
-  branch="${type_prefix}/${slug}"
+  branch="${branch_override:-${type_prefix}/${slug}}"
+
+  review_rule="Review findings: apply blocker/major fixes directly in the PR branch (commit + push), do NOT post them as PR comments. Never run \`gh pr comment\`, \`gh pr review --comment\`, or any \`gh\` command that writes to the PR conversation. Minor/NB findings: include in the final report only."
+  brief_ref="${ticket_file:-~/.claude/tickets/<PARENT>/${ticket}.md}"
 
   initial=""
-  if [[ -n "$ticket" ]]; then
-    plan="$HOME/.claude/plans/${plan_slug}.md"
-    review_rule="Review findings: apply blocker/major fixes directly in the PR branch (commit + push), do NOT post them as PR comments. Never run \`gh pr comment\`, \`gh pr review --comment\`, or any \`gh\` command that writes to the PR conversation. Minor/NB findings: include in the final report only."
-    if [[ -f "$plan" ]]; then
-      initial="Autonomous mode. Plan at ${plan}. Read it. Implement every slice end-to-end: per slice run type-check + tests (use \`bun test\` in example-org-agent), commit per layer (schema → backend → frontend), then move on. After the final slice, run /ship to open the PR and run a full review. ${review_rule} Stop only when the PR is open and review-driven fixes are pushed. If you hit a genuine blocker (ambiguity not resolvable from the plan, repeated test failure on the same root cause, missing credential), stop and report — do not guess. Do not ask for confirmation between slices."
+  if [[ "$mode" == "ralph" ]]; then
+    initial="Autonomous mode — Ralph loop. Step 1: run \`ralph-bootstrap\` to set up scripts/ralph/ in this worktree. Step 2: read the epic brief at ${brief_ref}. Step 3: run /prd on it, then /ralph to convert to scripts/ralph/prd.json. Step 4: run \`./scripts/ralph/ralph.sh --tool claude\` — it works one story per fresh-context iteration, committing as it goes. When all stories pass (<promise>COMPLETE</promise>), run /ship to open the PR. ${review_rule} Stop only on COMPLETE + PR open, or a genuine blocker (missing credential, repeated failure same root cause)."
+  elif [[ -n "$ticket" ]]; then
+    if [[ -n "$ticket_file" ]]; then
+      initial="Autonomous mode. Brief at ${ticket_file}. Read it. Plan slices inline — no separate scoping pass. Use /grill-with-docs if the brief is thin, /tdd for the change loop, /handoff at the context threshold instead of compacting. Per slice: type-check + tests (use \`bun test\` in example-org-agent), commit per layer (schema → backend → frontend). After the final slice, run /ship to open the PR and trigger review. ${review_rule} Stop only when the PR is open and review-driven fixes are pushed. Genuine blocker (ambiguity not in the brief, repeated test failure same root cause, missing credential) → stop and report. No inter-slice confirmation."
     else
-      initial="Autonomous mode. Run /ticket-pickup ${ticket} first to scope (it will write ~/.claude/plans/${ticket}.md). Then implement every slice end-to-end per the plan: type-check + tests per slice, commit per layer, no inter-slice confirmation. After the final slice, run /ship. ${review_rule} Stop only when the PR is open and review-driven fixes are pushed. Stop early only on a genuine blocker (ambiguity, repeated failure, missing credential)."
+      initial="Autonomous mode. No synced brief found at ~/.claude/tickets/**/${ticket}.md — run /sync-from-linear first to pull it locally. Then read the brief, plan slices inline, /tdd loop, commit per layer, /handoff at context threshold, /ship at the end. ${review_rule} Stop only when the PR is open and review-driven fixes are pushed."
     fi
   fi
 
