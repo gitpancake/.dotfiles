@@ -29,8 +29,9 @@ dotfiles/
 │   │                                 #   database, fullstack, platform, infra, deploy,
 │   │                                 #   bugfinder, plan-lint, verifier
 │   ├── commands/                     # Slash commands — /sync-from-linear, /sync-to-linear,
-│   │                                 #   /rescope, /read-ticket, /ship, /address-feedback,
-│   │                                 #   /linear-review, /simplify, /retrospective
+│   │                                 #   /scope, /rescope, /read-ticket, /ship,
+│   │                                 #   /address-feedback, /linear-review, /simplify,
+│   │                                 #   /retrospective
 │   ├── skills/                       # Cherry-picked mattpocock skills — grill-with-docs,
 │   │                                 #   to-prd, to-issues, tdd, diagnose, handoff
 │   ├── ralph/                        # Vendored Ralph loop — ralph.sh + CLAUDE.md.template
@@ -191,6 +192,8 @@ Linear is a boundary touched twice — pull briefs in, push completed work out. 
 ```
 /sync-from-linear            → batch-pull your tickets to ~/.claude/tickets/<PARENT>/<ID>.md
                                (morning / when taking on new work — not per pickup)
+/scope <free text>           → engineer a local brief at ~/.claude/tickets/_loose/DRAFT-<N>.md
+                               (fresh idea with no Linear ticket yet — no Linear write)
 wt <ID>                      → autonomous lane: reads the brief, plans slices inline,
                                leans on grill-with-docs / tdd / handoff, commits per layer
 wt --ralph <EPIC>            → Ralph loop in a lane: one story per fresh-context iteration

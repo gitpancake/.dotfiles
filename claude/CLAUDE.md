@@ -26,6 +26,7 @@ Subagents and slash commands self-describe via Agent/skills schemas — don't li
 
 - **Regular ticket** → `wt <TICKET>` spawns an autonomous lane that reads the synced brief, plans slices inline, leans on the `grill-with-docs` / `tdd` / `handoff` skills, commits per layer, `/ship` at the end.
 - **Epic** → `wt --ralph <EPIC>` runs the Ralph autonomous loop in the lane: one story per fresh-context iteration, memory via git + `progress.txt` + `prd.json`.
+- **Fresh idea, no ticket** → `/scope <free text>` engineers a local brief at `~/.claude/tickets/_loose/DRAFT-<N>.md` (no Linear write); `wt DRAFT-<N>` picks it up.
 
 **Autonomous semantics.** `wt` lanes fire-and-forget. A lane stops only on: (1) PR open + review triggered, (2) genuine blocker (ambiguity not in the brief, repeated test failure same root cause, missing credential). Brief missing → lane asks for `/sync-from-linear` first. Slice protocol + parallel-lane gotchas: `~/.dotfiles/CLAUDE.md`.
 
