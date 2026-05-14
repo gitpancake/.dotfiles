@@ -85,7 +85,7 @@ type_prefix=$(printf '%s' "$type_prefix" | tr '[:upper:]' '[:lower:]' | sed -E '
 [[ -z "$type_prefix" ]] && { echo "wt: invalid --type prefix" >&2; exit 1; }
 
 raw=${1:-}
-[[ -z "$raw" ]] && { echo "usage: wt [--dag|--resolve] [--type <prefix>] <task-slug-or-ticket>" >&2; exit 1; }
+[[ -z "$raw" ]] && { echo "usage: wt [--ralph|--dag|--resolve] [--type <prefix>] <task-slug-or-ticket>" >&2; exit 1; }
 
 # Derive a slug descriptor from the plan's first heading.
 #   '# TEAM-1530 — Add foo bar' → 'add-foo-bar'
