@@ -10,7 +10,7 @@ mkdir -p ~/.oh-my-zsh/custom/themes
 ln -sf "$DOTFILES_DIR/zsh/robbyrussell-bar.zsh-theme" ~/.oh-my-zsh/custom/themes/robbyrussell-bar.zsh-theme
 
 # Claude Code
-mkdir -p ~/.claude ~/.claude/hooks ~/.claude/commands ~/.claude/agents ~/.claude/skills ~/.claude/scripts ~/.claude/logs
+mkdir -p ~/.claude ~/.claude/hooks ~/.claude/commands ~/.claude/agents ~/.claude/skills ~/.claude/scripts ~/.claude/handoffs ~/.claude/logs
 ln -sf "$DOTFILES_DIR/claude/statusline-command.sh" ~/.claude/statusline-command.sh
 ln -sf "$DOTFILES_DIR/claude/transcript-costs.sh" ~/.claude/transcript-costs.sh
 ln -sf "$DOTFILES_DIR/claude/settings.json" ~/.claude/settings.json
