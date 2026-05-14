@@ -12,13 +12,13 @@
 # Single-lane behavior:
 #   The task arg resolves to a brief, in order: Linear id (frontmatter `linear:`),
 #   then slug (filename), then epic folder name. Contract: ~/.claude/tickets/README.md.
-#   wt teams-error-mapping          # slug → ~/.claude/tickets/<area>/teams-error-mapping.md
-#   wt AE-1692                      # Linear id → brief whose frontmatter `linear:` matches
+#   wt auth-refactor                # slug → ~/.claude/tickets/<area>/auth-refactor.md
+#   wt TEAM-1234                    # Linear id → brief whose frontmatter `linear:` matches
 #                                   (run /sync-from-linear first if the brief is missing)
 #   wt raw-throwaway-slug           # slug with no brief → worktree only, no auto-kickoff
 #   wt --ralph billing-epic         # epic (folder with _epic.md) → lane runs epic-parse.sh
 #                                   then ralph.sh; /epic confirms the story order first
-#   wt teams-error-mapping-round-2  # trailing descriptor → 2nd lane on the same brief
+#   wt auth-refactor-round-2        # trailing descriptor → 2nd lane on the same brief
 #   wt --type fix some-bug-slug     # branch fix/some-bug-slug
 #
 # Type prefix defaults to `feature`. Override with --type or WT_TYPE env.
@@ -205,9 +205,9 @@ derive_descriptor_from_ticket() {
 }
 
 # Resolve <raw> to a brief + worktree slug.
-#   AE-1692                → resolve by Linear id; slug = the brief's own slug
-#   AE-1692-pr-feedback    → resolve AE-1692; slug = ae-1692-pr-feedback (2nd lane on it)
-#   teams-error-mapping    → resolve by slug, then epic folder name; slug = arg as-is
+#   TEAM-1234              → resolve by Linear id; slug = the brief's own slug
+#   TEAM-1234-pr-feedback  → resolve TEAM-1234; slug = team-1234-pr-feedback (2nd lane on it)
+#   auth-refactor          → resolve by slug, then epic folder name; slug = arg as-is
 ticket=""
 slug=""
 ticket_file=""

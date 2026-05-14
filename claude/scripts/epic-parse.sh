@@ -10,11 +10,11 @@
 #   <!-- epic-stories:start -->
 #   stories:
 #     - id: 01-error-mapping
-#       title: Teams adapter — typed XError code mapping
+#       title: Adapter — typed error code mapping
 #       needs: []
 #       context: 01-error-mapping.md
 #     - id: 02-attachment-handling
-#       title: Teams adapter — attachment passthrough
+#       title: Adapter — attachment passthrough
 #       needs: [01-error-mapping]
 #       context: 02-attachment-handling.md
 #   <!-- epic-stories:end -->

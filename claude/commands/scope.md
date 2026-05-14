@@ -60,7 +60,7 @@ test command, vendor-proxy routing). Org-specific specifics live in that gitigno
 No counter, no `DRAFT-N`. **The filename is the handle.**
 
 - **Slug** — kebab-case, ≤40 chars, descriptive. Derive it from the end state:
-  `teams-error-mapping`, not `draft-7`.
+  `auth-refactor`, not `draft-7`.
 - **Area** — one of the buckets in `~/.claude/tickets/` (`integrations`, `platform`, `ops`,
   `tooling`, `spikes`). Pick the closest; ask only if genuinely ambiguous.
 - **Shape** — single ticket or epic (from §1).

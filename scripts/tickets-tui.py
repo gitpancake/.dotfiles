@@ -16,8 +16,8 @@ from pathlib import Path
 TICKETS_DIR = Path(os.environ.get("TICKETS_DIR", Path.home() / ".claude" / "tickets"))
 
 # Linear workspace slug — used to derive a ticket URL from its `linear:` id.
-# Override with LINEAR_WORKSPACE if the workspace ever changes.
-LINEAR_WORKSPACE = os.environ.get("LINEAR_WORKSPACE", "<org>")
+# Set LINEAR_WORKSPACE in the environment; unset → no derived URL.
+LINEAR_WORKSPACE = os.environ.get("LINEAR_WORKSPACE", "")
 
 # Files under TICKETS_DIR that are not tickets — skipped by the loader.
 META_FILES = {"README.md", "_TEMPLATE.md", "_EPIC-TEMPLATE.md", "_CHILD-TEMPLATE.md"}
@@ -82,9 +82,10 @@ class Ticket:
         self.epic = fm.get("epic", "") or fm.get("parent", "")
         self.area = fm.get("area", "")
         self.status = fm.get("status", "").strip() or ("open" if self.is_epic else "")
-        # URL is derived from `linear:`; a legacy stored `url:` is the fallback.
+        # URL is derived from `linear:` when LINEAR_WORKSPACE is set; a legacy
+        # stored `url:` is the fallback.
         self.url = (f"https://linear.app/{LINEAR_WORKSPACE}/issue/{self.linear}"
-                    if self.linear else fm.get("url", ""))
+                    if self.linear and LINEAR_WORKSPACE else fm.get("url", ""))
         self.title = clean_title(fm.get("title", self.slug), self.slug)
         self.group = path.parent.name
 
