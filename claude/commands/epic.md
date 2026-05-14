@@ -1,38 +1,40 @@
 ---
-description: Pick up an epic and spawn an autonomous Ralph lane — accepts a single epic brief OR a folder of child tickets, which it orders into a story list first.
-argument-hint: <EPIC|EPIC-FOLDER> <BASE-BRANCH> [extra context...]
+description: Pick up an epic — confirm its ordered story list, then spawn an autonomous Ralph lane.
+argument-hint: <EPIC> <BASE-BRANCH> [extra context...]
 ---
 
 # /epic $ARGUMENTS
 
-Spawns `wt --ralph` — a lane running the Ralph autonomous loop. Two epic shapes:
+Spawns `wt --ralph` — a lane running the Ralph autonomous loop over an epic.
 
-- **Single-brief epic** — one brief at `~/.claude/tickets/**/<EPIC>.md`. The lane runs `/prd` → `/ralph` to synthesize its own story list.
-- **Folder epic** — a directory `~/.claude/tickets/<EPIC>/` of child ticket `.md` files (e.g. `billing-epic/` with a couple dozen tickets). The decomposition already happened in Linear, so `/epic` runs **one planning pass** to order the children into a `_prd.json` story list — then the lane consumes it directly, no `/prd` / `/ralph` re-synthesis.
+An **epic** is a folder with an `_epic.md` at its root — the durable, Ralph-ready PRD
+(contract: `~/.claude/tickets/README.md`). `_epic.md` carries the `<!-- epic-stories:start -->`
+block: the authoritative ordered story list + dependency DAG. `/epic` confirms that order with
+user, then spawns the lane. The lane runs `epic-parse.sh` to project `_epic.md` into
+`scripts/ralph/prd.json` and executes it — **Ralph never decomposes; it executes a confirmed
+list.** There is one epic shape. No `.epics.json`, no in-lane `/prd` + `/ralph` synthesis.
 
-Syncs the cockpit to a base branch, folds in any extra context, spawns the lane. Do **not** edit
-project source — this command only prepares and spawns.
+Syncs the cockpit to a base branch, folds in any extra context, spawns the lane. Do **not**
+edit project source — this command only prepares and spawns.
 
 ## 1. Parse
 
 `$ARGUMENTS` = `<EPIC> <BASE> [context...]`:
-- **token 1** — `EPIC` (required). A Linear epic ID, `DRAFT-<N>`, or a folder slug under
-  `~/.claude/tickets/` (e.g. `billing-epic`). Empty → ask, stop.
-- **token 2** — `BASE` (required). Base branch to spawn off. `.` = use the cockpit's
-  current branch as-is.
+- **token 1** — `EPIC` (required). An epic folder slug, a Linear epic id, or an `_epic.md`
+  path — `wt --print-brief` resolves all three. Empty → ask, stop.
+- **token 2** — `BASE` (required). Base branch to spawn off. `.` = cockpit's current branch.
 - **rest** — `CONTEXT` (optional). Free-text notes for the lane.
 
-## 2. Locate the epic — two shapes
+## 2. Resolve the epic
 
-Resolve `EPIC`, in order:
+`wt --print-brief <EPIC>` → `EPIC_MD`.
+- **Non-zero exit / no path** → stop. Tell user: `/sync-from-linear` (real Linear epic) or
+  `/scope` (fresh idea) first.
+- **Resolved, but the path is not an `_epic.md`** → it's a single ticket, not an epic. Stop.
+  Tell user: `/scope` it into an epic folder first (an `_epic.md` + `NN-<child>.md`
+  children), or `wt <EPIC>` to work it as a single ticket.
 
-1. **Single-brief** — `find ~/.claude/tickets -name "<EPIC>.md" -type f`. Hit, and the file is a
-   real brief (not a `moved -> ` tombstone) → `SHAPE=brief`, `BRIEF=<that file>`.
-2. **Folder** — `~/.claude/tickets/<EPIC>/` is a directory with `.md` children. Or `<EPIC>` is a
-   key in `~/.claude/tickets/.epics.json` whose mapped slug dir exists. → `SHAPE=folder`,
-   `FOLDER=<that dir>`, `SLUG=<dir basename>`.
-3. **Neither** → stop. Tell user: `/sync-from-linear` (real Linear epic) or `/scope`
-   (fresh idea) first.
+`EPIC_DIR` = the directory holding `EPIC_MD`. `SLUG` = its basename.
 
 ## 3. Sync the cockpit to BASE
 
@@ -47,91 +49,49 @@ git merge --ff-only "origin/<BASE>"
 
 ff-merge fails (dirty tree / diverged) → stop, surface it. Never force.
 
-## 4a. SHAPE=brief — fold context, spawn
+## 4. Fold in context — only if `CONTEXT` non-empty
 
-If `CONTEXT` non-empty, append to `BRIEF` under `## Local notes` (create that section at end of
-file if missing):
+Append to `EPIC_MD` under `## Local notes` (create that section at end of file if missing):
 
 ```
 ### Epic note — <ISO-8601 date>
 <CONTEXT>
 ```
 
-Then spawn:
+It rides with the epic — every Ralph iteration reads `_epic.md`.
 
-```bash
-wt --ralph <EPIC>
-```
+## 5. Confirm the story order
 
-The lane: `ralph-bootstrap` → reads `BRIEF` → `/prd` → `/ralph` (→ `scripts/ralph/prd.json`) →
-`./scripts/ralph/ralph.sh --tool claude`, one story per fresh-context iteration → `/ship` on
-`<promise>COMPLETE</promise>`.
+Read the `<!-- epic-stories:start -->` block in `EPIC_MD`. Print a terse numbered list —
+`priority  id  title`, plus each story's `needs` edges. This block *is* the decomposition;
+user confirms it before the lane runs. Ralph will not re-plan it.
 
-## 4b. SHAPE=folder — planning pass, then spawn
+Ask: spawn the Ralph lane with this order, or stop so he can edit the block in `EPIC_MD`
+first? **Wait for "go".**
 
-The child tickets *are* the decomposition. Don't re-synthesize — order them.
-
-**Read every child.** All `.md` files directly under `FOLDER`. Skip:
-- tombstones — files whose only content is `moved -> ...`
-- generated files — anything matching `_*` (e.g. a prior `_prd.json`)
-
-**Order them.** One planning pass over all children. Sequence by dependency: schema / infra /
-shared-primitive tickets first, their consumers next, UI / polish / docs last. Use each ticket's
-`## Context`, `## Acceptance criteria`, title, and any `parent:` hint. Dedupe tickets that fully
-overlap — fold the loser's AC into the winner's `notes`.
-
-**Build `<FOLDER>/_prd.json`.** One child ticket = one story, in dependency order:
-
-```json
-{
-  "project": "<folder slug>",
-  "branchName": "",
-  "description": "<one-line epic summary; prepend CONTEXT if non-empty>",
-  "userStories": [
-    {
-      "id": "<TICKET-ID>",
-      "title": "<ticket title>",
-      "description": "<ticket ## Context, condensed to 1-3 sentences>",
-      "acceptanceCriteria": ["<from ticket ## Acceptance criteria, verbatim>", "Typecheck passes"],
-      "priority": 1,
-      "passes": false,
-      "notes": ""
-    }
-  ]
-}
-```
-
-- `priority` = 1-based position in the order.
-- AC reads "none specified in Linear" → derive 1-2 concrete criteria from the ticket's Context.
-  Always include `"Typecheck passes"`.
-- `branchName` stays `""` — the lane stamps it from its actual branch.
-
-**Show user the order and confirm.** Print a terse numbered list (`priority  ID  title`) and
-ask: spawn the Ralph lane with this order, or stop so he can edit `_prd.json` first? Wait for go.
-
-**Spawn:**
+## 6. Spawn
 
 ```bash
 wt --ralph <SLUG>
 ```
 
-`wt --ralph <slug>` (a bare slug, not a ticket ID) finds `<FOLDER>/_prd.json`, branches off the
-now-current `BASE`, and the lane: `ralph-bootstrap` → copies `_prd.json` → `scripts/ralph/prd.json`
-→ stamps `branchName` + tunes `scripts/ralph/CLAUDE.md` test commands → `./scripts/ralph/ralph.sh
---tool claude`, one story per fresh-context iteration → `/ship` on `<promise>COMPLETE</promise>`.
-It does **not** run `/prd` or `/ralph` — the story list is already built and ordered.
+`wt --ralph <slug>` resolves the epic folder, branches off the now-current `BASE`, and the
+lane: `ralph-bootstrap` → `~/.claude/scripts/epic-parse.sh <EPIC_MD> > scripts/ralph/prd.json`
+→ stamps `branchName` + tunes `scripts/ralph/CLAUDE.md` test commands →
+`./scripts/ralph/ralph.sh --tool claude`, one story per fresh-context iteration → `/ship` on
+`<promise>COMPLETE</promise>`.
 
-Branch type defaults to `feature/` — override with `wt --ralph --type <prefix> <SLUG>` directly
-instead.
+Branch type defaults to `feature/` — override with `wt --ralph --type <prefix> <SLUG>`.
 
-## 5. Report, then stop
+## 7. Report, then stop
 
-> Ralph lane spawned off `<BASE>`. Autonomous epic loop running in new tmux window — <N> stories
-> from `<FOLDER or BRIEF>`. This pane is done.
+> Ralph lane spawned off `<BASE>`. Autonomous epic loop running in a new tmux window —
+> <N> stories from `<EPIC_MD>`. This pane is done.
 
 ## Stop conditions
 
-- Missing `EPIC` / `BASE`, or epic not found (neither brief nor folder) — ask or report, stop.
+- Missing `EPIC` / `BASE`, or epic not found — ask or report, stop.
+- Resolved to a single ticket, not an `_epic.md` — stop; tell user to `/scope` it into an epic.
 - ff-merge failure — surface, stop.
-- `SHAPE=folder` and user doesn't confirm the order — stop, leave `_prd.json` for him to edit.
+- user doesn't confirm the story order — stop, leave `EPIC_MD` for him to edit.
 - After spawn — done. Don't follow the lane.

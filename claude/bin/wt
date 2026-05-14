@@ -16,9 +16,8 @@
 #   wt AE-1692                      # Linear id → brief whose frontmatter `linear:` matches
 #                                   (run /sync-from-linear first if the brief is missing)
 #   wt raw-throwaway-slug           # slug with no brief → worktree only, no auto-kickoff
-#   wt --ralph TEAM-1600            # single-brief epic → lane runs /prd + /ralph, then the loop
-#   wt --ralph billing-epic         # folder epic → consumes ~/.claude/tickets/<slug>/_prd.json
-#                                   (built by /epic); lane skips /prd + /ralph
+#   wt --ralph billing-epic         # epic (folder with _epic.md) → lane runs epic-parse.sh
+#                                   then ralph.sh; /epic confirms the story order first
 #   wt teams-error-mapping-round-2  # trailing descriptor → 2nd lane on the same brief
 #   wt --type fix some-bug-slug     # branch fix/some-bug-slug
 #
@@ -380,20 +379,13 @@ if [[ "$mode" == "single" || "$mode" == "ralph" ]]; then
 
   initial=""
   if [[ "$mode" == "ralph" ]]; then
-    if [[ -n "$ticket" && "$is_epic" == "0" ]]; then
-      # Single-brief epic: one brief, the lane synthesizes its own story list via /prd + /ralph.
-      brief_ref="${ticket_file:-~/.claude/tickets/<PARENT>/${ticket}.md}"
-      initial="Autonomous mode — Ralph loop. Step 1: run \`ralph-bootstrap\` to set up scripts/ralph/ in this worktree. Step 2: read the epic brief at ${brief_ref}. Step 3: run /prd on it, then /ralph to convert to scripts/ralph/prd.json. Step 4: run \`./scripts/ralph/ralph.sh --tool claude\` — it works one story per fresh-context iteration, committing as it goes. When all stories pass (<promise>COMPLETE</promise>), run /ship to open the PR. ${review_rule} Stop only on COMPLETE + PR open, or a genuine blocker (missing credential, repeated failure same root cause)."
-    else
-      # Folder epic: /epic already ordered the child tickets into a pre-built story list.
-      epic_prd="$HOME/.claude/tickets/${slug}/_prd.json"
-      if [[ ! -f "$epic_prd" ]]; then
-        echo "wt: --ralph needs a Linear-style epic ID or a pre-built story list." >&2
-        echo "    No story list at ${epic_prd} — run \`/epic ${slug} <base>\` first to order the child tickets." >&2
-        exit 1
-      fi
-      initial="Autonomous mode — Ralph loop (folder epic). Step 1: run \`ralph-bootstrap\` to set up scripts/ralph/ in this worktree. Step 2: copy the pre-built, pre-ordered story list — \`cp ${epic_prd} scripts/ralph/prd.json\`. Step 3: stamp the prd.json \`branchName\` with this lane's branch (\`git branch --show-current\`) via jq, and tune \`scripts/ralph/CLAUDE.md\` typecheck/test commands for this repo. Do NOT run /prd or /ralph — the story list is already built and ordered, one child ticket per story. Step 4: run \`./scripts/ralph/ralph.sh --tool claude\` — it works one story per fresh-context iteration, committing as it goes. When all stories pass (<promise>COMPLETE</promise>), run /ship to open the PR. ${review_rule} Stop only on COMPLETE + PR open, or a genuine blocker (missing credential, repeated failure same root cause)."
+    if [[ "$is_epic" != "1" ]]; then
+      echo "wt: --ralph needs an epic — a folder with an _epic.md at its root." >&2
+      echo "    '$raw' did not resolve to an epic. /scope it into an epic folder first," >&2
+      echo "    or run \`wt $raw\` to work it as a single ticket." >&2
+      exit 1
     fi
+    initial="Autonomous mode — Ralph loop. Step 1: run \`ralph-bootstrap\` to set up scripts/ralph/ in this worktree. Step 2: project the epic's story list — \`~/.claude/scripts/epic-parse.sh ${ticket_file} > scripts/ralph/prd.json\`. Step 3: stamp the prd.json \`branchName\` with this lane's branch (\`git branch --show-current\`) via jq, and tune \`scripts/ralph/CLAUDE.md\` typecheck/test commands for this repo. Step 4: run \`./scripts/ralph/ralph.sh --tool claude\` — one story per fresh-context iteration, committing as it goes. The _epic.md is the source of truth; each story's NN-<child>.md carries its deep context. When all stories pass (<promise>COMPLETE</promise>), run /ship to open the PR. ${review_rule} Stop only on COMPLETE + PR open, or a genuine blocker (missing credential, repeated failure same root cause)."
   elif [[ -n "$ticket_file" ]]; then
     initial="Autonomous mode. Brief at ${ticket_file}. Read it. Plan slices inline — no separate scoping pass. Use /grill-with-docs if the brief is thin, /tdd for the change loop, /handoff at the context threshold instead of compacting. Per slice: type-check + tests (use the project's test command), commit per layer (schema → backend → frontend). After the final slice, run /ship to open the PR and trigger review. ${review_rule} Stop only when the PR is open and review-driven fixes are pushed. Genuine blocker (ambiguity not in the brief, repeated test failure same root cause, missing credential) → stop and report. No inter-slice confirmation."
   elif [[ -n "$ticket" ]]; then
