@@ -7,17 +7,20 @@
 #   wt --branch <name> [--type ...] <slug>         # single lane on an existing branch (e.g. a PR head)
 #   wt --dag [--type <prefix>] <TICKET>            # parse plan DAG, spawn ready-set lanes (dormant)
 #   wt --resolve [--type <prefix>] <TICKET>        # re-spawn ready-set after slices merged (dormant)
+#   wt --print-brief <task-slug-or-ticket>         # resolve + print the brief path, then exit
 #
 # Single-lane behavior:
-#   wt team-1234                    # raw slug → worktree only, no auto-kickoff
-#   wt TEAM-1234                    # bare Linear ticket → reads the synced brief at
-#                                   ~/.claude/tickets/<PARENT>/TEAM-1234.md and works it
+#   The task arg resolves to a brief, in order: Linear id (frontmatter `linear:`),
+#   then slug (filename), then epic folder name. Contract: ~/.claude/tickets/README.md.
+#   wt teams-error-mapping          # slug → ~/.claude/tickets/<area>/teams-error-mapping.md
+#   wt AE-1692                      # Linear id → brief whose frontmatter `linear:` matches
 #                                   (run /sync-from-linear first if the brief is missing)
+#   wt raw-throwaway-slug           # slug with no brief → worktree only, no auto-kickoff
 #   wt --ralph TEAM-1600            # single-brief epic → lane runs /prd + /ralph, then the loop
-#   wt --ralph billing-epic        # folder epic → consumes ~/.claude/tickets/<slug>/_prd.json
+#   wt --ralph billing-epic         # folder epic → consumes ~/.claude/tickets/<slug>/_prd.json
 #                                   (built by /epic); lane skips /prd + /ralph
-#   wt TEAM-1234-pr-feedback        # explicit descriptor
-#   wt --type fix TEAM-1234-bug-x   # branch fix/team-1234-bug-x
+#   wt teams-error-mapping-round-2  # trailing descriptor → 2nd lane on the same brief
+#   wt --type fix some-bug-slug     # branch fix/some-bug-slug
 #
 # Type prefix defaults to `feature`. Override with --type or WT_TYPE env.
 # Common values: feature, fix, chore, task, refactor.
@@ -62,6 +65,7 @@ while [[ $# -gt 0 ]]; do
     --dag)     mode="dag";     shift ;;
     --resolve) mode="resolve"; shift ;;
     --ralph)   mode="ralph";   shift ;;
+    --print-brief) mode="print-brief"; shift ;;
     --type)
       [[ -z "${2:-}" ]] && { echo "wt: --type requires an argument" >&2; exit 1; }
       type_prefix="$2"; shift 2 ;;
@@ -107,9 +111,83 @@ derive_descriptor_from_plan() {
   printf '%s' "$desc"
 }
 
-# Find a synced ticket file by ID anywhere under ~/.claude/tickets/ (nested by parent).
+TICKETS_DIR="$HOME/.claude/tickets"
+
+# A brief may be a tombstone — first line `moved -> <path>`. Follow it to the real file.
+follow_tombstone() {
+  local f=$1 first target
+  first=$(head -1 "$f" 2>/dev/null)
+  if [[ "$first" =~ ^moved[[:space:]]-\>[[:space:]](.+)$ ]]; then
+    target="${BASH_REMATCH[1]}"
+    target="${target/#\~/$HOME}"
+    [[ -f "$target" ]] && { printf '%s' "$target"; return 0; }
+  fi
+  printf '%s' "$f"
+}
+
+# Find a brief whose frontmatter `linear:` field equals <ID>.
+find_ticket_by_linear() {
+  grep -rlE "^linear:[[:space:]]+$1[[:space:]]*$" "$TICKETS_DIR" --include='*.md' 2>/dev/null | head -1
+}
+
+# Find a brief file named <slug>.md (also matches legacy <ID>.md files mid-migration).
 find_ticket_file() {
-  find "$HOME/.claude/tickets" -name "$1.md" -type f 2>/dev/null | head -1
+  find "$TICKETS_DIR" -name "$1.md" -type f 2>/dev/null | head -1
+}
+
+# Find an epic directory named <slug> that contains an _epic.md.
+find_epic_dir() {
+  local d
+  while IFS= read -r d; do
+    [[ -f "$d/_epic.md" ]] && { printf '%s' "$d"; return 0; }
+  done < <(find "$TICKETS_DIR" -type d -name "$1" 2>/dev/null)
+  return 1
+}
+
+# Read the frontmatter `linear:` id from a brief (empty if none — i.e. a draft).
+read_linear_id() {
+  awk '
+    /^---[[:space:]]*$/ { fm++; next }
+    fm == 1 && /^linear:/ {
+      sub(/^linear:[[:space:]]*/, ""); gsub(/[[:space:]]/, ""); print; exit
+    }
+    fm >= 2 { exit }
+  ' "$1" 2>/dev/null | tr '[:lower:]' '[:upper:]'
+}
+
+# Resolve a bare id-or-slug to a brief. Order: Linear id (frontmatter) → slug
+# (filename) → epic folder name. Sets ticket_file + is_epic. 0 = hit, 1 = miss.
+resolve_brief() {
+  local cand=$1 cand_upper f d
+  cand_upper=$(printf '%s' "$cand" | tr '[:lower:]' '[:upper:]')
+  ticket_file=""
+  is_epic=0
+
+  if [[ "$cand" =~ ^[A-Za-z]+-[0-9]+$ ]]; then
+    f=$(find_ticket_by_linear "$cand_upper")
+    [[ -z "$f" ]] && f=$(find_ticket_file "$cand_upper")   # legacy <ID>.md fallback
+    if [[ -n "$f" ]]; then
+      ticket_file=$(follow_tombstone "$f")
+      [[ "$(basename "$ticket_file")" == "_epic.md" ]] && is_epic=1
+      return 0
+    fi
+  fi
+
+  f=$(find_ticket_file "$cand")
+  if [[ -n "$f" ]]; then
+    ticket_file=$(follow_tombstone "$f")
+    [[ "$(basename "$ticket_file")" == "_epic.md" ]] && is_epic=1
+    return 0
+  fi
+
+  d=$(find_epic_dir "$cand") || d=""
+  if [[ -n "$d" ]]; then
+    ticket_file="$d/_epic.md"
+    is_epic=1
+    return 0
+  fi
+
+  return 1
 }
 
 # Derive a slug descriptor from a synced ticket file's frontmatter `title:`.
@@ -127,34 +205,56 @@ derive_descriptor_from_ticket() {
   printf '%s' "$desc"
 }
 
-# Detect Linear-style ticket: TEAM-NNNN, optionally with -descriptor suffix.
-#   TEAM-1234              → ticket=TEAM-1234, slug=team-1234-<derived>, plan=TEAM-1234.md
-#   TEAM-1234-pr-feedback  → ticket=TEAM-1234, slug=team-1234-pr-feedback,
-#                          plan=TEAM-1234-pr-feedback.md
-#   raw-feature-x        → no ticket, slug=raw-feature-x
+# Resolve <raw> to a brief + worktree slug.
+#   AE-1692                → resolve by Linear id; slug = the brief's own slug
+#   AE-1692-pr-feedback    → resolve AE-1692; slug = ae-1692-pr-feedback (2nd lane on it)
+#   teams-error-mapping    → resolve by slug, then epic folder name; slug = arg as-is
 ticket=""
-plan_slug=""
+slug=""
 ticket_file=""
+plan_slug=""
+is_epic=0
+
 if [[ "$raw" =~ ^([A-Za-z]+-[0-9]+)(-.+)?$ ]]; then
   ticket=$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:lower:]' '[:upper:]')
   ticket_lower=$(printf '%s' "$ticket" | tr '[:upper:]' '[:lower:]')
-  ticket_file=$(find_ticket_file "$ticket")
   tail="${BASH_REMATCH[2]:-}"
+  resolve_brief "$ticket" || true
   if [[ -n "$tail" ]]; then
-    descriptor="${tail#-}"
-    slug="${ticket_lower}-${descriptor}"
+    # Explicit descriptor suffix → a second lane on the same brief.
+    slug="${ticket_lower}${tail}"
     plan_slug="${ticket}${tail}"
   else
     plan_slug="$ticket"
-    descriptor=$(derive_descriptor_from_ticket "$ticket_file" || true)
-    if [[ -z "$descriptor" ]]; then
-      slug="$ticket_lower"
+    if [[ -n "$ticket_file" && "$is_epic" == "1" ]]; then
+      slug=$(basename "$(dirname "$ticket_file")")
+    elif [[ -n "$ticket_file" ]]; then
+      base=$(basename "$ticket_file" .md)
+      if [[ "$base" == "$ticket" ]]; then
+        # Legacy <ID>.md brief — derive a descriptor from its title.
+        descriptor=$(derive_descriptor_from_ticket "$ticket_file" || true)
+        [[ -n "$descriptor" ]] && slug="${ticket_lower}-${descriptor}" || slug="$ticket_lower"
+      else
+        slug="$base"
+      fi
     else
-      slug="${ticket_lower}-${descriptor}"
+      slug="$ticket_lower"
     fi
   fi
 else
   slug=$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')
+  plan_slug="$slug"
+  resolve_brief "$slug" || true
+  [[ -n "$ticket_file" && "$is_epic" == "1" ]] && slug=$(basename "$(dirname "$ticket_file")")
+  [[ -n "$ticket_file" ]] && ticket=$(read_linear_id "$ticket_file")
+fi
+
+# --print-brief: resolve only, print the brief path, exit. /pickup calls this so
+# the resolution logic lives in exactly one place.
+if [[ "$mode" == "print-brief" ]]; then
+  [[ -n "$ticket_file" ]] || { echo "wt: no brief found for '$raw'" >&2; exit 1; }
+  printf '%s\n' "$ticket_file"
+  exit 0
 fi
 
 repo=$(git rev-parse --show-toplevel 2>/dev/null) \
@@ -280,7 +380,7 @@ if [[ "$mode" == "single" || "$mode" == "ralph" ]]; then
 
   initial=""
   if [[ "$mode" == "ralph" ]]; then
-    if [[ -n "$ticket" ]]; then
+    if [[ -n "$ticket" && "$is_epic" == "0" ]]; then
       # Single-brief epic: one brief, the lane synthesizes its own story list via /prd + /ralph.
       brief_ref="${ticket_file:-~/.claude/tickets/<PARENT>/${ticket}.md}"
       initial="Autonomous mode — Ralph loop. Step 1: run \`ralph-bootstrap\` to set up scripts/ralph/ in this worktree. Step 2: read the epic brief at ${brief_ref}. Step 3: run /prd on it, then /ralph to convert to scripts/ralph/prd.json. Step 4: run \`./scripts/ralph/ralph.sh --tool claude\` — it works one story per fresh-context iteration, committing as it goes. When all stories pass (<promise>COMPLETE</promise>), run /ship to open the PR. ${review_rule} Stop only on COMPLETE + PR open, or a genuine blocker (missing credential, repeated failure same root cause)."
@@ -294,12 +394,10 @@ if [[ "$mode" == "single" || "$mode" == "ralph" ]]; then
       fi
       initial="Autonomous mode — Ralph loop (folder epic). Step 1: run \`ralph-bootstrap\` to set up scripts/ralph/ in this worktree. Step 2: copy the pre-built, pre-ordered story list — \`cp ${epic_prd} scripts/ralph/prd.json\`. Step 3: stamp the prd.json \`branchName\` with this lane's branch (\`git branch --show-current\`) via jq, and tune \`scripts/ralph/CLAUDE.md\` typecheck/test commands for this repo. Do NOT run /prd or /ralph — the story list is already built and ordered, one child ticket per story. Step 4: run \`./scripts/ralph/ralph.sh --tool claude\` — it works one story per fresh-context iteration, committing as it goes. When all stories pass (<promise>COMPLETE</promise>), run /ship to open the PR. ${review_rule} Stop only on COMPLETE + PR open, or a genuine blocker (missing credential, repeated failure same root cause)."
     fi
+  elif [[ -n "$ticket_file" ]]; then
+    initial="Autonomous mode. Brief at ${ticket_file}. Read it. Plan slices inline — no separate scoping pass. Use /grill-with-docs if the brief is thin, /tdd for the change loop, /handoff at the context threshold instead of compacting. Per slice: type-check + tests (use the project's test command), commit per layer (schema → backend → frontend). After the final slice, run /ship to open the PR and trigger review. ${review_rule} Stop only when the PR is open and review-driven fixes are pushed. Genuine blocker (ambiguity not in the brief, repeated test failure same root cause, missing credential) → stop and report. No inter-slice confirmation."
   elif [[ -n "$ticket" ]]; then
-    if [[ -n "$ticket_file" ]]; then
-      initial="Autonomous mode. Brief at ${ticket_file}. Read it. Plan slices inline — no separate scoping pass. Use /grill-with-docs if the brief is thin, /tdd for the change loop, /handoff at the context threshold instead of compacting. Per slice: type-check + tests (use the project's test command), commit per layer (schema → backend → frontend). After the final slice, run /ship to open the PR and trigger review. ${review_rule} Stop only when the PR is open and review-driven fixes are pushed. Genuine blocker (ambiguity not in the brief, repeated test failure same root cause, missing credential) → stop and report. No inter-slice confirmation."
-    else
-      initial="Autonomous mode. No synced brief found at ~/.claude/tickets/**/${ticket}.md — run /sync-from-linear first to pull it locally. Then read the brief, plan slices inline, /tdd loop, commit per layer, /handoff at context threshold, /ship at the end. ${review_rule} Stop only when the PR is open and review-driven fixes are pushed."
-    fi
+    initial="Autonomous mode. No synced brief found for ${ticket} — run /sync-from-linear first to pull it locally. Then read the brief, plan slices inline, /tdd loop, commit per layer, /handoff at context threshold, /ship at the end. ${review_rule} Stop only when the PR is open and review-driven fixes are pushed."
   fi
 
   spawn_lane "$slug" "$branch" "$wt_path" "$initial" "${ticket:-$slug}"

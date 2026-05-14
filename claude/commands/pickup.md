@@ -5,23 +5,25 @@ argument-hint: <TICKET> <BASE-BRANCH> [extra context...]
 
 # /pickup $ARGUMENTS
 
-Wraps `wt` for the common pickup: take a brief at `~/.claude/tickets/**/<TICKET>.md`, sync the
-cockpit to a base branch, fold in any extra context, spawn the lane. Do **not** edit project
-source — this command only prepares and spawns.
+Wraps `wt` for the common pickup: resolve a brief from `<TICKET>`, sync the cockpit to a base
+branch, fold in any extra context, spawn the lane. Do **not** edit project source — this
+command only prepares and spawns.
 
 ## 1. Parse
 
 `$ARGUMENTS` = `<TICKET> <BASE> [context...]`:
-- **token 1** — `TICKET` (required). Linear-style ID or `DRAFT-<N>`. Empty → ask, stop.
+- **token 1** — `TICKET` (required). A ticket slug, a Linear id, or an epic folder name —
+  `wt` resolves all three. Empty → ask, stop.
 - **token 2** — `BASE` (required). Base branch to spawn off. `.` = use the cockpit's
   current branch as-is.
 - **rest** — `CONTEXT` (optional). Free-text notes for the lane.
 
 ## 2. Locate the brief
 
-`find ~/.claude/tickets -name "<TICKET>.md" -type f` → `BRIEF`.
-- **Not found** → stop. Tell user: `/sync-from-linear` (real Linear ticket) or `/scope`
-  (fresh idea) first.
+`wt --print-brief <TICKET>` → `BRIEF`. This is the one resolver `wt` itself uses (Linear id →
+slug → epic folder name) — do **not** re-implement the lookup here.
+- **Non-zero exit / no path printed** → stop. Tell user: `/sync-from-linear` (real Linear
+  ticket) or `/scope` (fresh idea) first.
 
 ## 3. Fold in context — only if `CONTEXT` non-empty
 
