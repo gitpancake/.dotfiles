@@ -65,6 +65,13 @@ STATE_COLORS = {
     "CLOSED": RED,
 }
 
+CI_BADGES = {
+    "pass":    f"{GREEN}✓{RESET}",
+    "fail":    f"{RED}✗{RESET}",
+    "pending": f"{YELLOW}●{RESET}",
+    "none":    f"{DIM}-{RESET}",
+}
+
 
 def run(args, cwd=None, timeout=10):
     try:
@@ -97,6 +104,27 @@ def since_seconds():
     return 7 * 86400
 
 
+def _ci_status(checks):
+    if not checks:
+        return "none"
+    dominated_by_failure = False
+    has_pending = False
+    for c in checks:
+        s = (c.get("status") or "").upper()
+        conclusion = (c.get("conclusion") or "").upper()
+        if conclusion in ("FAILURE", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED"):
+            dominated_by_failure = True
+        elif s in ("IN_PROGRESS", "QUEUED", "PENDING", "WAITING", "REQUESTED"):
+            has_pending = True
+        elif conclusion not in ("SUCCESS", "SKIPPED", "NEUTRAL"):
+            has_pending = True
+    if dominated_by_failure:
+        return "fail"
+    if has_pending:
+        return "pending"
+    return "pass"
+
+
 def collect():
     rows = []
     if not CODE_DIR.is_dir():
@@ -111,7 +139,7 @@ def collect():
             "--author", AUTHOR,
             "--state", "all",
             "--limit", "20",
-            "--json", "number,title,state,isDraft,updatedAt,headRefName,url",
+            "--json", "number,title,state,isDraft,updatedAt,headRefName,url,statusCheckRollup",
         ], cwd=str(repo), timeout=15)
         if not text:
             continue
@@ -131,6 +159,7 @@ def collect():
                 "repo": repo.name,
                 "number": pr["number"],
                 "state": state,
+                "ci": _ci_status(pr.get("statusCheckRollup", [])),
                 "title": pr["title"],
                 "branch": pr.get("headRefName", ""),
                 "url": pr.get("url", ""),
@@ -277,6 +306,13 @@ def render(out, rows, first_seen, blink_on=True, cols=None):
         except OSError:
             pass
 
+    max_repo_w = max((min(len(r["repo"]), 18) for r in shown), default=0)
+    max_num_w = max((len(str(r["number"])) + 1 for r in shown), default=2)
+    has_ci = any(r["state"] in ("OPEN", "DRAFT") for r in shown)
+    ci_col_w = 4 if has_ci else 0
+    right_len = 2 + max_repo_w + 2 + max_num_w
+    title_w = max(20, cols - 2 - ci_col_w - right_len)
+
     now = time.time()
     prev_state = None
     for r in shown:
@@ -288,8 +324,8 @@ def render(out, rows, first_seen, blink_on=True, cols=None):
             out.write(f" {BOLD}{color}{r['state']}{RESET} {DIM}({count}){RESET}\n")
             prev_state = r["state"]
 
-        repo_disp = trunc(r["repo"], 18)
-        num_disp = f"#{r['number']}"
+        repo_disp = trunc(r["repo"], 18).ljust(max_repo_w)
+        num_disp = f"#{r['number']}".rjust(max_num_w)
 
         key = (r["repo"], r["number"])
         if key in first_seen:
@@ -299,15 +335,20 @@ def render(out, rows, first_seen, blink_on=True, cols=None):
             bar = " "
             subj_sgr = ""
 
-        right_len = 2 + len(repo_disp) + 2 + len(num_disp)
-        title_w = max(20, cols - 2 - 8 - right_len)
-        title_disp = trunc(r["title"], title_w)
+        show_ci = r["state"] in ("OPEN", "DRAFT")
+        if show_ci:
+            ci_badge = CI_BADGES.get(r.get("ci", "none"), CI_BADGES["none"])
+            prefix = f"{bar} {ci_badge} "
+        else:
+            prefix = f"{bar} " + (" " * ci_col_w)
+
+        title_disp = trunc(r["title"], title_w).ljust(title_w)
 
         s_open = subj_sgr
         s_close = RESET if subj_sgr else ""
 
         out.write(
-            f"{bar}  "
+            f"{prefix}"
             f"{s_open}{title_disp}{s_close}  "
             f"{MAGENTA}{repo_disp}{RESET}  "
             f"{DIM}{num_disp}{RESET}\n"

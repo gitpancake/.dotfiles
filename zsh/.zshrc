@@ -58,6 +58,7 @@ alias config="vim ~/.zshrc"
 alias reload="source ~/.zshrc"
 alias ll="ls -la"
 alias cdsp="claude --dangerously-skip-permissions"
+alias cls="clear"
 unalias art 2>/dev/null
 # Start (or hand off) the commit-watcher daemon so reactive `art watch`
 # panes pick up new merges to the current repo's main branch. The

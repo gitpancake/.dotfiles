@@ -40,6 +40,8 @@ Most example-org-agent work is "mirror Slack equivalent for Teams" / "mirror Rel
   - `mcp__openviking__search` `resources/example-org/<vendor>/`
   - Cite `source_file § section` for any vendor spec claim, or note "no docs indexed for this vendor — propose adding them."
 
+**Integration probe** (vendor/adapter integrations only): before assuming the adapter is reachable, verify auth shapes match. Dump the current account's auth shape from the connection config, read the vendor client constructor or prebuilt component entry point, and confirm the shapes align. Mismatch here means the adapter is unreachable code. Document findings inline — this prevents scoping work against a dead path.
+
 ### 3b. Surface area (grounded grep)
 
 After mirror, ground the proposal in actual files:
@@ -48,7 +50,17 @@ After mirror, ground the proposal in actual files:
 - Imports / callers of the affected types and functions (use grep for the mirror's exported symbols).
 - Any project `CLAUDE.md` "Gotchas" section entries that apply — quote them inline in §6's Risk callouts.
 
-### 3c. Mechanism honesty
+### 3c. Capability coverage (integration epics only)
+
+For integration or migration epics, enumerate the source system's operations and map coverage:
+
+| Operation | Covered? | Notes |
+|-----------|----------|-------|
+| … | Yes / Dropped / Deferred | ticket ref if dropped intentionally |
+
+Dropped capabilities surface as Sentry events post-migration if not explicitly suppressed or guarded. List every intentional drop in the ticket body with a reason. This table goes into §4's Surface area section.
+
+### 3d. Mechanism honesty
 
 Sanity-check the mechanism. If it depends on something you haven't confirmed:
 - Required env vars / secrets — list and flag any not yet set.
@@ -59,7 +71,7 @@ Never invent file paths, function names, or env vars. If you can't grep it, say 
 
 ## 4. House-style ticket — sections in order
 
-- **Context** — 2–4 sentences. Why this exists. Quote slack / email / customer / tracing-tool run if available.
+- **Context** — 2–4 sentences. Why this exists. Quote slack / email / customer / tracing-tool run if available. For bug tickets sourced from Sentry: include `runId` + `orgId` + cause-chain from the XError envelope as default shape. Read the error *verb* (what failed), not the *noun* (what the error mentions) — the verb anchors root cause, the noun often misleads.
 - **Acceptance criteria** — bulleted, each independently verifiable.
 - **Surface area** *(new — from §3)*:
   - **Mirror**: `<feature/file>` — one-line why it's the structural twin.
@@ -81,6 +93,9 @@ Add an explicit risk line if the work touches:
 - **Trigger.dev tasks** → "verify both `TaskRegistry` and `TASK_ROUTES_ENV` updated; either alone is a silent no-op."
 - **Tests** → "use `bun test` (`:vm` flag required in worktrees); failure messages must include human-readable explanation for AO."
 - **Vendor integration** → "search OpenViking docs first; cite source files. No direct llm-vendor/llm-observability calls — go through llm-gateway."
+- **Integration epic (multi-op)** → "run §3d capability coverage table. Dropped ops must be explicitly listed with ticket refs or suppression plan — they will surface as Sentry events otherwise."
+- **Memory reversals** → if auto-memory shows an assumption about this domain was written and reversed within 5 days, flag it: "architectural commitment shipped before assumption validated — verify before re-committing."
+- **Env config drift** → multiple Sentry groups pointing at env vars in the same vendor → scope as one sweep ticket, not N separate fixes.
 
 ## 6. Show the draft. Stop.
 

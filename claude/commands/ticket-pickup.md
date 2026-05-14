@@ -20,6 +20,8 @@ Linear `attachments[]` already names linked PRs. Fall back to `gh pr list --sear
 
 **Linked tickets**: fetch parent + tickets named in `relations.blocks`/`blockedBy` only. Defer sibling/related fetches until a slice needs them. Plan-lint flags fetched-but-never-referenced tickets as `over-fetched` notes — keep §1 fetches lean.
 
+**Memory reversal scan**: check `~/.claude/projects/*/memory/` for recent entries about this ticket's domain. If any assumption was written and reversed within 5 days, flag it in §6 (Open questions → Risky): "assumption reversed on `<date>` — validate before re-committing." Every memory reversal in <5 days = architectural commitment shipped before assumption was validated.
+
 **Stop conditions** (report and wait): in-progress + assignee not user; open PR exists; `Blocked` label or unresolved blocker comment.
 
 ## 1.5. Type detection
@@ -65,6 +67,13 @@ After gathering evidence, write a **root cause hypothesis** (2-3 sentences max):
 - Why it breaks (the mechanism, not just the symptom).
 
 If root cause is unclear after investigation, flag it in §6 (Open questions) as a blocker — don't guess.
+
+### Dead code detection
+
+Before patching response schema, prop shape, or error handling:
+- **Verify the call actually executes.** If the underlying call never fires, the patch is on dead code. Paste the raw response (or lack thereof) into the plan.
+- **Same Sentry fingerprint surviving a fix = fix is on dead code.** If a prior PR targeted this fingerprint and it persists, the prior fix didn't reach the executing path. Don't ship a third patch against an unchanged fingerprint without running the call by hand first.
+- **Exec the failing call against the real account** before planning the fix. Vendor dashboards (Pipedream Connect, Stripe Dashboard, etc.) often expose SDK calls directly — 5 minutes of manual verification beats a wasted PR.
 
 ## 3. Mirror search (TYPE=feature only)
 
@@ -115,6 +124,10 @@ Lightweight. Often single-slice. Skip DAG. Config, deps, infra — no user-facin
 
 If a slice can't merge alone without breaking main or showing half-finished UI, restructure until it can.
 
+**PR size gate**: no slice should produce a PR over 1000 lines changed. If estimated over, split the slice further. Mega PRs are unreviewable and frequently get closed-not-merged — wasted work.
+
+**Prod cutover gate** (integration/migration work): add an explicit gate slice before flipping prod traffic: "end-to-end on real data in staging." The gate verifies the real vendor webhook/call fires through the full path. Don't flip prod without this — post-cutover bugs are expensive (8+ bugs in 48h on the Shopify migration).
+
 ### 5b. DAG block
 
 If slice count > 1, embed a `<!-- slice-dag:start -->` … `<!-- slice-dag:end -->` block per `~/.claude/dag-schema.md`. Used by `wt --dag <TICKET>` to spawn ready slices in parallel. Single-slice plans may omit.
@@ -135,10 +148,14 @@ Slice count (1/3/5/8). Comparable prior plan from `~/.claude/plans/` ("M like AE
 - Function signatures with multiple primitives → object-params rule.
 - Tests → `bun test` (`:vm` flag required in worktrees).
 - Trigger.dev tasks → both `TaskRegistry` and `TASK_ROUTES_ENV` updated.
+- Env config drift → multiple Sentry groups pointing at env vars in same vendor = one sweep ticket, not N separate fixes. Flag if detected during investigation.
+- Integration fix PRs → exec the failing call against real account before merging. Don't patch downstream of a call that never fires.
 
 ## 9. Branch + worktree (planning only)
 
 Branch: `<TYPE>/<ticket-id-lower>-<descriptor>` where `<TYPE>` is from §1.5. `<descriptor>` is the slugified ticket title (lowercased, non-alnum → `-`, trimmed, ≤50 chars). Worktree: `<repo>/.claude/worktrees/<ticket-id-lower>-<descriptor>`. Base: `BASE` if passed, else cockpit's current branch. Record branch, worktree, and base in plan.
+
+**Integration work branch pattern**: for multi-ticket integration epics, use `agent/<ticket>` → `feat/<substrate>` → main. Individual slice branches route through `agent/<ticket>`, which merges into the integration feature branch. Avoids the chaotic direct-to-feature pattern that produced orphaned branches in prior integrations.
 
 ## 10. Linear comment
 
