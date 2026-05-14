@@ -19,7 +19,7 @@ via $SLACK_TLDR_CONFIG):
       "alerts":  {"name": "C_ID", …}, # alert-tab channels
       "monitor": {"name": "C_ID", …}  # monitor-tab channels
     },
-    "backfill_count": 2,               # last N messages to TLDR on startup / new join
+    "backfill_hours": 24,              # backfill window on startup
     "model":          "claude-haiku-4-5-20251001",
     "max_active":     50
   }
@@ -60,11 +60,7 @@ DEFAULT_ALERT_CHANNELS = ["alerts-channel-1", "alerts-channel-2", "alerts-channe
 DISMISSED_RING_SIZE = 500
 SEEN_RING_SIZE = 200
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
-DEFAULT_BACKFILL_COUNT = 5
 BACKFILL_STAGGER_MS = 500
-BACKFILL_FETCH_MULTIPLIER = 8  # over-fetch then filter — joins/edits/etc can dominate
-BACKFILL_FETCH_MIN = 30
-BACKFILL_FETCH_MAX = 200
 
 
 # ----------------------------------------------------------------------
@@ -150,7 +146,6 @@ def load_config():
 
     cfg.setdefault("model", DEFAULT_MODEL)
     cfg.setdefault("max_active", DEFAULT_MAX_ACTIVE)
-    cfg.setdefault("backfill_count", DEFAULT_BACKFILL_COUNT)
     return cfg
 
 
@@ -187,6 +182,10 @@ def flatten_message_text(event):
         for field in block.get("fields", []) or []:
             if isinstance(field, dict) and field.get("text"):
                 parts.append(field["text"])
+    for f in event.get("files", []) or []:
+        title = f.get("title") or f.get("name") or ""
+        if title:
+            parts.append(title)
     raw = "\n".join(p for p in parts if p)
     raw = MENTION_RE.sub(r"@\1", raw)
     raw = CHANNEL_RE.sub(lambda m: f"#{m.group(2) or m.group(1)}", raw)
@@ -196,11 +195,15 @@ def flatten_message_text(event):
 
 def haiku_tldr(text, model):
     """One-line TLDR ≤15 words. Falls back to truncated raw on auth failure."""
+    clean = text.replace("\n", " ").strip()
+    if len(clean) <= 80:
+        return clean
     snippet = text[:4000]
     prompt = (
         "Summarize this Slack alert in ONE line, max 15 words. "
         "No filler, no quotes, no trailing period. "
-        "Preserve identifiers (service names, error codes, hostnames).\n\n"
+        "Preserve identifiers (service names, error codes, hostnames). "
+        "If the message is unclear, summarize what you can see literally.\n\n"
         f"---\n{snippet}\n---"
     )
     response = call_messages(
@@ -213,6 +216,13 @@ def haiku_tldr(text, model):
     if not out:
         return text.replace("\n", " ")[:120]
     out = out.splitlines()[0].strip().strip("\"'")
+    bail_phrases = ("unable to summarize", "i don't see", "insufficient data",
+                    "not enough information", "cannot summarize",
+                    "no actionable alert", "no alert content",
+                    "please provide the alert", "please provide",
+                    "not an actual alert", "no alert provided")
+    if any(p in out.lower() for p in bail_phrases):
+        return text.replace("\n", " ")[:120]
     return out[:200]
 
 
@@ -286,41 +296,40 @@ def discover_member_channels(web_client):
     return ids
 
 
-def backfill_channel(web, channel_id, count, name_cache, model, max_active):
-    """Pull last `count` non-trivial messages from channel and add as alerts."""
-    if count <= 0:
-        return
-    fetch_limit = min(
-        BACKFILL_FETCH_MAX,
-        max(BACKFILL_FETCH_MIN, count * BACKFILL_FETCH_MULTIPLIER),
-    )
-    try:
-        resp = web.conversations_history(channel=channel_id, limit=fetch_limit)
-    except Exception as e:
-        sys.stderr.write(f"slack-tldr: backfill {channel_id} failed: {e}\n")
-        return
-    msgs = resp.get("messages", []) or []
+def backfill_channel(web, channel_id, name_cache, model, max_active):
+    """Pull all messages from the last 24h and add as alerts."""
+    cutoff = time.time() - 24 * 3600
     name = get_channel_name(web, channel_id, name_cache)
-    # API returns newest-first. Pick first `count` non-trivial, then reverse
-    # so the oldest enters the active list first → newest ends at bottom.
-    picked = []
     skip_subtypes = {
         "channel_join", "channel_leave",
         "message_changed", "message_deleted",
     }
-    for ev in msgs:
-        if ev.get("subtype") in skip_subtypes:
-            continue
-        text = flatten_message_text(ev)
-        if not text:
-            continue
-        picked.append((ev.get("ts") or "", text))
-        if len(picked) >= count:
+    picked = []
+    cursor = None
+    while True:
+        try:
+            kwargs = {"channel": channel_id, "limit": 200, "oldest": str(cutoff)}
+            if cursor:
+                kwargs["cursor"] = cursor
+            resp = web.conversations_history(**kwargs)
+        except Exception as e:
+            sys.stderr.write(f"slack-tldr: backfill {channel_id} failed: {e}\n")
+            return
+        for ev in resp.get("messages", []) or []:
+            if ev.get("subtype") in skip_subtypes:
+                continue
+            text = flatten_message_text(ev)
+            if not text:
+                continue
+            picked.append((ev.get("ts") or "", text))
+        cursor = (resp.get("response_metadata") or {}).get("next_cursor") or ""
+        if not cursor:
             break
+    picked.sort(key=lambda p: float(p[0] or 0))
     sys.stderr.write(
         f"slack-tldr: backfill #{name} → {len(picked)} message(s)\n"
     )
-    for ts, text in reversed(picked):
+    for ts, text in picked:
         try:
             tldr = haiku_tldr(text, model)
         except Exception as e:
@@ -389,17 +398,15 @@ def run_daemon():
         for ch_id in sorted(missing):
             name = cfg["_id_to_name"].get(ch_id, ch_id)
             sys.stderr.write(
-                f"slack-tldr: ERROR — bot not a member of #{name} ({ch_id})\n"
+                f"slack-tldr: WARN — bot not a member of #{name} ({ch_id}), skipping\n"
             )
-        sys.stderr.write(
-            "slack-tldr: invite the bot to these channels and restart\n"
-        )
-        sys.exit(1)
+        channel_set -= missing
 
-    # Backfill last N from each known channel before live listening starts.
-    for ch in sorted(channel_set):
+    # Backfill last 24h from alert channels only (monitor is live-only).
+    alert_ids = set(cfg.get("channels", {}).get("alerts", {}).values())
+    for ch in sorted(channel_set & alert_ids):
         backfill_channel(
-            web, ch, cfg["backfill_count"],
+            web, ch,
             name_cache, cfg["model"], cfg["max_active"],
         )
 
@@ -544,6 +551,8 @@ def _render_pane(state, out, blink_on=True, alert_channels=None, view=VIEW_SPLIT
         alert_channels = DEFAULT_ALERT_CHANNELS
 
     alerts, monitor = _partition_alerts(active, alert_channels)
+    alerts.sort(key=lambda a: float(a.get("ts") or 0))
+    monitor.sort(key=lambda a: float(a.get("ts") or 0))
 
     rows = 24
     try:
