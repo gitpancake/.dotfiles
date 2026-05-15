@@ -78,9 +78,10 @@ Detect lane:
 
 ```bash
 wt --branch <headRefName> PR-<PR_NUM>-feedback
+tmux rename-window "feedback:PR-<PR_NUM>"
 ```
 
-`wt`'s pre-spawn `git fetch origin` makes `origin/<headRefName>` available; `--branch` checks the real PR branch into the worktree (DWIM tracking branch). If that branch is already checked out in an existing worktree (e.g. a still-open lane from when the PR was built), `wt` reuses that worktree instead of erroring on a double checkout. The plan already exists at `~/.claude/plans/PR-<PR_NUM>-feedback.md`, so `wt` auto-kicks-off the autonomous loop. Then stop:
+`wt`'s pre-spawn `git fetch origin` makes `origin/<headRefName>` available; `--branch` checks the real PR branch into the worktree (DWIM tracking branch). If that branch is already checked out in an existing worktree (e.g. a still-open lane from when the PR was built), `wt` reuses that worktree instead of erroring on a double checkout. `tmux new-window` auto-selects the new window, so the follow-up `tmux rename-window` (no `-t`) retargets it to `feedback:PR-<PR_NUM>` — flags the lane as feedback work in the tmux status. The plan already exists at `~/.claude/plans/PR-<PR_NUM>-feedback.md`, so `wt` auto-kicks-off the autonomous loop. Then stop:
 
 > Lane spawned on PR #<PR_NUM>'s branch. Autonomous feedback loop running in new tmux window. This pane is done.
 
