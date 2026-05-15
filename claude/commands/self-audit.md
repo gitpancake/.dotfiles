@@ -76,15 +76,18 @@ The script also emits two pre-computed Stage 2 flags directly in `sessionAgg.fla
 - **`adoptionGaps`** — for each frequent prompt-theme (token-frequency, ≥2 events), fuzzy-match (Levenshtein ≥ 0.6, substring boost) to a slash/project command by name and emit `themeCount − invocations` where positive. Heads-up: autonomous `wt --ralph` lane spawn prompts dominate the histogram; treat very-high-count themes that look like lane spawn text as noise, not user intent. The Haiku clustering in §4 is the authoritative theme source — `adoptionGaps` is a cheap fallback when Haiku is unavailable.
 - **`handoffVsClear`** — `{handoff, clear, handoffShare, flagged, note}`. `flagged: true` when ≥3 hygiene events and `handoffShare < 0.5`.
 
-## 4. Bash command history (last 7 days)
+## 4. Shell command history (last 7 days)
 
-Zsh extended history at `~/.zsh_history` carries epoch-prefixed entries:
+Detect the user's shell history file in order:
 
-```
-: <epoch>:<duration>;<command>
-```
+1. **Zsh extended** — `~/.zsh_history`. Format: `: <epoch>:<duration>;<command>`. Multi-line commands continue on subsequent lines without the `:` prefix — join before tallying.
+2. **Bash w/ timestamps** — `~/.bash_history` *and* `$HISTTIMEFORMAT` set (heuristic: file contains lines starting with `#<10-digit-epoch>`). Format: alternating `#<epoch>` / `<command>` blocks.
+3. **Bash plain** — `~/.bash_history` with no timestamp lines. **Cannot 7d-filter** — read the whole file and mark the section `window: all-time (no timestamps in bash history)`.
+4. **None found** → mark `unavailable`, skip §4.
 
-Filter to `epoch >= now - 7d`. Multi-line commands span entries (continuation lines lack the `:` prefix) — join them before tallying.
+If both zsh and bash histories exist, prefer whichever was modified more recently (matches the active shell).
+
+Filter (where possible) to `epoch >= now - 7d`.
 
 Aggregate:
 
@@ -94,7 +97,7 @@ Aggregate:
 - **Long one-liners** — any command > 200 chars (after joining continuations). List the top 5. Alias / script candidate.
 - **`&&`-chained recipes** — commands containing `&&` or `;` joiners with ≥3 segments. Top 5 by frequency. Strong workflow-script signal.
 
-**Cost discipline.** Done by the §3 script — extend `self-audit.ts` to emit `bashHistory` into the same JSON. Inline parse is fine if the script is unavailable.
+**Cost discipline.** Done by the §3 script — extend `self-audit.ts` to emit `shellHistory` into the same JSON, carrying the detected shell + window (7d or all-time) alongside the aggregates. Inline parse is fine if the script is unavailable.
 
 **Flag:**
 - Cmd+subcommand ≥ 50 invocations → wrapper-script candidate.
@@ -188,7 +191,7 @@ Note: separate real stale feature lanes from dormant repo-main checkouts.
 ### Tool-call leaderboard
 | Tool | Calls |
 
-## Bash history (last 7 days)
+## Shell history (<shell>, <window>)
 - Total commands: N
 - Top 20 cmd+subcommand
 | Cmd | Invocations |
@@ -225,8 +228,8 @@ Note: separate real stale feature lanes from dormant repo-main checkouts.
 - Turn-cap obedience < 50% → session-hygiene candidate (auto-handoff hook)
 - Stale worktrees > 3 → cleanup-automation candidate
 - Top tool calls dominated by Bash → possible workflow-script candidate
-- Bash cmd+subcommand ≥ 50 invocations → wrapper-script candidate
-- Verbatim bash command ≥ 10 invocations → alias candidate
+- Shell cmd+subcommand ≥ 50 invocations → wrapper-script candidate
+- Verbatim shell command ≥ 10 invocations → alias candidate
 - `&&` chain ≥ 5 invocations → workflow-script candidate
 - Orphan plans → delete candidates
 - Handoffs > 30d → archive candidate
@@ -239,13 +242,13 @@ Stage 2 (synthesis — what to *do* with this) is out of scope for this command.
 
 ## 8. On completion
 
-Print the output path. Print a one-line summary of the top four flags (encyclopedia commands count, obedience ratio, stale worktree count, top repeated bash command). Stop.
+Print the output path. Print a one-line summary of the top four flags (encyclopedia commands count, obedience ratio, stale worktree count, top repeated shell command). Stop.
 
 ## Stop conditions
 
 - `~/.claude/projects/` missing or empty → report, write inventory + worktree sections only, mark session block `unavailable`.
 - Script in §3 fails → report the error, do not fabricate session stats. Inventory + worktree still written.
-- `~/.zsh_history` missing or unreadable → skip §4, mark `unavailable`. Do not fail the audit.
+- No shell history found (zsh + bash both missing/unreadable) → skip §4, mark `unavailable`. Do not fail the audit.
 - Haiku clustering fails → write the deduped opener list as a raw `<details>` block under "Repeated prompt themes" for manual clustering. Do not fail the whole audit.
 
 Never edit code. Never create Linear tickets. Never modify slash commands or CLAUDE.md.
