@@ -60,6 +60,31 @@ alias ll="ls -la"
 alias cdsp="claude --dangerously-skip-permissions"
 alias cls="clear"
 alias agent-watch="watch -tcn2 ~/.tmux/agent-board.sh"
+
+# `g` is oh-my-zsh's `git` alias by default. Override with a function so
+# `g checkout <branch>` cds to the worktree when that branch is already
+# checked out elsewhere (instead of git's "already used by worktree" fatal).
+# All other `g …` invocations fall through to plain `git`.
+unalias g 2>/dev/null
+g() {
+  if [[ "$1" == "checkout" && $# -eq 2 && "$2" != -* ]]; then
+    local branch="$2"
+    local wt_path
+    wt_path=$(git worktree list --porcelain 2>/dev/null | awk -v b="refs/heads/$branch" '
+      /^worktree / { path=$2 }
+      $0 == "branch " b { print path; exit }
+    ')
+    local here
+    here=$(git rev-parse --show-toplevel 2>/dev/null)
+    if [[ -n "$wt_path" && "$wt_path" != "$here" ]]; then
+      echo "g: '$branch' lives at $wt_path — cd-ing there"
+      cd "$wt_path"
+      return
+    fi
+  fi
+  command git "$@"
+}
+
 unalias art 2>/dev/null
 # Start (or hand off) the commit-watcher daemon so reactive `art watch`
 # panes pick up new merges to the current repo's main branch. The
