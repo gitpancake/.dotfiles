@@ -2,105 +2,92 @@
 
 ## Verify Before Acting
 
-Before stating ANYTHING about function signatures, file paths, API shapes, event types, env vars, field names, modules, or library methods — **grep or read the source first.** Training data stale. Code is truth.
+Before stating ANYTHING re fn signatures, paths, API shapes, event types, env vars, field names, modules, lib methods — **grep/read source first.** Training stale. Code = truth.
 
-When uncertain, in order:
-1. Grep/read the source.
-2. Re-read the ticket brief.
-3. Re-read the original prompt.
-4. Ask. Direct question beats confident wrong answer.
-
-No guesses. No invented names.
+Uncertain: 1) grep source 2) re-read brief 3) re-read prompt 4) ask. No guesses, no invented names.
 
 ## Tone
 
-Direct, concise, opinionated. Match user's energy. No disclaimers, hedging, preamble.
+Direct, terse, opinionated. Match user energy. No disclaimers/hedging/preamble.
 
 ## Subagents & Slash Commands
 
-Subagents and slash commands self-describe via Agent/skills schemas — don't list here. Run `/simplify` at chunk boundaries (orchestrator only, not inside subagents). Org preamble: dispatching subagent in known org's codebase → read `~/.claude/org/<org>/preamble.md`, prepend.
+Self-describe via Agent/skills schemas — don't list. Run `/simplify` at chunk boundaries (orchestrator only). Org preamble: known org codebase → prepend `~/.claude/org/<org>/preamble.md`.
 
 ## Ticket Lifecycle
 
-Tickets live in `~/.claude/tickets/` — the filesystem is the database, there is no external tracker. Contract + templates: `~/.claude/tickets/README.md`. Filename is a descriptive slug; an epic is a folder with an `_epic.md`.
+`~/.claude/tickets/` = DB. Contract: its `README.md`. Slug filename; epic = folder w/ `_epic.md`. Brief missing → `/scope` it.
 
-- **Single ticket** → `/scope <free text>` engineers a brief at `~/.claude/tickets/<area>/<slug>.md`; `wt <slug>` (or `/pickup <slug> <BASE> [context]` to sync the cockpit to a base branch + fold in context first) spawns an autonomous lane that reads the brief, plans slices inline, leans on the `grill-with-docs` / `tdd` / `handoff` skills, commits per layer, `/ship` at the end.
-- **Epic** → `/scope` engineers a `<area>/<epic-slug>/_epic.md` + `NN-<child>.md` children; `/epic <epic-slug> <BASE> [context]` confirms the story order and spawns `wt --ralph` — the Ralph autonomous loop runs one story per fresh-context iteration, memory via git + `progress.txt` + `prd.json`. `epic-parse.sh` projects `_epic.md` into the lane's `prd.json`; Ralph executes a confirmed list, never decomposes.
+- **Single**: `/scope` → brief `<area>/<slug>.md`. `wt <slug>` (or `/pickup <slug> <BASE> [ctx]`) → autonomous lane: reads brief, plans slices, uses `grill-with-docs`/`tdd`/`handoff`, commits per layer, `/ship`.
+- **Epic**: `/scope` → `<area>/<epic-slug>/_epic.md` + `NN-<child>.md`. `/epic <slug> <BASE> [ctx]` confirms order + spawns `wt --ralph`. Ralph: one story/iteration, fresh context, memory via git + `progress.txt` + `prd.json`. `epic-parse.sh` projects `_epic.md` → `prd.json`. Executes confirmed list, never decomposes.
 
-**Autonomous semantics.** `wt` lanes fire-and-forget. A lane stops only on: (1) PR open + review triggered, (2) genuine blocker (ambiguity not in the brief, repeated test failure same root cause, missing credential). Brief missing → lane asks user to `/scope` it. Slice protocol + parallel-lane gotchas: `~/.dotfiles/CLAUDE.md`.
-
-## Planning — filesystem is the database
-
-The source of truth for in-flight work is the local file system: `~/.claude/tickets/` for briefs (contract: its `README.md`), handoff docs for session state, `_epic.md` + `epic-parse.sh` for Ralph epics. There is no upstream — no external tracker, no sync. A ticket is a file; an epic is a folder. Brief missing → `/scope` it.
+**Autonomous semantics.** `wt` = fire-and-forget. Stops only on: (1) PR opened + review triggered, (2) blocker (ambiguity not in brief, repeated test fail same cause, missing cred). Slice protocol + parallel gotchas: `~/.dotfiles/CLAUDE.md`.
 
 ## Session Start
 
-1. Read project CLAUDE.md before writing code. None → scan repo, create one.
-2. Check OV for relevant context.
-3. `git status` + branch state. Feature branch for new work.
-4. Check `~/.claude/org/` for org folder. Apply `context.md` if exists.
+1. Read project CLAUDE.md. None → scan repo, create.
+2. Check OV for context.
+3. `git status` + branch. Feature branch for new work.
+4. `~/.claude/org/` org folder → apply `context.md`.
 
 ## Code Quality
 
-- Guard clauses, early return. Happy path shallowest. Max 2 levels deep.
-- One task per function. Parses AND computes AND formats → split.
+- Guard clauses, early return. Max 2 levels deep.
+- One task/fn. Parses+computes+formats → split.
 - Specific names: `fetchUserProfile` not `getData`. No `tmp`/`data`/`result`.
-- Booleans as assertions: `isValid`, `hasChildren`. Ranges: `first`/`last`.
-- Complex conditions → named booleans.
-- `const` by default. Declare close to first use.
-- Comment "why" (tradeoffs, edges), never "what."
-- Composition over inheritance. Narrow interfaces.
+- Bools as assertions: `isValid`, `hasChildren`. Ranges: `first`/`last`.
+- Complex conditions → named bools.
+- `const` default. Declare near first use.
+- Comment "why" not "what".
+- Composition > inheritance. Narrow interfaces.
 
-OV `resources/agents/code-structure-reference` for detail.
+Detail: OV `resources/agents/code-structure-reference`.
 
 ## Cost Discipline
 
-Tool calls re-read full conversation context. Heavy loops compound.
+Tool calls re-read full context. Loops compound.
 
-- Batch pattern: one LLM call → plan, script applies it. Never run same tool 20+ times.
-- Models: Opus for everything — the workflow is context-efficient enough that the sonnet-for-execution hack is retired. Haiku only for bulk mechanical edits (20+ identical changes).
-- Context hygiene: >70% context or >50 tool calls → `/handoff` + `/clear`.
+- Batch: one LLM call → plan, script applies. Never same tool 20+ times.
+- Opus default. Haiku only bulk mechanical (20+ identical edits).
+- >70% context or >50 tool calls → `/handoff` + `/clear`.
+- `Read` files >500 lines: use `offset`/`limit`. Never full-read a big file to find one symbol — grep first, then targeted read. Same for log dumps, JSON fixtures, transcripts.
 
-## Session Hygiene — turn-cap protocol
+## Turn-Cap Protocol
 
-`turn-cap-warn.sh` hard-halts at turn 30. Soft reminder at 20. Past behavior: user rode sessions to 600+ turns where cache_read on the transcript dominated cost — this is the assertive counterweight.
+`turn-cap-warn.sh` hard-halts turn 30. Soft turn 20. `auto-handoff.sh` writes `~/.claude/handoffs/` at 30 → `/clear` safe, `/resume` reads back.
 
-Companion hook `auto-handoff.sh` writes a mechanical handoff doc to `~/.claude/handoffs/` at turn 30 so `/clear` is always safe — the fresh session reads it back via `/resume`.
+- **20 soft**: wrap in-flight. No new scope.
+- **30 HARD HALT** by cwd:
+  - Normal: tell user `/clear`. No tools.
+  - `wt` lane (`<repo>/.claude/worktrees/`): one `git add -A && git commit` max, stop. user `/resume`s fresh lane.
+  - Ralph lane (lane + `scripts/ralph/`): end iteration silently. `ralph.sh` spawns next w/ fresh ctx.
+- **Past 30**: directive re-fires every prompt. Cost = quadratic. No push-through.
 
-Required response:
+`/handoff` skill = richer; auto doc = safety net.
 
-- **Turn 20 soft** — wrap the in-flight task before turn 30. Don't start new scope.
-- **Turn 30 HARD HALT** — hook injects a mandatory directive. Variant depends on cwd:
-  - **Normal session** — short reply telling the user to `/clear`. No tool use.
-  - **Autonomous wt lane** (cwd under `<repo>/.claude/worktrees/`) — commit any safe uncommitted work (one `git add -A && git commit` call max), then stop. user `/resume`s in a fresh lane.
-  - **Ralph lane** (lane + `scripts/ralph/` present) — end this iteration silently. `ralph.sh` will spawn the next iteration with fresh context; `progress.txt` + git state carry continuity.
-- **Past turn 30** — same halt directive re-fires every prompt until /clear or lane ends. There is no "push through" — the cost curve is now quadratic.
+## Briefs & PRDs
 
-`/handoff` skill produces richer docs when invoked deliberately; the auto doc is the safety net.
-
-## Briefs & PRDs — keep them tight
-
-Briefs (`~/.claude/tickets/<area>/<slug>.md`) and Ralph PRDs (`prd.json`) are re-read on every lane resume / loop iteration — cost compounds. Keep a brief to context + acceptance criteria; keep `## Local notes` to decisions, not narration. Right-size Ralph stories to one context window each.
+Re-read every lane resume / loop iteration — compounds. Brief = context + acceptance criteria. `## Local notes` = decisions, not narration. Ralph stories sized to one context window.
 
 ## Git Workflow
 
-- Branches: `feature/`, `fix/`, `refactor/`. Never `user/`. Main always deployable.
-- Auto-commit per isolated chunk. Separate commits: schema, backend, frontend.
+- Branches: `feature/`, `fix/`, `refactor/`. Never `user/`. Main deployable.
+- Auto-commit per chunk. Separate: schema, backend, frontend.
 - Never push unless asked. PR title <70 chars. Squash merge.
-- Worktree default for non-trivial. Cleanup only on user-confirmed PR merge.
+- Worktree default for non-trivial. Cleanup only on confirmed merge.
 
 ## Project CLAUDE.md
 
-After each chunk: update project `CLAUDE.md` (conventions, decisions, gotchas). Update `README.md` if user-facing behavior changes. Project CLAUDE.md ≤150 lines. Cut anything derivable from code.
+After each chunk: update project `CLAUDE.md` (conventions, decisions, gotchas). Update `README.md` if user-facing behavior changes. ≤150 lines. Cut anything derivable from code.
 
 ## OpenViking
 
-Vector-indexed MCP for cross-project knowledge — external API docs, cross-project decisions, research.
+Vector-indexed MCP: cross-project knowledge, external API docs, research.
 
-**Not for**: per-project context (CLAUDE.md), work summaries (git), user prefs (auto-memory).
+**Not for**: project context (CLAUDE.md), work summaries (git), user prefs (auto-memory).
 
-**MANDATORY**: Before `WebFetch`/`WebSearch`/`context7` for API docs, `find`/`search` OV first. Not found → fetch externally + `add_resource`.
+**MANDATORY**: Before `WebFetch`/`WebSearch`/`context7` for API docs → `find`/`search` OV first. Not found → fetch + `add_resource`.
 
-`mcp__openviking__ls` at `resources/` to discover. `find`/`search` for keyword queries. List before assuming paths.
+`mcp__openviking__ls` at `resources/` to discover. List before assuming paths.
 
 Namespaces: `resources/agents/`, `resources/<project>/`, `resources/<api-name>/`.

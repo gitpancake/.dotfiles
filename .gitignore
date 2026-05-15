@@ -15,3 +15,6 @@ org/
 *.local
 # macOS noise
 .DS_Store
+
+# Caveman compress backup
+*.original.md
