@@ -1,5 +1,5 @@
 ---
-description: Pick up an epic — confirm its ordered story list, then spawn an autonomous Ralph lane.
+description: Pickup epic — confirm story list, spawn Ralph lane.
 argument-hint: <EPIC> <BASE-BRANCH> [extra context...]
 ---
 

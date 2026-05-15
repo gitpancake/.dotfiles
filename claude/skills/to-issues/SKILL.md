@@ -1,6 +1,6 @@
 ---
 name: to-issues
-description: Break a plan, spec, or PRD into independently-grabbable tickets in the local ticket tree using tracer-bullet vertical slices. Use when user wants to convert a plan into tickets, create implementation tickets, or break down work into slices.
+description: Plan/PRD/spec → tracer-bullet vertical tickets in local tree. Trigger: convert plan/create tickets/break down work.
 ---
 
 # To Issues

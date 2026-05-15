@@ -1,5 +1,5 @@
 ---
-description: Explain how a piece of the codebase works — data flow, call chain, where a thing is defined, why it routes the way it does. Wraps Agent(Explore) with the org preamble so the explorer answers in this project's vocabulary.
+description: Explain code flow / call chain / where defined. Wraps Agent(Explore) + org preamble.
 argument-hint: <free-text question> — e.g. "how does Wilson V3 dispatch tool calls" or "where is the Pipedream connection ID looked up for Shopify"
 ---
 

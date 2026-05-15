@@ -1,5 +1,5 @@
 ---
-description: Personal Claude Code usage audit. Inventories config, parses the last 7 days of sessions, clusters repeated prompts, surfaces command/skill/workflow candidates. Output is one Markdown report at ~/.claude/audits/<name>-<YYYY-MM-DD>.md. Stage 1 of the team workflow-optimization plan — produces data, does not synthesize.
+description: Claude Code usage audit — config + 7d sessions → workflow/command/skill candidates. → md report at ~/.claude/audits/.
 argument-hint: <name>
 ---
 

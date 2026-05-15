@@ -1,5 +1,5 @@
 ---
-description: Pull a PR's review comments, triage into actionable feedback, write a plan, and spawn an autonomous worktree lane on the PR's own branch.
+description: Pull PR review comments → triage → plan → spawn wt lane on PR branch.
 argument-hint: <PR number or URL>
 ---
 

@@ -1,5 +1,5 @@
 ---
-description: Resume work from a handoff document — reads the most recent handoff, or one matched by description, and picks the thread back up.
+description: Resume from handoff doc — most recent or matched by description.
 argument-hint: "[description of which handoff — omit for the most recent]"
 ---
 

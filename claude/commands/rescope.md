@@ -1,5 +1,5 @@
 ---
-description: Refine a local ticket brief with user's recommendations. Edits the brief file under ~/.claude/tickets/ — nothing else.
+description: Refine local ticket brief w/ user's notes. Brief edit only.
 argument-hint: <ticket> [free-text adjustments]
 ---
 

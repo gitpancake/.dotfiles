@@ -1,5 +1,5 @@
 ---
-description: Rebase a feature branch onto a base branch. Fetches base, rebases, attempts intelligent conflict resolution, escalates ambiguous conflicts, pushes on clean replay. Force-push only on confirmation. Uses a throwaway worktree when the feature branch is remote-only.
+description: Rebase feature onto base. Auto-resolve conflicts, escalate ambiguous, push on clean replay. Force-push on confirm.
 argument-hint: <base> <feature> — e.g. `main feature/ae-1700-foo`. If only one arg, assumes current branch is the feature.
 ---
 

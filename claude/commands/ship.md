@@ -1,5 +1,5 @@
 ---
-description: Commit + push + open a PR with a tight bullet body, then trigger an external @claude review. Idempotent — pass a PR number to skip create and just re-trigger review.
+description: Commit + push + open PR + trigger @claude review. Pass PR# to re-trigger only.
 argument-hint: [optional: PR number or URL to skip create and review-only]
 ---
 

@@ -1,5 +1,5 @@
 ---
-description: Run a structured retrospective on a completed integration or feature, analyzing Linear tickets + GitHub PRs + git history. Outputs to Notion.
+description: Retro on completed integration/feature. Linear + GH PRs + git → Notion.
 argument-hint: <integration-name or free-text scope>
 ---
 

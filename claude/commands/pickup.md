@@ -1,5 +1,5 @@
 ---
-description: Pick up a local ticket brief — sync the cockpit to a base branch, fold in any extra context, then spawn an autonomous wt lane.
+description: Pickup local ticket brief — sync base, fold context, spawn wt lane.
 argument-hint: <TICKET> <BASE-BRANCH> [extra context...]
 ---
 

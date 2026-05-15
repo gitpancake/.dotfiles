@@ -1,5 +1,5 @@
 ---
-description: Turn a free-text problem into an engineered local ticket brief under ~/.claude/tickets/. Includes codebase exploration. Writes the markdown on "go".
+description: Free-text problem → engineered ticket brief under ~/.claude/tickets/. Writes on "go".
 argument-hint: <free-text problem statement>
 ---
 
