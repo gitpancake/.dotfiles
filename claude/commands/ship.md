@@ -39,12 +39,56 @@ Clean + commits ahead → skip to §2.
 `git push -u origin HEAD`. Rejected → `git pull --rebase`, resolve, push again. Surface
 conflicts; don't resolve silently.
 
+## 2.5. Linear ticket (create if absent)
+
+Goal: every PR carries `[AE-NNNN] <desc>` so it links to a ticket with description,
+reasoning, implementation, and assignee.
+
+1. **Resolve brief** from current branch. Reuse `wt --resolve` if available; else
+   `grep -rlE "^linear:" ~/.claude/tickets/ --include='*.md'` and match by branch slug
+   in filename or `## Local notes`. Found → `BRIEF_FILE=<path>`.
+2. **Read `linear:` frontmatter** from `$BRIEF_FILE` (if any). Non-empty → `AE_ID=<that>`,
+   **skip to §3**.
+3. **No brief found** → prompt: `No local brief for this branch — create Linear from
+   commits+diff anyway? [Y/n]`. `n` → set `AE_ID=""`, skip to §3 with classic no-prefix
+   title. `y` (default) → proceed.
+4. **Compose body** from real data — never invent:
+   - **Description**: bullets from `git log --format='%s' origin/main..HEAD`, deduped.
+   - **Reasoning**: brief's `## Context` section verbatim if present; else commit-body
+     paragraphs (`git log --format='%b' origin/main..HEAD`) trimmed of empties.
+   - **Implementation**: file-list summary from `git diff --stat origin/main...HEAD` —
+     group by top-level dir, one line per group with file count + paths.
+5. **Create ticket** via `mcp__linear-server__save_issue`:
+   - `team`: `Autonomy Eng`
+   - `title`: derive from branch slug + work; ≤80 chars; no `[AE-]` prefix (Linear adds
+     its own ID).
+   - `description`:
+     ```
+     ## Description
+     <bullets>
+
+     ## Reasoning
+     <paragraphs or brief Context>
+
+     ## Implementation
+     <grouped file summary>
+     ```
+   - `assignee`: `me`
+   - `state`: `In Progress` (work is done at this point — PR is the deliverable)
+   - `labels`: copy from brief frontmatter `labels:` if present, else `[]`
+6. **Capture `AE-NNNN`** from response → `AE_ID`. Write back into brief frontmatter
+   (`linear: AE-NNNN`) so future runs reuse it. Brief missing → skip writeback.
+7. **MCP failure** (network, perms, schema) → log the error in one line, set `AE_ID=""`,
+   continue with no-prefix title. Do not block ship.
+
 ## 3. PR body — tight bullet pattern
 
 If `.github/PULL_REQUEST_TEMPLATE.md` exists, fill its sections with this bullet style.
-Default shape:
+Default shape (prepend `Linear:` line only when `$AE_ID` non-empty):
 
 ```
+Linear: https://linear.app/<org>/issue/AE-NNNN
+
 ## Changed
 - <structural change>
 
@@ -61,7 +105,8 @@ is small. No emoji, no generated-with footer unless repo convention. Derive bull
 don't restate.
 
 Then `gh pr create`:
-- `--title` ≤70 chars, action-oriented — derive it from the slug + the work, no ID prefix.
+- `--title`: `$AE_ID` non-empty → `[AE-NNNN] <desc>` (≤70 chars total).
+  Empty → action-oriented title with no ID prefix.
 - `--body` from the shape above via heredoc.
 - `--base` usually `main`; for `*/slice-N` branches infer the parent from `git log`,
   confirm if ambiguous.
