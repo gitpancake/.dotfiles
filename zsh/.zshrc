@@ -168,6 +168,73 @@ export PATH="$BUN_INSTALL/bin:$PATH"
 # Prefix any command with a space to keep it out of history
 setopt HIST_IGNORE_SPACE
 
+# env-edit: list/edit/delete keys in .env.local without opening vim.
+# Usage:
+#   env-edit              fzf-pick a key, then prompt for new value (hidden input)
+#   env-edit KEY          target KEY directly (added if missing)
+#   env-edit -l           list keys only (values never printed)
+#   env-edit KEY --reload after edit, `set -a; source .env.local; set +a` into current shell
+# Set ENV_EDIT_AUTO_RELOAD=1 to make --reload the default.
+# At new-value prompt: empty=keep, "-"=delete.
+env-edit() {
+  local file=".env.local"
+  [[ -f "$file" ]] || { echo "no $file in $PWD"; return 1 }
+
+  if [[ "$1" == "-l" || "$1" == "--list" ]]; then
+    grep -E '^[A-Z_][A-Z0-9_]*=' "$file" | cut -d= -f1
+    return
+  fi
+
+  local key="$1"
+  if [[ -z "$key" ]]; then
+    if ! command -v fzf >/dev/null; then
+      echo "fzf required for picker, or pass key as arg"
+      return 1
+    fi
+    key=$(grep -E '^[A-Z_][A-Z0-9_]*=' "$file" | cut -d= -f1 | fzf --prompt="env key> ") || return 1
+  fi
+
+  local current
+  current=$(awk -F= -v k="$key" '$1==k {sub(/^[^=]*=/, ""); print; exit}' "$file")
+  if [[ -n "$current" ]]; then
+    echo "current $key=${current:0:4}… (${#current} chars)"
+  else
+    echo "$key not present — will add"
+  fi
+
+  printf "new value (empty=keep, '-'=delete): "
+  local new
+  read -rs new
+  echo
+
+  case "$new" in
+    "")
+      echo "kept"
+      return
+      ;;
+    "-")
+      awk -v k="$key" 'BEGIN{FS=OFS="="} $1!=k' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+      echo "deleted $key"
+      ;;
+    *)
+      if grep -qE "^${key}=" "$file"; then
+        awk -v k="$key" -v v="$new" 'BEGIN{FS=OFS="="} $1==k {print k"="v; next} {print}' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+        echo "updated $key"
+      else
+        printf '%s=%s\n' "$key" "$new" >> "$file"
+        echo "added $key"
+      fi
+      ;;
+  esac
+
+  if [[ "$2" == "--reload" || "$ENV_EDIT_AUTO_RELOAD" == "1" ]]; then
+    set -a
+    source "$file"
+    set +a
+    echo "reloaded into shell"
+  fi
+}
+
 # gcloud
 [[ -f "/opt/homebrew/share/google-cloud-sdk/path.zsh.inc" ]] && source "/opt/homebrew/share/google-cloud-sdk/path.zsh.inc"
 [[ -f "/opt/homebrew/share/google-cloud-sdk/completion.zsh.inc" ]] && source "/opt/homebrew/share/google-cloud-sdk/completion.zsh.inc"
