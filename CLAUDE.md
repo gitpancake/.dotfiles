@@ -54,6 +54,10 @@ One epic shape feeds the loop. An epic is a folder with an `_epic.md`; its `<!--
 
 `agent-board.sh` self-heals: if the recorded `<wt>/.claude/agent-pid` is dead, it resets the row to `IDLE` and preserves mtime. CTX column reads `~/.claude/projects/<encoded>/*.jsonl` and caches by jsonl mtime+size.
 
+## Auto-handoff (turn-cap fallback)
+
+`claude/hooks/auto-handoff.sh` (UserPromptSubmit, runs after `turn-cap-warn.sh`) — at turn ≥50, mechanically dumps last prompts + tool calls + active files + git state to `~/.claude/handoffs/<UTC>-auto-<branch>.md` and announces the path via `systemMessage`. Fires once per session (sentinel reuses `${TMPDIR}/claude-turn-cap-warn/session-<id>.warned`). Belt-and-suspenders for the documented turn-cap protocol — handoff doc exists *before* `/clear` is plausible, so /resume has a target even when the warning was ignored. Pure shell — no LLM call, no compliance dependency.
+
 ## Editing rules
 
 - `zsh/*.zsh*`: `zsh -n <file>` to syntax-check after editing.
