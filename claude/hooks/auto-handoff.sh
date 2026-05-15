@@ -27,6 +27,9 @@ counterFile="${logDir}/session-${sessionId}.count"
 warnedFile="${logDir}/session-${sessionId}.warned"
 
 current=$(cat "$counterFile" 2>/dev/null || echo 0)
+# turn-cap-warn.sh runs after us and will increment the counter. Match its
+# +1 semantic so we agree on the turn number being recorded this prompt.
+current=$((current + 1))
 (( current < 30 )) && exit 0
 
 # Fire once per session.

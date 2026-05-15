@@ -63,18 +63,17 @@ Tool calls re-read full conversation context. Heavy loops compound.
 
 ## Session Hygiene — turn-cap protocol
 
-`turn-cap-warn.sh` fires tiered `systemMessage` warnings at turns 30/50/75/100+. **Honor them.** Past behavior: user habitually ignores soft warns and rides sessions to 600+ turns, where cache_read on the transcript dominates cost. Be the assertive counterweight.
+`turn-cap-warn.sh` hard-halts at turn 30. Soft reminder at 20. Past behavior: user rode sessions to 600+ turns where cache_read on the transcript dominated cost — this is the assertive counterweight.
 
-Preferred response is `/handoff` (capture state to a doc the fresh session reads) then `/clear` — more context-efficient than riding the transcript into compaction.
+Companion hook `auto-handoff.sh` writes a mechanical handoff doc to `~/.claude/handoffs/` at turn 30 so `/clear` is always safe — the fresh session reads it back via `/resume`.
 
-Required response per tier:
+Required response:
 
-- **Turn 30 reminder** — acknowledge once in next reply ("noting turn 30 — we can `/handoff` + `/clear` after this chunk"), continue.
-- **Turn 50 warn** — **stop adding new scope this turn.** Finish the in-flight tool chain, then explicitly ask: "We're at 50 turns. `/handoff` + `/clear` now, or push through?" Do not silently proceed past this prompt without an answer.
-- **Turn 75 PAUSE** — finish current tool call, then HALT before any further tool use. Surface to user: "Hit the 75-turn pause. I won't start new tool chains until you `/handoff` + `/clear` or explicitly say continue." Single-tool lookups OK, multi-step work blocked until confirmation. An autonomous lane self-invokes `/handoff` here.
-- **Turn 100+** — same as 75 but louder. Refuse multi-step work without explicit "I know, push through" from user.
+- **Turn 20 soft** — wrap the in-flight task before turn 30. Don't start new scope.
+- **Turn 30 HARD HALT** — hook injects a mandatory directive: your only allowed response that turn is a short message telling the user to `/clear` immediately. **Do not call any tool, do not continue the in-flight task.** Auto-handoff has already captured state. Reply pattern: `Turn N hard-halt. Auto-handoff at <path>. /clear now — fresh session can /resume.` Autonomous lanes obey identically.
+- **Past turn 30** — same halt directive re-fires every prompt until /clear. There is no "push through" — the cost curve is now quadratic.
 
-`/handoff` writes a handoff doc; the fresh session reads it instead of re-briefing from memory. For ticket work the brief at `~/.claude/tickets/<area>/<slug>.md` is the durable anchor.
+`/handoff` skill produces richer docs when invoked deliberately; the auto doc is the safety net.
 
 ## Briefs & PRDs — keep them tight
 

@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# UserPromptSubmit hook: tiered warnings as conversation lengthens.
+# UserPromptSubmit hook: tiered actions as conversation lengthens.
 # Each user prompt counts as one turn. Long sessions = quadratic cache_read
 # growth, the dominant cost driver in long Opus sessions.
 #
-# Thresholds (each fires once per session unless noted):
-#   - 30 prompts → gentle reminder
-#   - 50 prompts → strong suggestion to /handoff + /clear
-#   - 75 prompts → PAUSE: ask Claude to stop and confirm before continuing
-#   - 100+ prompts → hard nag every prompt thereafter
+# Thresholds:
+#   - 20 prompts → gentle reminder (soft, once)
+#   - 30 prompts → HARD HALT: inject mandatory directive forcing Claude to
+#                  tell user to /clear, no other tool use this turn. The
+#                  companion auto-handoff.sh has already written a handoff
+#                  doc, so /clear is safe.
+#   - 50/75/100 → re-fire halt directive (every turn past 30)
 #
-# Preferred response is /handoff (capture state to a doc the fresh session reads)
-# then /clear — more context-efficient than riding the transcript into compaction.
-# An autonomous lane should self-invoke /handoff on seeing the 50/75 warning.
-#
-# Warnings surface to the user via systemMessage on stdout. Never blocks.
+# Halts use hookSpecificOutput.additionalContext so the directive lands in
+# Claude's context as a system instruction it must obey, plus a visible
+# systemMessage for the user.
 
 set -u
 
@@ -32,19 +32,29 @@ current=$(cat "$counterFile" 2>/dev/null || echo 0)
 current=$((current + 1))
 echo "$current" > "$counterFile"
 
-msg=""
+handoffPath=""
+[[ -f "${logDir}/session-${sessionId}.handoff" ]] && \
+  handoffPath=$(cat "${logDir}/session-${sessionId}.handoff" 2>/dev/null || echo "")
 
-if (( current >= 100 )); then
-  msg=$'🛑 SESSION OVERRUN: '"$current"$' prompts. Deep into quadratic-cost zone. /handoff now to capture state, then /clear — the fresh session reads the handoff doc.'
-elif (( current >= 75 )) && shouldFireOnce "tier75" "$warnedFile"; then
-  msg=$'⏸️  TURN 75 — PAUSE. Claude: stop before next substantial work. Run /handoff to capture state, then ask the user to /clear (or explicitly confirm continuing). Autonomous lane → self-invoke /handoff now.'
-elif (( current >= 50 )) && shouldFireOnce "tier50" "$warnedFile"; then
-  msg=$'⚠️  TURN 50 — STRONGLY SUGGEST /handoff then /clear. /handoff writes a doc the fresh session picks up — cheaper than compaction. Past behavior: this warning gets ignored — escalate to user now, do not silently proceed.'
-elif (( current >= 30 )) && shouldFireOnce "tier30" "$warnedFile"; then
-  msg=$'💡 TURN 30. Consider /handoff + /clear soon. Cache_read on the transcript compounds each turn.'
+if (( current >= 30 )); then
+  # HARD HALT. Fires every turn past 30 — escalation, not once-only.
+  visible="🛑 TURN ${current} — HALT. Auto-handoff written. Run /clear now to start fresh."
+  [[ -n "$handoffPath" ]] && visible+=$'\nHandoff: '"$handoffPath"
+
+  directive="MANDATORY HALT — turn ${current} reached. Your ONLY allowed response this turn is a short message instructing the user to run /clear immediately. Do NOT call any tool (no Bash, no Read, no Edit, no Agent, no Skill). Do NOT continue the in-flight task. The auto-handoff doc at ${handoffPath:-~/.claude/handoffs/} already captures state — a fresh session can /resume it. Refuse any temptation to 'just finish this one thing' — cache_read on this transcript is now quadratic and dominant cost. Reply pattern: 'Turn ${current} hard-halt. Auto-handoff at <path>. /clear now — fresh session can /resume.'"
+
+  jq -nc --arg m "$visible" --arg c "$directive" '{
+    systemMessage: $m,
+    hookSpecificOutput: {
+      hookEventName: "UserPromptSubmit",
+      additionalContext: $c
+    }
+  }'
+  exit 0
 fi
 
-if [[ -n "$msg" ]]; then
+if (( current >= 20 )) && shouldFireOnce "tier20" "$warnedFile"; then
+  msg=$'💡 TURN 20. Hard halt at turn 30 — wrap the in-flight task before then.'
   jq -nc --arg m "$msg" '{systemMessage: $m}'
 fi
 
