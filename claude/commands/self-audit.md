@@ -76,7 +76,60 @@ The script also emits two pre-computed Stage 2 flags directly in `sessionAgg.fla
 - **`adoptionGaps`** — for each frequent prompt-theme (token-frequency, ≥2 events), fuzzy-match (Levenshtein ≥ 0.6, substring boost) to a slash/project command by name and emit `themeCount − invocations` where positive. Heads-up: autonomous `wt --ralph` lane spawn prompts dominate the histogram; treat very-high-count themes that look like lane spawn text as noise, not user intent. The Haiku clustering in §4 is the authoritative theme source — `adoptionGaps` is a cheap fallback when Haiku is unavailable.
 - **`handoffVsClear`** — `{handoff, clear, handoffShare, flagged, note}`. `flagged: true` when ≥3 hygiene events and `handoffShare < 0.5`.
 
-## 4. Prompt clustering (one Haiku call)
+## 4. Bash command history (last 7 days)
+
+Zsh extended history at `~/.zsh_history` carries epoch-prefixed entries:
+
+```
+: <epoch>:<duration>;<command>
+```
+
+Filter to `epoch >= now - 7d`. Multi-line commands span entries (continuation lines lack the `:` prefix) — join them before tallying.
+
+Aggregate:
+
+- **Total commands** + per-day distribution.
+- **Top 20 by cmd+subcommand** — first two tokens (`git status`, `bun run`, `gh pr list`). This is the workflow-pattern view.
+- **Top 10 verbatim commands** — exact repetition. A command appearing ≥10× verbatim is a wrapper-script candidate.
+- **Long one-liners** — any command > 200 chars (after joining continuations). List the top 5. Alias / script candidate.
+- **`&&`-chained recipes** — commands containing `&&` or `;` joiners with ≥3 segments. Top 5 by frequency. Strong workflow-script signal.
+
+**Cost discipline.** Done by the §3 script — extend `self-audit.ts` to emit `bashHistory` into the same JSON. Inline parse is fine if the script is unavailable.
+
+**Flag:**
+- Cmd+subcommand ≥ 50 invocations → wrapper-script candidate.
+- Verbatim command ≥ 10 invocations → alias candidate.
+- `&&` chain ≥ 5 invocations → workflow-script candidate.
+
+## 5. Filesystem layout (~/.claude/ + per-worktree `.claude/`)
+
+The filesystem is the database (per `~/.claude/CLAUDE.md`). Sprawl = friction. Probe:
+
+**Global `~/.claude/`:**
+
+- `tickets/` — count per area, oldest brief mtime, total count. Flag areas with ≥ 20 briefs (re-org candidate). Flag briefs older than 30d (likely abandoned).
+- `handoffs/` — count, oldest mtime. Flag if count > 50 (cleanup candidate) or any handoff > 30d (archive candidate).
+- `plans/` — count, oldest mtime. Cross-reference each `<slug>.md` against active git branches (`git -C <wt> branch --show-current` across worktrees from §2). Plans with no matching branch = **orphan**. List orphans.
+- `audits/` — count + dates.
+- `scripts/` — file count, total line count, list any single file > 500 lines (refactor candidate).
+- `projects/` (transcripts) — total size in GB. Flag if > 5GB (rotation candidate).
+
+**Per-worktree `.claude/`** (from §2 worktree list):
+
+- Presence: `.claude/agent-state`, `.claude/precheck.sh`, `.claude/verify.ok` per lane.
+- Oversized: any file > 100KB inside a lane's `.claude/` (likely log accumulation — surface path + size).
+- Stale state files: `agent-state` mtime > 7d while lane itself has 0d activity → state machine wedged.
+
+**Flag:**
+- Orphan plans → delete candidates.
+- Handoffs > 30d → archive candidate.
+- Tickets > 30d in non-epic areas → /scope decay.
+- `projects/` > 5GB → transcript rotation.
+- Wedged lane state → manual reset.
+
+**Cost discipline.** Extend `self-audit.ts` to emit `filesystem` into the same JSON. Pure `stat` + `find` — no LLM.
+
+## 6. Prompt clustering (one Haiku call)
 
 §3 is deterministic; clustering is not.
 
@@ -88,7 +141,7 @@ Dispatch one subagent with `model: "haiku"`:
 
 Use the returned themes verbatim in §5. Do not re-cluster in the main session.
 
-## 5. Output schema
+## 7. Output schema
 
 Write to `~/.claude/audits/<name>-<YYYY-MM-DD>.md`:
 
@@ -135,6 +188,29 @@ Note: separate real stale feature lanes from dormant repo-main checkouts.
 ### Tool-call leaderboard
 | Tool | Calls |
 
+## Bash history (last 7 days)
+- Total commands: N
+- Top 20 cmd+subcommand
+| Cmd | Invocations |
+- Top 10 verbatim commands
+| Command | Count |
+- Long one-liners (>200 chars): top 5
+- `&&`-chains (≥3 segments): top 5 by frequency
+
+## Filesystem layout
+### Global ~/.claude/
+| Path | Count | Oldest | Flag |
+|------|-------|--------|------|
+(tickets per area, handoffs, plans, audits, scripts, projects size)
+
+### Orphan plans (no matching branch)
+- list
+
+### Per-worktree .claude/
+- Lanes missing agent-state / precheck.sh: list
+- Oversized files (>100KB) inside lane .claude/: list path + size
+- Wedged state (agent-state mtime > 7d on active lane): list
+
 ## Repeated prompt themes
 | Theme | Count | Examples |
 |-------|-------|----------|
@@ -149,18 +225,27 @@ Note: separate real stale feature lanes from dormant repo-main checkouts.
 - Turn-cap obedience < 50% → session-hygiene candidate (auto-handoff hook)
 - Stale worktrees > 3 → cleanup-automation candidate
 - Top tool calls dominated by Bash → possible workflow-script candidate
+- Bash cmd+subcommand ≥ 50 invocations → wrapper-script candidate
+- Verbatim bash command ≥ 10 invocations → alias candidate
+- `&&` chain ≥ 5 invocations → workflow-script candidate
+- Orphan plans → delete candidates
+- Handoffs > 30d → archive candidate
+- Tickets > 30d outside epics → /scope decay
+- ~/.claude/projects/ > 5GB → transcript rotation
+- Wedged lane state → manual reset
 ```
 
 Stage 2 (synthesis — what to *do* with this) is out of scope for this command. Produce the data, stop.
 
-## 6. On completion
+## 8. On completion
 
-Print the output path. Print a one-line summary of the top three flags (encyclopedia commands count, obedience ratio, stale worktree count). Stop.
+Print the output path. Print a one-line summary of the top four flags (encyclopedia commands count, obedience ratio, stale worktree count, top repeated bash command). Stop.
 
 ## Stop conditions
 
 - `~/.claude/projects/` missing or empty → report, write inventory + worktree sections only, mark session block `unavailable`.
 - Script in §3 fails → report the error, do not fabricate session stats. Inventory + worktree still written.
+- `~/.zsh_history` missing or unreadable → skip §4, mark `unavailable`. Do not fail the audit.
 - Haiku clustering fails → write the deduped opener list as a raw `<details>` block under "Repeated prompt themes" for manual clustering. Do not fail the whole audit.
 
 Never edit code. Never create Linear tickets. Never modify slash commands or CLAUDE.md.
