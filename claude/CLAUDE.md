@@ -70,8 +70,11 @@ Companion hook `auto-handoff.sh` writes a mechanical handoff doc to `~/.claude/h
 Required response:
 
 - **Turn 20 soft** — wrap the in-flight task before turn 30. Don't start new scope.
-- **Turn 30 HARD HALT** — hook injects a mandatory directive: your only allowed response that turn is a short message telling the user to `/clear` immediately. **Do not call any tool, do not continue the in-flight task.** Auto-handoff has already captured state. Reply pattern: `Turn N hard-halt. Auto-handoff at <path>. /clear now — fresh session can /resume.` Autonomous lanes obey identically.
-- **Past turn 30** — same halt directive re-fires every prompt until /clear. There is no "push through" — the cost curve is now quadratic.
+- **Turn 30 HARD HALT** — hook injects a mandatory directive. Variant depends on cwd:
+  - **Normal session** — short reply telling the user to `/clear`. No tool use.
+  - **Autonomous wt lane** (cwd under `<repo>/.claude/worktrees/`) — commit any safe uncommitted work (one `git add -A && git commit` call max), then stop. user `/resume`s in a fresh lane.
+  - **Ralph lane** (lane + `scripts/ralph/` present) — end this iteration silently. `ralph.sh` will spawn the next iteration with fresh context; `progress.txt` + git state carry continuity.
+- **Past turn 30** — same halt directive re-fires every prompt until /clear or lane ends. There is no "push through" — the cost curve is now quadratic.
 
 `/handoff` skill produces richer docs when invoked deliberately; the auto doc is the safety net.
 
