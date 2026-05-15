@@ -2,8 +2,9 @@
 # wt — spin up a worktree lane in one command.
 #
 # Usage:
-#   wt [--type <prefix>] <task-slug-or-ticket>     # single lane (default)
-#   wt --ralph [--type <prefix>] <EPIC>            # single lane running the Ralph autonomous loop
+#   wt [--type <prefix>] <task-slug-or-ticket>     # single lane, one-shot claude (default)
+#   wt --loop [--type <prefix>] <task-slug>        # single lane, wt-loop.sh outer loop (fresh-context iterations to PR)
+#   wt --ralph [--type <prefix>] <EPIC>            # epic lane running the Ralph autonomous loop
 #   wt --branch <name> [--type ...] <slug>         # single lane on an existing branch (e.g. a PR head)
 #   wt --dag [--type <prefix>] <TICKET>            # parse plan DAG, spawn ready-set lanes (dormant)
 #   wt --resolve [--type <prefix>] <TICKET>        # re-spawn ready-set after slices merged (dormant)
@@ -64,6 +65,7 @@ while [[ $# -gt 0 ]]; do
     --dag)     mode="dag";     shift ;;
     --resolve) mode="resolve"; shift ;;
     --ralph)   mode="ralph";   shift ;;
+    --loop)    mode="loop";    shift ;;
     --print-brief) mode="print-brief"; shift ;;
     --type)
       [[ -z "${2:-}" ]] && { echo "wt: --type requires an argument" >&2; exit 1; }
@@ -90,7 +92,7 @@ type_prefix=$(printf '%s' "$type_prefix" | tr '[:upper:]' '[:lower:]' | sed -E '
 [[ -z "$type_prefix" ]] && { echo "wt: invalid --type prefix" >&2; exit 1; }
 
 raw=${1:-}
-[[ -z "$raw" ]] && { echo "usage: wt [--ralph|--dag|--resolve] [--type <prefix>] <task-slug-or-ticket>" >&2; exit 1; }
+[[ -z "$raw" ]] && { echo "usage: wt [--loop|--ralph|--dag|--resolve] [--type <prefix>] <task-slug-or-ticket>" >&2; exit 1; }
 
 # Derive a slug descriptor from the plan's first heading.
 #   '# TEAM-1234 — Add foo bar' → 'add-foo-bar'
@@ -346,8 +348,17 @@ JSON
 
   local claude_bin claude_cmd
   claude_bin="${WT_CLAUDE:-claude --dangerously-skip-permissions --model ${WT_MODEL:-opus}}"
-  claude_cmd="$claude_bin"
-  [[ -n "$s_initial" ]] && claude_cmd="$claude_bin $(printf '%q' "$s_initial")"
+
+  # @@WT_LOOP@@<brief> sentinel → drive the lane via wt-loop.sh instead of
+  # one-shot claude. wt-loop owns the iteration cadence so each fresh-context
+  # iteration stays under the turn-30 halt cliff.
+  if [[ "$s_initial" == @@WT_LOOP@@* ]]; then
+    local brief_path="${s_initial#@@WT_LOOP@@}"
+    claude_cmd="bash $HOME/.claude/scripts/wt-loop.sh $(printf '%q' "$s_wt") $(printf '%q' "$brief_path")"
+  else
+    claude_cmd="$claude_bin"
+    [[ -n "$s_initial" ]] && claude_cmd="$claude_bin $(printf '%q' "$s_initial")"
+  fi
 
   if [[ -n "${TMUX:-}" ]]; then
     case "$layout" in
@@ -378,14 +389,22 @@ JSON
 
 # ---- single-lane + ralph modes --------------------------------------------
 
-if [[ "$mode" == "single" || "$mode" == "ralph" ]]; then
+if [[ "$mode" == "single" || "$mode" == "ralph" || "$mode" == "loop" ]]; then
   wt_path="$wt_dir/$slug"
   branch="${branch_override:-${type_prefix}/${slug}}"
 
   review_rule="Review findings: apply blocker/major fixes directly in the PR branch (commit + push), do NOT post them as PR comments. Never run \`gh pr comment\`, \`gh pr review --comment\`, or any \`gh\` command that writes to the PR conversation. Minor/NB findings: include in the final report only."
 
   initial=""
-  if [[ "$mode" == "ralph" ]]; then
+  if [[ "$mode" == "loop" ]]; then
+    if [[ -z "$ticket_file" ]]; then
+      echo "wt: --loop needs a ticket brief. /scope '$raw' first." >&2
+      exit 1
+    fi
+    # wt-loop owns the iteration cadence; spawn_lane only puts a brief into the
+    # worktree and starts a shell that runs wt-loop.sh in --print mode.
+    initial="@@WT_LOOP@@${ticket_file}"
+  elif [[ "$mode" == "ralph" ]]; then
     if [[ "$is_epic" != "1" ]]; then
       echo "wt: --ralph needs an epic — a folder with an _epic.md at its root." >&2
       echo "    '$raw' did not resolve to an epic. /scope it into an epic folder first," >&2
