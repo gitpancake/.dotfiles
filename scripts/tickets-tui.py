@@ -6,14 +6,19 @@ view groups tickets by their on-disk folder; Enter opens the full
 markdown in glow's pager. Zero deps beyond the stdlib + glow on PATH.
 """
 import curses
+import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 TICKETS_DIR = Path(os.environ.get("TICKETS_DIR", Path.home() / ".claude" / "tickets"))
+LANES_FILE = Path(os.environ.get("ACTIVE_LANES_FILE",
+                                 Path.home() / ".claude" / "active-lanes.json"))
 
 # Linear workspace slug — used to derive a ticket URL from its `linear:` id.
 # Set LINEAR_WORKSPACE in the environment; unset → no derived URL.
@@ -29,6 +34,8 @@ STATUS_META = {
     "open":        ("○", "todo", 1),
     "draft":       ("◌", "backlog", 2),
     "done":        ("●", "done", 3),
+    "cancelled":   ("✕", "muted", 6),
+    "canceled":    ("✕", "muted", 6),
     "In Progress": ("◐", "inprogress", 0),
     "In Review":   ("◑", "inreview", 1),
     "Todo":        ("○", "todo", 2),
@@ -38,8 +45,191 @@ STATUS_META = {
     "Cancelled":   ("✕", "muted", 5),
 }
 DEFAULT_STATUS_META = ("·", "muted", 9)
-FILTER_ORDER = ["active", "open", "draft", "done",
+FILTER_ORDER = ["active", "open", "draft", "done", "cancelled",
                 "In Progress", "In Review", "Todo", "Backlog"]
+CANCELLED_STATUSES = {"cancelled", "canceled", "Cancelled", "Canceled"}
+
+# Split-pane thresholds. Below the combined minimum, preview is hidden and
+# the list reclaims the full width.
+LIST_MIN_W = 38
+PREVIEW_MIN_W = 32
+
+# Priority bucket → (sort rank, color name). Missing/blank priorities sort last
+# with rank 9 so prioritized work bubbles to the top of each group.
+PRIORITY_META = {
+    "P0": (0, "p0"),
+    "P1": (1, "p1"),
+    "P2": (2, "p2"),
+    "P3": (3, "p3"),
+}
+PRIORITY_ORDER = ["P0", "P1", "P2", "P3"]
+PRIORITY_DEFAULT_RANK = 9
+
+# Fixed area bucket set (kept in sync with ~/.claude/tickets/README.md). The
+# minibuffer move picker indexes into this list — extend with care.
+AREAS = ["integrations", "ops", "platform", "spikes", "tooling"]
+
+HELP_TEXT = """tix — keyboard reference
+
+NAVIGATION
+  ↑ / k          move up
+  ↓ / j          move down
+  PgUp / Ctrl-U  page (half) up
+  PgDn / Ctrl-D  page (half) down
+  g              jump to top
+  G              jump to bottom
+  ← / h          collapse current group
+  → / l / ⏎      open ticket in glow (or expand group)
+  space          toggle current group
+  C / z          collapse / expand all groups
+
+FILTER + SEARCH
+  tab / shift-tab  cycle status filter chip
+  1-9              jump to filter chip N
+  /                start text search (esc to cancel, ⏎ to commit)
+
+TICKET ACTIONS
+  p              pickup → wt <slug> (suspend curses, run, return)
+  e              edit brief in $EDITOR; reload after
+  R              rescope → $EDITOR scratch → claude "/rescope <slug> <text>"
+  n              new ticket → $EDITOR scratch → claude "/scope <text>"
+  N              new from clipboard (pbpaste) → $EDITOR → claude "/scope"
+  +/= / -        raise / lower priority (P0..P3, blank); writes frontmatter
+  d              toggle done   (sticky: trumps reconciler)
+  x              toggle cancel (sticky terminal; ticket hides from default views)
+  m              move ticket to a different area (numeric pick)
+  o              open the ticket's URL (legacy linear: field)
+  r              force reload (also auto-reloads every 2s on tickets-dir change)
+  ?              this help
+  q / esc        quit
+
+HIDE RULES
+  cancelled  hidden everywhere except `cancelled` chip
+  done       hidden everywhere except `done` chip
+  All chip shows draft / open / active only.
+
+STATUS LIFECYCLE
+  draft → /scope plants it; reconciler preserves until a lane spawns
+  open → default
+  active → derived from live worktree / branch (~/.claude/scripts/ticket-status-sync.py)
+  done → derived from merged PR OR sticky `d` mark in tix
+  cancelled → sticky `x` mark; trumps every derived signal
+
+The reconciler runs on every tix launch + every `wt` spawn.
+"""
+
+
+def load_lanes():
+    """slug -> {path, branch, repo, last_commit} sidecar emitted by
+    ticket-status-sync.py. Best-effort: missing/corrupt → empty dict, tix
+    just hides the lane-state section."""
+    try:
+        return json.loads(LANES_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def read_agent_state(wt_path):
+    """Single-file read — the state machine writes one line per transition,
+    so this is the live agent indicator. Empty / missing → just hide."""
+    try:
+        return (Path(wt_path) / ".claude" / "agent-state").read_text(
+            encoding="utf-8", errors="replace").strip()
+    except OSError:
+        return ""
+
+
+AGENT_STATE_COLORS = {
+    "ACTIVE":  "inprogress",
+    "WAITING": "p1",
+    "IDLE":    "todo",
+    "RUNNING": "inreview",
+    "DONE":    "done",
+    "FAILED":  "p0",
+}
+
+
+def agent_state_color(state):
+    """Map the leading token of an agent-state line (`ACTIVE:tool`,
+    `WAITING:code:detail`, …) onto a tix color name."""
+    head = state.split(":", 1)[0] if state else ""
+    return AGENT_STATE_COLORS.get(head, "muted")
+
+
+def dir_signature():
+    """Sum of every brief's mtime_ns under TICKETS_DIR. Order-independent —
+    a single bumped/added/removed file changes the sum, so tix can poll this
+    cheaply on idle ticks and reload only when something actually changed."""
+    total = 0
+    try:
+        for path in TICKETS_DIR.rglob("*.md"):
+            try:
+                total += path.stat().st_mtime_ns
+            except OSError:
+                continue
+    except OSError:
+        pass
+    return total
+
+
+def is_tombstone(path):
+    """A tombstone is a brief whose only content is `moved -> <path>`. The
+    contract (~/.claude/tickets/README.md) defines them as redirects; tix
+    should not surface them as tickets. We sniff only the first non-empty
+    line so the check stays cheap on the rglob hot path."""
+    try:
+        with path.open(encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                return stripped.startswith("moved -> ")
+    except OSError:
+        return False
+    return False
+
+
+def write_frontmatter_field(path, key_name, value):
+    """Insert, replace, or remove a frontmatter field. value="" clears the line.
+    No-op if the file has no frontmatter. Mirrors the line-edit pattern in
+    ticket-status-sync.py — flat key:value, no PyYAML."""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return
+    if not text.startswith("---"):
+        return
+    lines = text.splitlines(keepends=True)
+    fm_end = None
+    for i in range(1, len(lines)):
+        if lines[i].strip() == "---":
+            fm_end = i
+            break
+    if fm_end is None:
+        return
+    field_idx = None
+    for i in range(1, fm_end):
+        key, sep, _ = lines[i].partition(":")
+        if sep and key.strip() == key_name:
+            field_idx = i
+            break
+    if value:
+        new_line = f"{key_name}: {value}\n"
+        if field_idx is not None:
+            lines[field_idx] = new_line
+        else:
+            lines.insert(fm_end, new_line)
+    elif field_idx is not None:
+        del lines[field_idx]
+    path.write_text("".join(lines), encoding="utf-8")
+
+
+def write_priority(path, new_priority):
+    write_frontmatter_field(path, "priority", new_priority)
+
+
+def write_status(path, new_status):
+    write_frontmatter_field(path, "status", new_status)
 
 
 def parse_frontmatter(path):
@@ -82,6 +272,8 @@ class Ticket:
         self.epic = fm.get("epic", "") or fm.get("parent", "")
         self.area = fm.get("area", "")
         self.status = fm.get("status", "").strip() or ("open" if self.is_epic else "")
+        # Priority is optional; missing = unprioritized (sorted last).
+        self.priority = fm.get("priority", "").strip().upper()
         # URL is derived from `linear:` when LINEAR_WORKSPACE is set; a legacy
         # stored `url:` is the fallback.
         self.url = (f"https://linear.app/{LINEAR_WORKSPACE}/issue/{self.linear}"
@@ -95,6 +287,23 @@ class Ticket:
             return ("▸", "accent", -1)
         return STATUS_META.get(self.status, DEFAULT_STATUS_META)
 
+    def body(self):
+        """Brief body text with frontmatter stripped. Cached per Ticket — the
+        preview pane re-reads on every keystroke, so paying disk I/O once is the
+        right trade for a ~50-ticket tree."""
+        if hasattr(self, "_body"):
+            return self._body
+        try:
+            text = self.path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            text = ""
+        if text.startswith("---"):
+            end = text.find("\n---", 3)
+            if end >= 0:
+                text = text[end + 4:]
+        self._body = text.lstrip("\n")
+        return self._body
+
 
 def load_tickets():
     tickets = []
@@ -104,6 +313,8 @@ def load_tickets():
                 continue
             # Skip other _*.md meta files, but keep _epic.md (the epic PRD).
             if path.name.startswith("_") and path.name != "_epic.md":
+                continue
+            if is_tombstone(path):
                 continue
             try:
                 tickets.append(Ticket(path))
@@ -124,9 +335,14 @@ class App:
         self.filter_idx = 0
         self.query = ""
         self.search_mode = False
+        # move_mode is None or the Ticket awaiting an area pick from the footer
+        # minibuffer (`m` enters; 1-N commits; esc cancels).
+        self.move_mode = None
         self.sel = 0
         self.top = 0
         self.colors = {}
+        self._dir_sig = dir_signature()
+        self.lanes = load_lanes()
         self.rebuild()
 
     # ---- data ---------------------------------------------------------
@@ -135,9 +351,24 @@ class App:
         for t in self.tickets:
             by_group.setdefault(t.group, []).append(t)
         for g in by_group:
-            by_group[g].sort(key=lambda t: (t.meta[2], t.id))
+            by_group[g].sort(key=lambda t: (
+                PRIORITY_META.get(t.priority, (PRIORITY_DEFAULT_RANK, None))[0],
+                t.meta[2],
+                t.id,
+            ))
         self.by_group = by_group
         self.groups = sorted(by_group, key=group_sort_key)
+        # group_meta[g] = (is_epic_group, area). Epic groups live one level deeper
+        # than area groups, so we prefix the header with the area path for context.
+        self.group_meta = {}
+        for g, ts in by_group.items():
+            epic_t = next((t for t in ts if t.is_epic), None)
+            if epic_t:
+                parents = epic_t.path.parents
+                area = parents[1].name if len(parents) >= 2 else ""
+                self.group_meta[g] = (True, area)
+            else:
+                self.group_meta[g] = (False, "")
         present = [s for s in FILTER_ORDER if any(t.status == s for t in self.tickets)]
         self.filters = ["All"] + present
         if self.filter_idx >= len(self.filters):
@@ -146,6 +377,12 @@ class App:
 
     def passes(self, t):
         f = self.filters[self.filter_idx]
+        # Cancelled + done tickets are hidden from every view except their
+        # explicit filter chip — the working list is for in-flight work.
+        if t.status in CANCELLED_STATUSES and f != "cancelled":
+            return False
+        if t.status.lower() == "done" and f != "done":
+            return False
         if f != "All" and t.status != f:
             return False
         if self.query:
@@ -188,6 +425,10 @@ class App:
             "muted": curses.COLOR_WHITE,
             "group": curses.COLOR_WHITE,
             "accent": curses.COLOR_CYAN,
+            "p0": curses.COLOR_RED,
+            "p1": curses.COLOR_YELLOW,
+            "p2": curses.COLOR_CYAN,
+            "p3": curses.COLOR_BLUE,
         }
         for i, (name, fg) in enumerate(spec.items(), start=1):
             try:
@@ -216,19 +457,122 @@ class App:
         except curses.error:
             pass
 
+    def panes(self, w):
+        """Return (list_w, preview_w). preview_w == 0 means hidden — the list
+        gets the full width back on narrow terminals."""
+        if w < LIST_MIN_W + PREVIEW_MIN_W + 1:
+            return w, 0
+        list_w = max(LIST_MIN_W, int(w * 0.48))
+        preview_w = w - list_w - 1
+        if preview_w < PREVIEW_MIN_W:
+            list_w = w - PREVIEW_MIN_W - 1
+            preview_w = PREVIEW_MIN_W
+        return list_w, preview_w
+
     def draw(self, stdscr):
         stdscr.erase()
         h, w = stdscr.getmaxyx()
         self.draw_header(stdscr, w)
         body_h = max(0, h - 2)
         self.clamp_viewport(body_h)
+        list_w, preview_w = self.panes(w)
         for i in range(body_h):
             idx = self.top + i
             if idx >= len(self.rows):
                 break
-            self.draw_row(stdscr, 1 + i, w, idx, self.rows[idx])
+            self.draw_row(stdscr, 1 + i, list_w, idx, self.rows[idx])
+        if preview_w > 0:
+            sep_x = list_w
+            sep_attr = self.attr("muted", curses.A_DIM)
+            for i in range(body_h):
+                self._put(stdscr, 1 + i, sep_x, "│", sep_attr)
+            self.draw_preview(stdscr, sep_x + 2, 1, preview_w - 2, body_h)
         self.draw_footer(stdscr, h, w)
         stdscr.refresh()
+
+    def draw_preview(self, stdscr, x0, y0, w, h):
+        if w <= 0 or h <= 0:
+            return
+        row = self.current()
+        if not row:
+            return
+        if row["type"] == "group":
+            is_epic_g, area = self.group_meta.get(row["group"], (False, ""))
+            heading = f"{area} / {row['group']}" if is_epic_g and area else row["group"]
+            kind = "epic group" if is_epic_g else "area group"
+            self._put(stdscr, y0, x0, heading[:w], self.attr("accent", curses.A_BOLD), maxx=x0 + w)
+            sub = f"{row['count']}/{row['total']} tickets · {kind}"
+            self._put(stdscr, y0 + 1, x0, sub[:w], self.attr("muted", curses.A_DIM), maxx=x0 + w)
+            return
+
+        t = row["ticket"]
+        y = y0
+        # Title — bold, single line, truncated.
+        self._put(stdscr, y, x0, t.title[:w], curses.A_BOLD, maxx=x0 + w)
+        y += 1
+        meta_bits = [b for b in (t.area, t.status, t.priority) if b]
+        if meta_bits:
+            color = t.meta[1] if not t.is_epic else "accent"
+            self._put(stdscr, y, x0, (" · ".join(meta_bits))[:w],
+                      self.attr(color), maxx=x0 + w)
+            y += 1
+        kv = []
+        if t.id and t.id != t.slug:
+            kv.append(("id", t.id))
+        if t.epic:
+            kv.append(("epic", t.epic))
+        if t.linear:
+            kv.append(("linear", t.linear))
+        for key, val in kv:
+            if y - y0 >= h:
+                break
+            line = f"{key}: {val}"
+            self._put(stdscr, y, x0, line[:w], self.attr("muted", curses.A_DIM),
+                      maxx=x0 + w)
+            y += 1
+        # In-progress block: only for tickets the reconciler marked `active`.
+        # Sidecar lookup is O(1); agent-state is one tiny file read per draw.
+        if t.status == "active" and t.slug in self.lanes and y - y0 < h:
+            lane = self.lanes[t.slug]
+            y += 1
+            if y - y0 >= h:
+                return
+            self._put(stdscr, y, x0, "── lane ─────────────"[:w],
+                      self.attr("muted", curses.A_DIM), maxx=x0 + w)
+            y += 1
+            wt_path = lane.get("path", "")
+            home = str(Path.home())
+            rel = wt_path.replace(home, "~", 1) if wt_path.startswith(home) else wt_path
+            for label, val, color in (
+                ("path",   rel, "muted"),
+                ("branch", lane.get("branch", ""), "muted"),
+            ):
+                if not val or y - y0 >= h:
+                    continue
+                self._put(stdscr, y, x0, f"{label}: {val}"[:w],
+                          self.attr(color, curses.A_DIM), maxx=x0 + w)
+                y += 1
+            state = read_agent_state(wt_path)
+            if state and y - y0 < h:
+                self._put(stdscr, y, x0, f"state: {state}"[:w],
+                          self.attr(agent_state_color(state), curses.A_BOLD),
+                          maxx=x0 + w)
+                y += 1
+            last = lane.get("last_commit", "")
+            if last and y - y0 < h:
+                self._put(stdscr, y, x0, f"last: {last}"[:w],
+                          self.attr("muted"), maxx=x0 + w)
+                y += 1
+        if y - y0 >= h:
+            return
+        # Visual gap before body.
+        y += 1
+        body_lines = t.body().splitlines() or ["(empty)"]
+        for raw in body_lines:
+            if y - y0 >= h:
+                break
+            self._put(stdscr, y, x0, raw[:w], maxx=x0 + w)
+            y += 1
 
     def draw_header(self, stdscr, w):
         x = 0
@@ -250,14 +594,19 @@ class App:
         selected = idx == self.sel
         if row["type"] == "group":
             arrow = "▶" if row["group"] in self.collapsed else "▼"
-            text = f"{arrow} {row['group']}"
+            is_epic_g, area = self.group_meta.get(row["group"], (False, ""))
+            if is_epic_g and area:
+                text = f"{arrow} {area} / {row['group']}  (epic)"
+            else:
+                text = f"{arrow} {row['group']}"
             count = f"({row['count']}/{row['total']})"
             attr = curses.A_BOLD | (curses.A_REVERSE if selected else 0)
             if selected:
-                self._put(stdscr, y, 0, " " * (w - 1), curses.A_REVERSE)
-            self._put(stdscr, y, 0, text, attr)
+                self._put(stdscr, y, 0, " " * (w - 1), curses.A_REVERSE, maxx=w)
+            self._put(stdscr, y, 0, text, attr, maxx=w)
             self._put(stdscr, y, max(0, w - len(count) - 1), count,
-                      attr if selected else self.attr("muted", curses.A_DIM))
+                      attr if selected else self.attr("muted", curses.A_DIM),
+                      maxx=w)
             return
 
         t = row["ticket"]
@@ -265,27 +614,41 @@ class App:
         status = t.status
         # Legacy tickets get a `~` marker; slugs are wider than Linear ids.
         disp_id = (t.id + "~") if t.legacy else t.id
-        id_col = f"{disp_id[:16]:<16}"
+        id_col = f"{disp_id[:13]:<13}"
+        prio_tag = t.priority if t.priority in PRIORITY_META else "  "
+        prio_color = PRIORITY_META.get(t.priority, (None, "muted"))[1]
         if selected:
-            self._put(stdscr, y, 0, " " * (w - 1), curses.A_REVERSE)
+            self._put(stdscr, y, 0, " " * (w - 1), curses.A_REVERSE, maxx=w)
             base = curses.A_REVERSE
-            self._put(stdscr, y, 2, icon, base | curses.A_BOLD)
-            self._put(stdscr, y, 4, id_col, base | curses.A_BOLD)
-            title_x = 4 + len(id_col) + 1
+            self._put(stdscr, y, 2, icon, base | curses.A_BOLD, maxx=w)
+            self._put(stdscr, y, 4, f"{prio_tag:<2}",
+                      base | curses.A_BOLD, maxx=w)
+            self._put(stdscr, y, 7, id_col, base | curses.A_BOLD, maxx=w)
+            title_x = 7 + len(id_col) + 1
             avail = w - title_x - len(status) - 2
-            self._put(stdscr, y, title_x, t.title[: max(0, avail)], base)
-            self._put(stdscr, y, max(title_x, w - len(status) - 1), status, base | curses.A_DIM)
-        else:
-            self._put(stdscr, y, 2, icon, self.attr(color, curses.A_BOLD))
-            self._put(stdscr, y, 4, id_col, curses.A_DIM)
-            title_x = 4 + len(id_col) + 1
-            avail = w - title_x - len(status) - 2
-            self._put(stdscr, y, title_x, t.title[: max(0, avail)])
+            self._put(stdscr, y, title_x, t.title[: max(0, avail)], base, maxx=w)
             self._put(stdscr, y, max(title_x, w - len(status) - 1), status,
-                      self.attr(color))
+                      base | curses.A_DIM, maxx=w)
+        else:
+            self._put(stdscr, y, 2, icon, self.attr(color, curses.A_BOLD), maxx=w)
+            self._put(stdscr, y, 4, f"{prio_tag:<2}",
+                      self.attr(prio_color, curses.A_BOLD), maxx=w)
+            self._put(stdscr, y, 7, id_col, curses.A_DIM, maxx=w)
+            title_x = 7 + len(id_col) + 1
+            avail = w - title_x - len(status) - 2
+            self._put(stdscr, y, title_x, t.title[: max(0, avail)], maxx=w)
+            self._put(stdscr, y, max(title_x, w - len(status) - 1), status,
+                      self.attr(color), maxx=w)
 
     def draw_footer(self, stdscr, h, w):
         y = h - 1
+        if self.move_mode is not None:
+            items = "  ".join(f"{i+1}) {a}" for i, a in enumerate(AREAS))
+            text = f" move `{self.move_mode.slug}` → {items}   esc cancel "
+            self._put(stdscr, y, 0, " " * (w - 1), curses.A_REVERSE)
+            self._put(stdscr, y, 0, text[:w],
+                      self.attr("accent", curses.A_REVERSE | curses.A_BOLD))
+            return
         if self.search_mode:
             prompt = f"/{self.query}"
             self._put(stdscr, y, 0, " " * (w - 1), curses.A_REVERSE)
@@ -295,8 +658,8 @@ class App:
             except curses.error:
                 pass
             return
-        hints = ("↑↓ move  ⏎ open  space fold  tab filter  "
-                 "/ search  o url  r reload  q quit")
+        hints = ("⏎ open · p pickup · e edit · R rescope · n new · m move · "
+                 "+/− prio · d done · x cancel · ? help · q quit")
         if self.query:
             hints = f"filter:/{self.query}   " + hints
         self._put(stdscr, y, 0, hints, self.attr("muted", curses.A_DIM))
@@ -336,6 +699,27 @@ class App:
             self.collapsed.clear()
         self.rebuild_rows()
 
+    def show_help(self, stdscr):
+        pager = shutil.which("less") or os.environ.get("PAGER", "less")
+        fd, tmp = tempfile.mkstemp(suffix=".txt", prefix="tix-help-")
+        os.close(fd)
+        tmp_path = Path(tmp)
+        try:
+            tmp_path.write_text(HELP_TEXT, encoding="utf-8")
+            curses.def_prog_mode()
+            curses.endwin()
+            try:
+                subprocess.run([pager, str(tmp_path)])
+            except OSError:
+                pass
+            curses.reset_prog_mode()
+            stdscr.refresh()
+        finally:
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+
     def open_ticket(self, stdscr, ticket):
         pager = shutil.which("glow")
         cmd = [pager, "-p", str(ticket.path)] if pager else \
@@ -362,13 +746,226 @@ class App:
             pass
 
     def reload(self):
+        keep = self.selected_path()
         self.tickets = load_tickets()
+        self.lanes = load_lanes()
+        self._dir_sig = dir_signature()
         self.rebuild()
+        if keep:
+            self.reselect_path(keep)
+
+    def selected_path(self):
+        row = self.current()
+        if row and row["type"] == "ticket":
+            return row["ticket"].path
+        return None
+
+    def reselect_path(self, path):
+        for i, row in enumerate(self.rows):
+            if row["type"] == "ticket" and row["ticket"].path == path:
+                self.sel = i
+                return
+
+    # ---- external dispatch -------------------------------------------
+    @staticmethod
+    def in_tmux():
+        return bool(os.environ.get("TMUX"))
+
+    def run_external(self, stdscr, argv, name=None):
+        """Run an external command. In tmux: spawn a new window so tix keeps
+        running. Otherwise: suspend curses, run in the foreground, restore.
+        argv is a list — no shell interpolation, free-text safe."""
+        if self.in_tmux() and shutil.which("tmux"):
+            quoted = " ".join(shlex.quote(a) for a in argv)
+            cmd = ["tmux", "new-window"]
+            if name:
+                cmd += ["-n", name]
+            cmd.append(quoted)
+            try:
+                subprocess.run(cmd, check=False)
+            except OSError:
+                pass
+            return
+        curses.def_prog_mode()
+        curses.endwin()
+        try:
+            subprocess.run(argv)
+        except OSError:
+            pass
+        curses.reset_prog_mode()
+        stdscr.refresh()
+
+    def capture_buffer(self, stdscr, seed=""):
+        """Open $EDITOR on a tmpfile (pre-seeded). Return stripped contents.
+        Empty string = user cleared / aborted — caller should noop."""
+        editor = os.environ.get("EDITOR") or os.environ.get("VISUAL") or "vi"
+        fd, tmp_path = tempfile.mkstemp(suffix=".md", prefix="tix-")
+        os.close(fd)
+        tmp = Path(tmp_path)
+        try:
+            if seed:
+                tmp.write_text(seed, encoding="utf-8")
+            curses.def_prog_mode()
+            curses.endwin()
+            try:
+                subprocess.run([editor, str(tmp)])
+            except OSError:
+                pass
+            curses.reset_prog_mode()
+            stdscr.refresh()
+            try:
+                return tmp.read_text(encoding="utf-8").strip()
+            except OSError:
+                return ""
+        finally:
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+
+    # ---- ticket actions ----------------------------------------------
+    def pickup_ticket(self, stdscr, ticket):
+        """Always foreground-suspend for pickup. `wt` is fast (sets up the
+        worktree, then spawns the lane into its own tmux window per WT_LAYOUT)
+        and returns — wrapping it in our own `tmux new-window` would just add a
+        transient flash window before wt's real one."""
+        wt = shutil.which("wt") or "wt"
+        curses.def_prog_mode()
+        curses.endwin()
+        try:
+            subprocess.run([wt, ticket.slug])
+        except OSError:
+            pass
+        curses.reset_prog_mode()
+        stdscr.refresh()
+
+    def edit_brief(self, stdscr, ticket):
+        editor = os.environ.get("EDITOR") or os.environ.get("VISUAL") or "vi"
+        curses.def_prog_mode()
+        curses.endwin()
+        try:
+            subprocess.run([editor, str(ticket.path)])
+        except OSError:
+            pass
+        curses.reset_prog_mode()
+        stdscr.refresh()
+        self.reload()
+
+    def rescope_ticket(self, stdscr, ticket):
+        seed = (f"# Rescope notes for `{ticket.slug}` — claude reads everything below.\n"
+                f"# Lines beginning with # are passed through; delete them if you don't\n"
+                f"# want them sent. Save & quit to dispatch, or leave empty to cancel.\n\n")
+        text = self.capture_buffer(stdscr, seed=seed)
+        if not text:
+            return
+        prompt = f"/rescope {ticket.slug} {text}"
+        self.run_external(stdscr, ["claude", prompt], name=f"rescope:{ticket.slug[:10]}")
+
+    def new_ticket(self, stdscr, seed=""):
+        if not seed:
+            seed = ("# New ticket — describe the problem. Claude will run /scope on this\n"
+                    "# text: it'll ask up to 3 clarifying questions, then engineer the brief.\n"
+                    "# Save & quit to dispatch, or leave empty to cancel.\n\n")
+        text = self.capture_buffer(stdscr, seed=seed)
+        if not text:
+            return
+        prompt = f"/scope {text}"
+        self.run_external(stdscr, ["claude", prompt], name="scope")
+
+    def new_from_clipboard(self, stdscr):
+        clip = ""
+        clip_cmd = "pbpaste" if sys.platform == "darwin" else "xclip"
+        if shutil.which(clip_cmd):
+            args = [clip_cmd] if clip_cmd == "pbpaste" else [clip_cmd, "-o", "-selection", "clipboard"]
+            try:
+                clip = subprocess.run(args, capture_output=True, text=True,
+                                      timeout=5).stdout
+            except (OSError, subprocess.SubprocessError):
+                clip = ""
+        seed = ("# New ticket from clipboard paste (Granola, notes, etc).\n"
+                "# Trim or annotate — claude will /scope this. Empty = cancel.\n\n")
+        seed += clip
+        self.new_ticket(stdscr, seed=seed)
+
+    def toggle_cancel(self, ticket):
+        """Flip cancelled ↔ open in place — no confirm prompt. Cancelled is
+        sticky in the reconciler, so the write survives subsequent syncs."""
+        new_status = "open" if ticket.status in CANCELLED_STATUSES else "cancelled"
+        write_status(ticket.path, new_status)
+        ticket.status = new_status
+        path = ticket.path
+        self.rebuild()
+        self.reselect_path(path)
+
+    def move_ticket(self, ticket, new_area):
+        """Move a single area-level brief to a different area folder. Uses
+        `git mv` when the tree is a git repo so history follows; falls back
+        to plain rename when it isn't. Also rewrites the stored `area:`
+        frontmatter so it matches the new location."""
+        if ticket.area == new_area:
+            return
+        src = ticket.path
+        dest_dir = TICKETS_DIR / new_area
+        dest = dest_dir / src.name
+        if dest.exists():
+            return  # slug collision in target area — bail rather than clobber
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        moved = False
+        try:
+            result = subprocess.run(
+                ["git", "-C", str(TICKETS_DIR), "mv",
+                 str(src.relative_to(TICKETS_DIR)),
+                 str(dest.relative_to(TICKETS_DIR))],
+                capture_output=True, text=True, timeout=10,
+            )
+            moved = result.returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            moved = False
+        if not moved:
+            try:
+                src.rename(dest)
+                moved = True
+            except OSError:
+                return
+        write_frontmatter_field(dest, "area", new_area)
+        self.reload()
+        self.reselect_path(dest)
+
+    def toggle_done(self, ticket):
+        """Flip done ↔ open in place. Sticky in the reconciler so a manual
+        mark survives even without a merged PR — useful for spikes, ops, or
+        research tickets whose 'completion' has no PR signal."""
+        new_status = "open" if ticket.status.lower() == "done" else "done"
+        write_status(ticket.path, new_status)
+        ticket.status = new_status
+        path = ticket.path
+        self.rebuild()
+        self.reselect_path(path)
+
+    def bump_priority(self, ticket, delta):
+        """delta > 0 raises priority (toward P0); delta < 0 lowers it toward
+        cleared. Writes frontmatter, then rebuilds so the new sort takes."""
+        seq = [""] + PRIORITY_ORDER
+        idx = (PRIORITY_ORDER.index(ticket.priority) + 1
+               if ticket.priority in PRIORITY_ORDER else 0)
+        new_idx = max(0, min(len(seq) - 1, idx - delta))
+        new_pri = seq[new_idx]
+        if new_pri == ticket.priority:
+            return
+        write_priority(ticket.path, new_pri)
+        ticket.priority = new_pri
+        path = ticket.path
+        self.rebuild()
+        self.reselect_path(path)
 
     # ---- main loop ----------------------------------------------------
     def run(self, stdscr):
         curses.curs_set(0)
         stdscr.keypad(True)
+        # 2 s idle timeout so getch() periodically returns -1 even with no
+        # keystroke — we use that tick to detect external writes (claude /scope
+        # finishing in a tmux window, sync.py running, hand edits) and reload.
+        stdscr.timeout(2000)
         self.init_colors()
         while True:
             h, _ = stdscr.getmaxyx()
@@ -376,6 +973,21 @@ class App:
             curses.curs_set(1 if self.search_mode else 0)
             self.draw(stdscr)
             ch = stdscr.getch()
+            if ch == -1:
+                new_sig = dir_signature()
+                if new_sig != self._dir_sig:
+                    self.reload()
+                continue
+            if self.move_mode is not None:
+                ticket = self.move_mode
+                if ch == 27:  # esc — cancel
+                    self.move_mode = None
+                elif ord("1") <= ch <= ord("9"):
+                    idx = ch - ord("1")
+                    self.move_mode = None
+                    if idx < len(AREAS):
+                        self.move_ticket(ticket, AREAS[idx])
+                continue
             if self.search_mode:
                 self.handle_search_key(ch)
                 continue
@@ -425,6 +1037,49 @@ class App:
                     self.open_url(row["ticket"])
             elif ch == ord("r"):
                 self.reload()
+            elif ch == ord("p"):
+                row = self.current()
+                if row and row["type"] == "ticket":
+                    self.pickup_ticket(stdscr, row["ticket"])
+            elif ch == ord("e"):
+                row = self.current()
+                if row and row["type"] == "ticket":
+                    self.edit_brief(stdscr, row["ticket"])
+            elif ch == ord("R"):
+                row = self.current()
+                if row and row["type"] == "ticket":
+                    self.rescope_ticket(stdscr, row["ticket"])
+            elif ch == ord("n"):
+                self.new_ticket(stdscr)
+            elif ch == ord("N"):
+                self.new_from_clipboard(stdscr)
+            elif ch in (ord("+"), ord("=")):
+                row = self.current()
+                if row and row["type"] == "ticket":
+                    self.bump_priority(row["ticket"], 1)
+            elif ch == ord("-"):
+                row = self.current()
+                if row and row["type"] == "ticket":
+                    self.bump_priority(row["ticket"], -1)
+            elif ch == ord("x"):
+                row = self.current()
+                if row and row["type"] == "ticket":
+                    self.toggle_cancel(row["ticket"])
+            elif ch == ord("d"):
+                row = self.current()
+                if row and row["type"] == "ticket":
+                    self.toggle_done(row["ticket"])
+            elif ch == ord("m"):
+                row = self.current()
+                if row and row["type"] == "ticket":
+                    t = row["ticket"]
+                    # Only area-level briefs (parent is the area dir). Epic
+                    # children stay with their epic; epic folders need their
+                    # whole tree moved, which is out of scope for now.
+                    if not t.is_epic and t.path.parent.parent == TICKETS_DIR:
+                        self.move_mode = t
+            elif ch == ord("?"):
+                self.show_help(stdscr)
             elif ch in (ord("C"), ord("z")):
                 self.toggle_all()
 

@@ -7,16 +7,22 @@ every ticket's status from filesystem + git signals and overwrites the
 frontmatter line. Hand edits are clobbered on the next run, by design.
 
 States (contract: ~/.claude/tickets/README.md):
-  done    — a PR for the ticket's branch was merged   (authority: `gh`)
-  active  — a live worktree or branch exists for the slug
-  open    — refined, ready, no active lane
-  draft   — freshly /scope'd, not yet refined or picked up
+  done       — a PR was merged OR user pinned it from tix (`d`); sticky
+  active     — a live worktree or branch exists for the slug
+  open       — refined, ready, no active lane
+  draft      — freshly /scope'd, not yet refined or picked up
+  cancelled  — user dropped the ticket; terminal, trumps every derived signal
 
 `draft` is a sticky seed: pre-migration it was the `_drafts/` folder, but that
 folder is dead — draft is a status, not a location. Nothing on the filesystem
 distinguishes a draft from an open ticket, so this script never *produces*
 draft; it only *preserves* it when no live signal exists. `/scope` plants
 `draft`; the first worktree flips it to `active`; from then on it is derived.
+
+`cancelled` is the second sticky carve-out, but with stronger semantics: it
+trumps every derived signal. The reconciler never produces `cancelled` either;
+`tix` writes it on `x`, and from then on it is preserved regardless of whether
+a branch or PR still exists. Reopen with `x` again from tix.
 
 Usage:
   ticket-status-sync.py            full sweep — every ticket, all signals
@@ -27,6 +33,7 @@ Usage:
 
 Exit code is always 0 — this runs as a `wt`/`tix` hook and must never block.
 """
+import json
 import os
 import subprocess
 import sys
@@ -34,6 +41,11 @@ from pathlib import Path
 
 TICKETS_DIR = Path(os.environ.get("TICKETS_DIR", Path.home() / ".claude" / "tickets"))
 HOME = Path.home()
+# Sidecar consumed by tix: slug -> {path, branch, repo, last_commit}. Written
+# only on full sweeps; the fast path (`wt <slug>`) is too narrow to refresh
+# the whole map and would leave stale entries for other lanes.
+LANES_FILE = Path(os.environ.get("ACTIVE_LANES_FILE",
+                                 HOME / ".claude" / "active-lanes.json"))
 
 # Files under TICKETS_DIR that are not single tickets. `_epic.md` and the
 # templates are `_`-prefixed; epics are containers, not units of change, so
@@ -211,6 +223,53 @@ def active_signals(repos):
     return active, repo_slugs
 
 
+def lane_info(repos):
+    """slug -> {path, branch, repo, last_commit} for every live worktree under
+    `<repo>/.claude/worktrees/`. tix consumes the JSON sidecar to render
+    in-progress state in its preview pane (lane path, agent-state, last commit)
+    without re-walking every repo on every keystroke."""
+    lanes = {}
+    for repo in repos:
+        wt_raw = run(["git", "-C", repo, "worktree", "list", "--porcelain"])
+        current = {}
+        for line in wt_raw.splitlines() + [""]:
+            if not line.strip():
+                wt_path = current.get("path", "")
+                parts = Path(wt_path).parts if wt_path else ()
+                if wt_path and ".claude" in parts and "worktrees" in parts:
+                    slug = Path(wt_path).name
+                    branch = current.get("branch", "")
+                    if branch.startswith("refs/heads/"):
+                        branch = branch[len("refs/heads/"):]
+                    last = run([
+                        "git", "-C", wt_path, "log", "-1",
+                        "--format=%s · %cr",
+                    ])
+                    lanes[slug] = {
+                        "path": wt_path,
+                        "branch": branch,
+                        "repo": repo,
+                        "last_commit": last,
+                    }
+                current = {}
+                continue
+            if line.startswith("worktree "):
+                current["path"] = line[len("worktree "):]
+            elif line.startswith("branch "):
+                current["branch"] = line[len("branch "):]
+    return lanes
+
+
+def write_lanes(lanes):
+    """Best-effort. tix's lane-state section is a courtesy — if the write
+    fails, tix simply hides the section, status sync is unaffected."""
+    try:
+        LANES_FILE.parent.mkdir(parents=True, exist_ok=True)
+        LANES_FILE.write_text(json.dumps(lanes, indent=2), encoding="utf-8")
+    except OSError:
+        pass
+
+
 def merged_slugs(repo_slugs):
     """slugs whose PR was merged, via `gh`. `gh` is the authority on `done` —
     a deleted branch is not proof of a merge. Only repos that have a lane
@@ -237,7 +296,14 @@ def merged_slugs(repo_slugs):
 # ---- reconcile -------------------------------------------------------------
 
 def compute_status(slug, current, active, merged):
-    """The derivation. Precedence: merged PR > live lane > sticky draft > open."""
+    """The derivation. Precedence: cancelled > done (sticky-or-derived) > active
+    > sticky draft > open. Both `cancelled` and `done` are sticky terminal
+    states the user can pin from tix (`x`/`d`); they trump every live signal so
+    a closed-out ticket whose branch still exists stays closed until reopened."""
+    if current.lower() in ("cancelled", "canceled"):
+        return "cancelled"  # normalises legacy `Cancelled`/`Canceled` too
+    if current.lower() == "done":
+        return "done"       # sticky — user marked it (no PR required)
     if merged is not None and slug in merged:
         return "done"
     if slug in active:
@@ -262,6 +328,11 @@ def reconcile(only_slug=None):
     # Fast path (`wt` spawn): skip the `gh` network pass — a freshly spawned
     # lane is becoming `active`, never `done`.
     merged = None if only_slug is not None else merged_slugs(repo_slugs)
+    # Full sweep also refreshes the lane sidecar tix consumes for in-progress
+    # state. Fast path skips it to avoid stale entries (one slug touched, others
+    # would diverge).
+    if only_slug is None:
+        write_lanes(lane_info(repos))
 
     changed = []
     unchanged = 0

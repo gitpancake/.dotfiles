@@ -193,8 +193,9 @@ The filesystem is the database — there is no external tracker. Briefs live in 
 ```
 /scope <free text>           → engineer a local brief at ~/.claude/tickets/<area>/<slug>.md
                                (single ticket, or an _epic.md + NN-<child>.md folder)
-tix                          → terminal ticket explorer: browse briefs by keyboard,
-                               read them full-screen in glow
+tix                          → terminal ticket explorer with split-pane preview.
+                               p pickup → wt · e $EDITOR · R/n /rescope|/scope via claude
+                               +/− priority · d done · x cancel · N paste from clipboard
 wt <slug>                    → autonomous lane: reads the brief, plans slices inline,
                                leans on grill-with-docs / tdd / handoff, commits per layer
 /pickup <slug> <BASE> [ctx]  → wt wrapper: sync cockpit to a base branch + fold in extra
