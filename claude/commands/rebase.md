@@ -1,12 +1,11 @@
 ---
-description: Rebase a feature branch onto a base branch. Fetches base, rebases, reports conflicts, pushes on clean replay. Force-push only on confirmation.
+description: Rebase a feature branch onto a base branch. Fetches base, rebases, attempts intelligent conflict resolution, escalates ambiguous conflicts, pushes on clean replay. Force-push only on confirmation. Uses a throwaway worktree when the feature branch is remote-only.
 argument-hint: <base> <feature> — e.g. `main feature/ae-1700-foo`. If only one arg, assumes current branch is the feature.
 ---
 
 # /rebase $ARGUMENTS
 
-Mechanical fetch → rebase → conflict report → push. Never resolves conflicts silently.
-Never force-pushes without explicit confirmation.
+Fetch → rebase → resolve trivial conflicts → escalate ambiguous ones → push. Never force-pushes without explicit confirmation.
 
 ## 0. Parse arguments
 
@@ -16,21 +15,27 @@ Tokens from `$ARGUMENTS`:
 - **zero tokens** → refuse. Print usage. Stop.
 
 Validate:
-- `git rev-parse --verify "$FEATURE"` — local branch must exist. Missing → check `origin/$FEATURE`; if remote-only, offer `git checkout -b $FEATURE origin/$FEATURE`. Otherwise stop.
 - `FEATURE` ≠ `main`/`master` → refuse.
+- `git rev-parse --verify "$FEATURE" 2>/dev/null` — branch presence check.
+  - Local exists → `MODE=local`. Continue §1.
+  - Missing locally → `git fetch origin "$FEATURE" --prune` then `git rev-parse --verify "origin/$FEATURE"`.
+    - Exists on origin → `MODE=worktree`. Continue §1.
+    - Missing on origin too → stop. Print: `Branch $FEATURE not found locally or on origin.`
 - `BASE` may be local or remote; we always rebase onto `origin/$BASE` after fetch.
 
 ## 1. Pre-flight (parallel)
 
-Run in parallel:
+`MODE=local`:
 - `git status --porcelain` — must be clean. Dirty → stop, surface files, ask user to commit/stash.
-- `git branch --show-current` — remember `STARTING_BRANCH`.
-- `git rev-parse "$FEATURE"@{u} 2>/dev/null` — capture upstream if any (`FEATURE_UPSTREAM`).
-- `git log --oneline "origin/$BASE..$FEATURE" 2>/dev/null | wc -l` — commit count ahead pre-rebase.
+- `git branch --show-current` → `STARTING_BRANCH`.
+- `git rev-parse "$FEATURE"@{u} 2>/dev/null` → `FEATURE_UPSTREAM`.
+- Ongoing rebase (`.git/rebase-merge` or `.git/rebase-apply`) → stop, tell user to `--abort` or `--continue`.
 
-Stop conditions:
-- Dirty tree → stop.
-- Ongoing rebase (`.git/rebase-merge` or `.git/rebase-apply` exists) → stop, tell user to `--abort` or `--continue` first.
+`MODE=worktree`:
+- Skip clean-tree check (worktree is isolated).
+- `STARTING_BRANCH` unset (we never leave the cockpit).
+- `FEATURE_UPSTREAM=origin/$FEATURE` (remote-only branch).
+- `WT=$(mktemp -d -t rebase-${FEATURE//\//-}-XXXX)` → throwaway worktree path. Remember it.
 
 ## 2. Fetch base
 
@@ -40,40 +45,72 @@ git fetch origin "$BASE" --prune
 
 Fail → stop, surface error.
 
-## 3. Checkout feature
+## 3. Position on feature
 
+`MODE=local`:
 ```
 git checkout "$FEATURE"
 ```
 
-Already on it → no-op. Different branch → switch. Failure (uncommitted local changes blocking) → stop.
+`MODE=worktree`:
+```
+git worktree add "$WT" -B "$FEATURE" "origin/$FEATURE"
+cd "$WT"
+```
+All subsequent git calls run inside `$WT` until cleanup.
 
-## 4. Rebase
+## 4. Rebase + intelligent conflict loop
 
 ```
 git rebase "origin/$BASE"
 ```
 
-Outcomes:
-- **Clean replay** → continue §5.
-- **Conflicts** → STOP. Do not attempt auto-resolution. Run `git status --porcelain` and `git diff --name-only --diff-filter=U`. Report:
+Loop until rebase finishes or escalates:
+
+- **Clean replay / already up-to-date** → continue §5.
+- **Conflict** → inspect:
+  - `git status --porcelain`
+  - `git diff --name-only --diff-filter=U` → conflicted files
+  - For each conflicted file: read full file, examine `<<<<<<<` / `=======` / `>>>>>>>` blocks, `git log --oneline -5 HEAD` and `git log --oneline -5 REBASE_HEAD` for context.
+
+  Auto-resolve **only** when resolution is unambiguous:
+  - Import/require lists, package.json deps, lockfile-style additive blocks → union of both sides, dedupe.
+  - Whitespace/formatting-only conflicts → take incoming (`origin/$BASE`) side.
+  - One side deletes a line the other side only reformats → keep the reformat.
+  - Adjacent but non-overlapping edits the merge driver mis-flagged → take both.
+  - Generated files (lockfiles, snapshots) → regenerate if a known command exists; otherwise escalate.
+
+  Escalate (stop, do **not** guess) when:
+  - Same lines edited semantically on both sides.
+  - Business logic, control flow, or type signatures conflict.
+  - File deleted on one side, modified on the other.
+  - Any uncertainty about intent.
+
+  Auto-resolve path:
+  1. Edit file to resolved state.
+  2. `git add <file>`.
+  3. After all auto-resolvable files staged: `git rebase --continue`.
+  4. Loop back to top of §4.
+
+  Escalation path → STOP. Print:
   ```
-  Rebase paused on conflicts:
-    <file1>
-    <file2>
-  Resolve, `git add <files>`, then `git rebase --continue`. Or `git rebase --abort` to bail.
+  Rebase paused — ambiguous conflicts need user:
+    <file>:<line-range> — <one-line reason>
+    ...
+  Worktree: $WT   (MODE=worktree only)
+  Resolve, `git add <files>`, then `git rebase --continue`.
+  Or `git rebase --abort` to bail.
   ```
-  Stop. Do not push. Do not call `--continue` yourself.
-- **Already up-to-date** (no commits to replay) → note it, skip to §5 anyway in case push state diverges.
+  Do **not** delete worktree. Do **not** push.
 
 ## 5. Push
 
-If `FEATURE_UPSTREAM` was unset (no remote tracking):
+If `FEATURE_UPSTREAM` unset (only possible in `MODE=local`):
 ```
 git push -u origin "$FEATURE"
 ```
 
-If `FEATURE_UPSTREAM` exists and rebase rewrote history (commit count ahead of base unchanged, but local SHAs differ from upstream):
+If rebase rewrote history (local SHAs differ from `FEATURE_UPSTREAM`):
 - **Confirm with user before force-pushing.** Show:
   ```
   Force-push required (rebase rewrote $FEATURE history).
@@ -81,25 +118,36 @@ If `FEATURE_UPSTREAM` exists and rebase rewrote history (commit count ahead of b
   Local:    $FEATURE @ <new-sha>
   Run `git push --force-with-lease`? [y/N]
   ```
-  On `y` → `git push --force-with-lease origin "$FEATURE"`.
-  Otherwise stop. Print the command for manual run.
+  `y` → `git push --force-with-lease origin "$FEATURE"`.
+  Otherwise stop. Print the command. Skip cleanup so user can push from `$WT` if needed.
 
-If no rewrite (fast-forward only): plain `git push`.
+Fast-forward only → plain `git push`.
 
 Rejected push (non-force case) → surface error, stop. Do not auto-retry.
 
-## 6. Restore starting branch (optional)
+## 6. Cleanup
 
-If `STARTING_BRANCH` ≠ `$FEATURE` and was a real branch → `git checkout "$STARTING_BRANCH"`. Skip on detached HEAD.
+`MODE=worktree` AND push succeeded:
+```
+cd -
+git worktree remove "$WT"
+git branch -D "$FEATURE"   # local ref created by `worktree add -B` — branch lives on origin
+```
+Push skipped or escalated → keep worktree, print path.
+
+`MODE=local`:
+- If `STARTING_BRANCH` ≠ `$FEATURE` and was a real branch → `git checkout "$STARTING_BRANCH"`. Skip on detached HEAD.
 
 ## 7. Report — terse
 
 ```
-Rebased $FEATURE onto origin/$BASE
+Rebased $FEATURE onto origin/$BASE   (mode: <local|worktree>)
 Commits replayed: <N>
+Auto-resolved: <file count or "none">
 Push: <pushed | force-pushed | skipped — manual>
+Worktree: <removed | $WT preserved>
 ```
 
 ## 8. Stop
 
-Do not amend commits. Do not open a PR. Do not trigger review. Conflicts → user resolves.
+Do not amend pre-existing commits. Do not open a PR. Do not trigger review. Ambiguous conflicts → user resolves.
