@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# UserPromptSubmit hook: at turn 50 (first crossing), mechanically generate a
+# UserPromptSubmit hook: at turn 30 (first crossing), mechanically generate a
 # handoff doc from the transcript + git state without involving Claude.
 #
 # Why: turn-cap-warn fires at 30/50/75/100 but historical obedience is ~0%.
@@ -27,7 +27,7 @@ counterFile="${logDir}/session-${sessionId}.count"
 warnedFile="${logDir}/session-${sessionId}.warned"
 
 current=$(cat "$counterFile" 2>/dev/null || echo 0)
-(( current < 50 )) && exit 0
+(( current < 30 )) && exit 0
 
 # Fire once per session.
 [[ -f "$warnedFile" ]] && grep -qx "auto-handoff" "$warnedFile" && exit 0
@@ -131,6 +131,8 @@ echo "$promptsLower" | grep -qE '(review|feedback|address)' && skills+="- addres
   echo "$gitDiffStat"
   echo '```'
 } > "$outFile"
+
+echo "$outFile" > "${logDir}/session-${sessionId}.handoff"
 
 msg=$'📝 Auto-handoff saved → '"${outFile}"$'\n\n/clear is now safe — fresh session run /resume to pick up.'
 jq -nc --arg m "$msg" '{systemMessage: $m}'
