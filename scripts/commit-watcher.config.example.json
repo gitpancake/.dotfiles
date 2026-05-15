@@ -5,8 +5,6 @@
   "poll_seconds": 30,
   "backfill_minutes": 30,
   "backfill_stagger_ms": 1500,
-  "describer_enabled": false,
-  "describer_model": "claude-haiku-4-5-20251001",
   "path_palette_rules": [
     {"prefix": "src/server/", "palette": "green"},
     {"prefix": "src/app/",    "palette": "magenta"},

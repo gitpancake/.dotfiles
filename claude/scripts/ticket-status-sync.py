@@ -308,6 +308,8 @@ def compute_status(slug, current, active, merged):
         return "done"
     if slug in active:
         return "active"
+    if current.lower() == "active":
+        return "active"  # sticky — user pinned it from tix (`i`), no lane required
     if current.lower() == "draft":
         return "draft"  # sticky seed — see module docstring (also normalises
         # a legacy capitalised `Draft` to the lowercase vocab)

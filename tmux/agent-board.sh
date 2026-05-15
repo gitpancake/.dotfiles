@@ -10,6 +10,13 @@
 
 set -u
 
+# Optional: pin the tmux window name so the cockpit pane stays labelled
+# regardless of what foreground command (watch, etc.) is rendering it.
+# Opt-in via $AGENT_BOARD_WINDOW_NAME so dev environments keep custom names.
+if [[ -n "${TMUX:-}" && -n "${TMUX_PANE:-}" && -n "${AGENT_BOARD_WINDOW_NAME:-}" ]]; then
+  tmux rename-window -t "$TMUX_PANE" "$AGENT_BOARD_WINDOW_NAME" 2>/dev/null || true
+fi
+
 # Roots scanned for worktrees. Add more as needed.
 ROOTS=("${HOME}/Documents/code")
 
@@ -218,28 +225,13 @@ render_row() {
     esac
   fi
 
-  # Prefer cached LLM summary keyed by HEAD sha; fall back to HEAD subject.
-  local display sha cache_sha cache_text
-  sha=$(git -C "$lane_dir" rev-parse HEAD 2>/dev/null)
-  local cache="$lane_dir/.claude/summary"
-  if [[ -n "$sha" && -f "$cache" ]]; then
-    cache_sha=$(head -1 "$cache" 2>/dev/null)
-    if [[ "$cache_sha" == "$sha" ]]; then
-      cache_text=$(sed -n '2p' "$cache")
-      display="$cache_text"
-    fi
-  fi
-  if [[ -z "${display:-}" ]]; then
-    display=$(git -C "$lane_dir" log -1 --pretty=%s 2>/dev/null || true)
-    # Fork background refresh so next render picks up the LLM summary.
-    # Skip idle/done/failed lanes — no point summarizing dormant work.
-    if [[ -n "$sha" && -z "${BOARD_NO_SUMMARY:-}" ]]; then
-      case "$raw" in
-        IDLE|DONE|FAILED*) ;;
-        *) ("$HOME/.claude/scripts/lane-summary.sh" "$lane_dir" "$sha" </dev/null >/dev/null 2>&1 &) ;;
-      esac
-    fi
-  fi
+  # Prefer tmux window name (human-set lane label) over git HEAD subject,
+  # which on a fresh lane is just the base commit and misnames the row.
+  local display=""
+  local lane_pid
+  lane_pid=$(cat "$pid_file" 2>/dev/null)
+  [[ -n "$lane_pid" ]] && display=$(tmux_window_for_pid "$lane_pid")
+  [[ -z "$display" ]] && display=$(basename "$lane_dir")
   [[ -z "$display" ]] && display="$label"
   [[ ${#display} -gt 28 ]] && display="${display:0:25}..."
 
@@ -258,9 +250,30 @@ render_row() {
     "$prio" "$c" "$display" "$state" "$ctx_disp" "$reset"
 }
 
+# Tmux pane_pid → window_name map, built once per render. Lets cockpit rows
+# inherit the human-meaningful tmux window name instead of the cwd basename
+# (e.g. `rescope:false-fail` vs `code`).
+tmux_pane_map=""
+if command -v tmux >/dev/null 2>&1; then
+  tmux_pane_map=$(tmux list-panes -a -F '#{pane_pid}|#{window_name}' 2>/dev/null)
+fi
+
+# Walk parent chain of $1 until a pid matches a tmux pane_pid; print its window name.
+tmux_window_for_pid() {
+  local pid=$1
+  [[ -n "$tmux_pane_map" ]] || return
+  local cur=$pid hops=0 win
+  while [[ -n "$cur" && "$cur" != 0 && "$cur" != 1 && $hops -lt 16 ]]; do
+    win=$(printf '%s\n' "$tmux_pane_map" | awk -F'|' -v p="$cur" '$1==p{print $2; exit}')
+    [[ -n "$win" ]] && { printf '%s' "$win"; return; }
+    cur=$(ps -o ppid= -p "$cur" 2>/dev/null | tr -d ' ')
+    hops=$((hops + 1))
+  done
+}
+
 # Render a cockpit row from session registry data.
 render_session_row() {
-  local cwd=$1 state=$2 ctx_disp=${3:-}
+  local cwd=$1 state=$2 ctx_disp=${3:-} spid=${4:-}
   local c
   case "$state" in
     ACTIVE*)  c=$green ;;
@@ -272,7 +285,8 @@ render_session_row() {
   esac
 
   local label
-  label=$(basename "$cwd")
+  [[ -n "$spid" ]] && label=$(tmux_window_for_pid "$spid")
+  [[ -z "$label" ]] && label=$(basename "$cwd")
   [[ ${#label} -gt 28 ]] && label="${label:0:25}..."
 
   local prio
@@ -361,7 +375,7 @@ for sess_json in "$HOME"/.claude/sessions/*.json; do
   fi
 
   cockpit_count=$((cockpit_count + 1))
-  cockpit_rows+=$(render_session_row "$scwd" "$sstate" "$ctx_disp")$'\n'
+  cockpit_rows+=$(render_session_row "$scwd" "$sstate" "$ctx_disp" "$spid")$'\n'
 done
 
 if (( lane_count == 0 && cockpit_count == 0 )); then

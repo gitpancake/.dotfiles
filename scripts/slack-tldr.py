@@ -26,10 +26,12 @@ via $SLACK_TLDR_CONFIG):
 State at $SLACK_TLDR_STATE (default ~/.local/share/slack-tldr/state.json):
   {
     "active":        [{"id": "<ts>", "ts": <epoch>, "channel": "C…",
-                       "channel_name": "alerts", "tldr": "…", "raw": "…"}],
+                       "channel_name": "alerts", "sender": "alice",
+                       "tldr": "…", "raw": "…"}],
     "dismissed_ts":  ["<ts>", …],   # ring of recent dismissals
     "ack_ts":        <epoch>,       # alerts with ts > ack_ts are "new"
-    "channel_names": {"C…": "alerts"}  # cache for pretty rendering
+    "channel_names": {"C…": "alerts"},  # cache for pretty rendering
+    "user_names":    {"U…": "alice"}   # cache for sender column
   }
 """
 
@@ -66,18 +68,31 @@ def _ensure_dirs():
     Path(DEFAULT_STATE).parent.mkdir(parents=True, exist_ok=True)
 
 
+def _empty_state():
+    return {
+        "active": [],
+        "dismissed_ts": [],
+        "channel_names": {},
+        "user_names": {},
+        "subteam_names": {},
+        "seen_ts": [],
+    }
+
+
 def _load_state():
     _ensure_dirs()
     if not os.path.exists(DEFAULT_STATE):
-        return {"active": [], "dismissed_ts": [], "channel_names": {}, "seen_ts": []}
+        return _empty_state()
     try:
         with open(DEFAULT_STATE, "r") as f:
             data = json.load(f)
     except (OSError, json.JSONDecodeError):
-        return {"active": [], "dismissed_ts": [], "channel_names": {}, "seen_ts": []}
+        return _empty_state()
     data.setdefault("active", [])
     data.setdefault("dismissed_ts", [])
     data.setdefault("channel_names", {})
+    data.setdefault("user_names", {})
+    data.setdefault("subteam_names", {})
     data.setdefault("seen_ts", [])
     data.setdefault("ack_ts", 0.0)
     return data
@@ -89,6 +104,20 @@ def _save_state(state):
     with open(tmp, "w") as f:
         json.dump(state, f, indent=2)
     os.replace(tmp, DEFAULT_STATE)
+
+
+def _persist_user_cache(user_cache):
+    """Fold the live user-name cache into the on-disk state so renderers
+    (pane/watch) can show sender names without re-hitting users.info."""
+    def mutate(state):
+        existing = state.get("user_names", {}) or {}
+        merged = dict(existing)
+        merged.update(user_cache)
+        if merged == existing:
+            return None
+        state["user_names"] = merged
+        return state
+    _with_state_lock(mutate)
 
 
 def _with_state_lock(fn):
@@ -150,9 +179,81 @@ def load_config():
 MENTION_RE = re.compile(r"<@([A-Z0-9]+)(?:\|[^>]+)?>")
 CHANNEL_RE = re.compile(r"<#([A-Z0-9]+)(?:\|([^>]+))?>")
 LINK_RE = re.compile(r"<(https?://[^|>]+)(?:\|([^>]+))?>")
+# Slack emoji shortcodes: `:rotating_light:`, `:+1:`, `:skin-tone-2:`.
+# Anchor on letter / `+` / `-` so timestamps like `10:30:00` survive.
+EMOJI_RE = re.compile(r":[a-z+\-][a-z0-9_+\-]*:")
+MULTISPACE_RE = re.compile(r"  +")
+# `<!subteam^SID>`, `<!subteam^SID|handle>`, `<!here>`, `<!channel>`,
+# `<!everyone>`, `<!date^...|fallback>`. Catch-all for any `<!…>` tag.
+SPECIAL_RE = re.compile(r"<!([^|>]+)(?:\|([^>]+))?>")
 
 
-def flatten_message_text(event):
+def _replace_special_tag(body, fallback, subteam_cache):
+    if body in ("here", "channel", "everyone"):
+        return f"@{body}"
+    if body.startswith("subteam^"):
+        sid = body.split("^", 1)[1]
+        if fallback:
+            return fallback if fallback.startswith("@") else f"@{fallback}"
+        name = (subteam_cache or {}).get(sid)
+        return f"@{name}" if name else f"@subteam-{sid[:6]}"
+    return fallback or ""
+
+
+def resolve_special_tags(text, subteam_cache=None):
+    """Swap `<!subteam^…>` etc. for human-readable mentions."""
+    if not text or "<!" not in text:
+        return text
+    return SPECIAL_RE.sub(
+        lambda m: _replace_special_tag(m.group(1), m.group(2), subteam_cache),
+        text,
+    )
+
+
+def strip_emoji_codes(text):
+    """Drop `:shortcode:` emojis and collapse the whitespace they leave behind."""
+    if not text or ":" not in text:
+        return text
+    out = EMOJI_RE.sub("", text)
+    return MULTISPACE_RE.sub(" ", out)
+
+
+STORED_MENTION_RE = re.compile(r"@(U[A-Z0-9]+|W[A-Z0-9]+)")
+
+
+def _resolve_stored_user_mentions(text, user_cache):
+    """Rewrite already-stored `@UXXX` strings using the on-disk user cache.
+    Renderer-side only — no API calls, no cache mutation.
+    """
+    if not user_cache or "@U" not in text and "@W" not in text:
+        return text
+    def sub(m):
+        uid = m.group(1)
+        name = user_cache.get(uid)
+        return f"@{name}" if name and name != uid else m.group(0)
+    return STORED_MENTION_RE.sub(sub, text)
+
+
+def _resolve_user_mentions(text, user_resolver):
+    """Swap `<@UXXX>` / `<@UXXX|label>` for `@<resolved-name>` or `@label`."""
+    def sub(m):
+        uid = m.group(1)
+        label = m.group(2) if m.lastindex and m.lastindex >= 2 else None
+        if label:
+            return f"@{label}"
+        if user_resolver:
+            try:
+                name = user_resolver(uid)
+                if name and name != uid:
+                    return f"@{name}"
+            except Exception:
+                pass
+        return f"@{uid}"
+
+    return re.sub(r"<@([A-Z0-9]+)(?:\|([^>]+))?>", sub, text)
+
+
+def flatten_message_text(event, subteam_cache=None, user_resolver=None):
     """Pull plain text from a Slack message event (root + attachments + blocks).
     Strips Slack-specific markup so the rendered text is clean prose.
     """
@@ -181,9 +282,11 @@ def flatten_message_text(event):
         if title:
             parts.append(title)
     raw = "\n".join(p for p in parts if p)
-    raw = MENTION_RE.sub(r"@\1", raw)
+    raw = _resolve_user_mentions(raw, user_resolver)
     raw = CHANNEL_RE.sub(lambda m: f"#{m.group(2) or m.group(1)}", raw)
     raw = LINK_RE.sub(lambda m: m.group(2) or m.group(1), raw)
+    raw = resolve_special_tags(raw, subteam_cache)
+    raw = strip_emoji_codes(raw)
     return raw.strip()
 
 
@@ -221,6 +324,83 @@ def get_channel_name(web_client, channel_id, cache):
         name = channel_id
     cache[channel_id] = name
     return name
+
+
+def get_user_name(web_client, user_id, cache):
+    if not user_id:
+        return ""
+    if user_id in cache:
+        return cache[user_id]
+    # Only Slack user IDs (U…/W…) need an API lookup; bot/email senders
+    # come pre-resolved (e.g. "Email", "GitHub") from sender_from_event.
+    if not (user_id.startswith("U") or user_id.startswith("W")) or " " in user_id:
+        cache[user_id] = user_id
+        return user_id
+    try:
+        info = web_client.users_info(user=user_id)
+        profile = info.get("user", {}).get("profile", {}) or {}
+        name = (
+            profile.get("display_name")
+            or profile.get("real_name")
+            or info.get("user", {}).get("name")
+            or user_id
+        )
+    except Exception:
+        name = user_id
+    cache[user_id] = name
+    return name
+
+
+def load_usergroups(web_client):
+    """Map subteam ID → handle (e.g. `S0A2QUAVDSS` → `oncall`).
+
+    Requires `usergroups:read`. Silent on missing scope; renderer
+    falls back to a short ID badge so unknown subteams stay readable.
+    """
+    try:
+        resp = web_client.usergroups_list()
+    except Exception as e:
+        sys.stderr.write(
+            f"slack-tldr: usergroups.list failed ({e}); "
+            "add `usergroups:read` to resolve subteam mentions\n"
+        )
+        return {}
+    out = {}
+    for g in resp.get("usergroups", []) or []:
+        gid = g.get("id")
+        if not gid:
+            continue
+        out[gid] = g.get("handle") or g.get("name") or gid
+    return out
+
+
+def _persist_subteam_cache(subteam_cache):
+    def mutate(state):
+        existing = state.get("subteam_names", {}) or {}
+        merged = dict(existing)
+        merged.update(subteam_cache)
+        if merged == existing:
+            return None
+        state["subteam_names"] = merged
+        return state
+    _with_state_lock(mutate)
+
+
+def sender_from_event(event):
+    """Return a display name, not an opaque ID, when possible.
+
+    Email integrations and other bot messages set `bot_profile.name`
+    (human-readable) but leave `user` empty — use that before falling
+    back to `username` / `bot_id` / `user`.
+    """
+    bot_profile = event.get("bot_profile") or {}
+    return (
+        bot_profile.get("name")
+        or event.get("username")
+        or event.get("user")
+        or event.get("bot_id")
+        or ""
+    )
 
 
 def discover_member_channels(web_client):
@@ -262,19 +442,38 @@ def discover_member_channels(web_client):
     return ids
 
 
-def backfill_channel(web, channel_id, name_cache, max_active):
-    """Pull all messages from the last 24h and add as alerts."""
-    cutoff = time.time() - 24 * 3600
+SKIP_SUBTYPES = {
+    "channel_join", "channel_leave",
+    "message_changed", "message_deleted",
+}
+
+
+def _is_thread_reply(ev):
+    """True for replies inside a thread — i.e. `thread_ts` is set and is
+    not the message's own `ts`. Parent messages have either no `thread_ts`
+    or `thread_ts == ts`.
+    """
+    tts = ev.get("thread_ts")
+    return bool(tts) and tts != ev.get("ts")
+
+
+def backfill_channel(web, channel_id, name_cache, user_cache, subteam_cache, backfill_hours, max_active):
+    """Pull top-level messages from the last `backfill_hours` and add as alerts.
+    Thread replies are intentionally skipped — they belong to the parent's context.
+    """
+    cutoff = time.time() - backfill_hours * 3600
     name = get_channel_name(web, channel_id, name_cache)
-    skip_subtypes = {
-        "channel_join", "channel_leave",
-        "message_changed", "message_deleted",
-    }
     picked = []
     cursor = None
+    user_resolver = lambda uid: get_user_name(web, uid, user_cache)
     while True:
         try:
-            kwargs = {"channel": channel_id, "limit": 200, "oldest": str(cutoff)}
+            kwargs = {
+                "channel": channel_id,
+                "limit": 200,
+                "oldest": str(cutoff),
+                "inclusive": True,
+            }
             if cursor:
                 kwargs["cursor"] = cursor
             resp = web.conversations_history(**kwargs)
@@ -282,12 +481,14 @@ def backfill_channel(web, channel_id, name_cache, max_active):
             sys.stderr.write(f"slack-tldr: backfill {channel_id} failed: {e}\n")
             return
         for ev in resp.get("messages", []) or []:
-            if ev.get("subtype") in skip_subtypes:
+            if ev.get("subtype") in SKIP_SUBTYPES:
                 continue
-            text = flatten_message_text(ev)
+            if _is_thread_reply(ev):
+                continue
+            text = flatten_message_text(ev, subteam_cache, user_resolver)
             if not text:
                 continue
-            picked.append((ev.get("ts") or "", text))
+            picked.append((ev.get("ts") or "", text, sender_from_event(ev)))
         cursor = (resp.get("response_metadata") or {}).get("next_cursor") or ""
         if not cursor:
             break
@@ -295,12 +496,13 @@ def backfill_channel(web, channel_id, name_cache, max_active):
     sys.stderr.write(
         f"slack-tldr: backfill #{name} → {len(picked)} message(s)\n"
     )
-    for ts, text in picked:
-        add_alert(channel_id, name, ts, tldr_line(text), text, max_active)
+    for ts, text, sender_id in picked:
+        sender = user_resolver(sender_id) if sender_id else ""
+        add_alert(channel_id, name, ts, tldr_line(text), text, sender, max_active)
         time.sleep(BACKFILL_STAGGER_MS / 1000.0)
 
 
-def add_alert(channel_id, channel_name, ts, tldr, raw, max_active):
+def add_alert(channel_id, channel_name, ts, tldr, raw, sender, max_active):
     def mutate(state):
         if ts in state.get("dismissed_ts", []):
             return None
@@ -313,6 +515,7 @@ def add_alert(channel_id, channel_name, ts, tldr, raw, max_active):
             "ts": float(ts) if ts else time.time(),
             "channel": channel_id,
             "channel_name": channel_name,
+            "sender": sender or "",
             "tldr": tldr,
             "raw": raw[:2000],
         }
@@ -347,6 +550,12 @@ def run_daemon():
     state = _load_state()
     name_cache.update(state.get("channel_names", {}))
     name_cache.update(cfg["_id_to_name"])
+    user_cache = dict(state.get("user_names", {}))
+    subteam_cache = dict(state.get("subteam_names", {}))
+    subteam_cache.update(load_usergroups(web))
+    _persist_subteam_cache(subteam_cache)
+
+    user_resolver = lambda uid: get_user_name(web, uid, user_cache)
 
     channel_set = set(cfg["_channel_ids"])
     sys.stderr.write(
@@ -365,8 +574,13 @@ def run_daemon():
 
     # Backfill last 24h from alert channels only (monitor is live-only).
     alert_ids = set(cfg.get("channels", {}).get("alerts", {}).values())
+    backfill_hours = int(cfg.get("backfill_hours") or 48)
     for ch in sorted(channel_set & alert_ids):
-        backfill_channel(web, ch, name_cache, cfg["max_active"])
+        backfill_channel(
+            web, ch, name_cache, user_cache, subteam_cache,
+            backfill_hours, cfg["max_active"],
+        )
+    _persist_user_cache(user_cache)
 
     def handle(client_, req):
         client_.send_socket_mode_response(
@@ -382,25 +596,26 @@ def run_daemon():
 
         if ev_type != "message":
             return
-        subtype = event.get("subtype")
-        if subtype in {
-            "message_changed", "message_deleted",
-            "channel_join", "channel_leave",
-        }:
+        if event.get("subtype") in SKIP_SUBTYPES:
+            return
+        if _is_thread_reply(event):
             return
         channel = event.get("channel")
         if channel not in channel_set:
             return
         ts = event.get("ts") or ""
-        text = flatten_message_text(event)
+        text = flatten_message_text(event, subteam_cache, user_resolver)
         if not text:
             return
         tldr = tldr_line(text)
         channel_name = get_channel_name(web, channel, name_cache)
+        sender_id = sender_from_event(event)
+        sender = user_resolver(sender_id) if sender_id else ""
+        _persist_user_cache(user_cache)
         sys.stderr.write(
-            f"slack-tldr: +{channel_name} {ts} → {tldr[:80]}\n"
+            f"slack-tldr: +{channel_name} {ts} {sender or '?'} → {tldr[:80]}\n"
         )
-        add_alert(channel, channel_name, ts, tldr, text, cfg["max_active"])
+        add_alert(channel, channel_name, ts, tldr, text, sender, cfg["max_active"])
 
     client.socket_mode_request_listeners.append(handle)
     client.connect()
@@ -430,19 +645,56 @@ ALERT_NEW_ON   = "\033[1;7;31m"
 ALERT_NEW_OFF  = "\033[1;7;33m"
 
 
-def _render_alert_line(a, ack_ts, out, blink_on, is_monitor=False):
+SENDER_COL_W = 10
+
+
+def _fmt_sender(sender):
+    if not sender:
+        return ""
+    if len(sender) <= SENDER_COL_W:
+        return sender
+    return sender[: SENDER_COL_W - 1] + "…"
+
+
+def _truncate_line(s, max_cols):
+    """Collapse to one line and truncate w/ ellipsis to fit terminal width."""
+    one_line = s.replace("\n", " ").replace("\r", " ")
+    if max_cols <= 0 or len(one_line) <= max_cols:
+        return one_line
+    if max_cols == 1:
+        return "…"
+    return one_line[: max_cols - 1] + "…"
+
+
+def _render_alert_line(a, ack_ts, out, blink_on, cols, is_monitor=False):
     ts = float(a.get("ts") or 0)
     hhmm = time.strftime("%H:%M", time.localtime(ts))
     ch = a.get("channel_name") or a.get("channel") or "?"
+    sender = _fmt_sender(a.get("sender") or "")
     tldr = a.get("tldr") or ""
+
+    # Plain-text layout decides width; ANSI escapes are layered after.
+    sender_col = sender.ljust(SENDER_COL_W) if sender else " " * SENDER_COL_W
+    plain_prefix = f" {hhmm} #{ch}  {sender_col}  "
+    budget = max(10, cols - len(plain_prefix) - 1)
+    msg = _truncate_line(tldr, budget)
+
     if ts > ack_ts:
         if is_monitor:
-            out.write(f"{GREEN}{hhmm} #{ch}{RESET}  {tldr}\n")
+            out.write(
+                f"{GREEN}{hhmm} #{ch}{RESET}  "
+                f"{DIM}{sender_col}{RESET}  {msg}\n"
+            )
         else:
             sgr = ALERT_NEW_ON if blink_on else ALERT_NEW_OFF
-            out.write(f"{sgr} {hhmm} #{ch}  {tldr} {RESET}\n")
+            out.write(
+                f"{sgr} {hhmm} #{ch}  {sender_col}  {msg} {RESET}\n"
+            )
     else:
-        out.write(f"{DIM}{hhmm}{RESET} {CYAN}#{ch}{RESET}  {tldr}\n")
+        out.write(
+            f"{DIM}{hhmm}{RESET} {CYAN}#{ch}{RESET}  "
+            f"{DIM}{sender_col}{RESET}  {msg}\n"
+        )
 
 
 def _partition_alerts(active, alert_channels):
@@ -484,14 +736,22 @@ ALERT_CAP_SPLIT = 10
 SINGLE_VIEW_CAP = 14
 
 
-def _render_section(out, title, items, ack_ts, blink_on, max_rows, show_counts=True, is_monitor=False):
+def _render_section(out, title, items, ack_ts, blink_on, max_rows, cols, show_counts=True, is_monitor=False):
     _render_section_header(out, title, items, ack_ts, blink_on, show_counts, is_monitor=is_monitor)
     out.write("\n")
     shown = items[-max_rows:] if len(items) > max_rows else items
     if not shown:
         out.write(f"{DIM}—{RESET}\n")
     for a in shown:
-        _render_alert_line(a, ack_ts, out, blink_on, is_monitor=is_monitor)
+        _render_alert_line(a, ack_ts, out, blink_on, cols, is_monitor=is_monitor)
+
+
+def _term_size():
+    try:
+        ts = os.get_terminal_size()
+        return ts.columns, ts.lines
+    except OSError:
+        return 80, 24
 
 
 def _render_pane(state, out, blink_on=True, alert_channels=None, view=VIEW_SPLIT):
@@ -504,26 +764,37 @@ def _render_pane(state, out, blink_on=True, alert_channels=None, view=VIEW_SPLIT
     if alert_channels is None:
         alert_channels = DEFAULT_ALERT_CHANNELS
 
+    # Clean up legacy entries written before the daemon learned to
+    # resolve subteam / user IDs and strip emoji codes. Helpers short-
+    # circuit when their trigger chars are absent.
+    subteam_cache = state.get("subteam_names") or {}
+    user_cache = state.get("user_names") or {}
+    for a in active:
+        tldr = a.get("tldr") or ""
+        if not tldr:
+            continue
+        cleaned = resolve_special_tags(tldr, subteam_cache)
+        cleaned = _resolve_stored_user_mentions(cleaned, user_cache)
+        cleaned = strip_emoji_codes(cleaned)
+        if cleaned != tldr:
+            a["tldr"] = cleaned
+
     alerts, monitor = _partition_alerts(active, alert_channels)
     alerts.sort(key=lambda a: float(a.get("ts") or 0))
     monitor.sort(key=lambda a: float(a.get("ts") or 0))
 
-    rows = 24
-    try:
-        rows = os.get_terminal_size().lines
-    except OSError:
-        pass
+    cols, rows = _term_size()
     usable = rows - 4  # top header + padding
 
     if view == VIEW_ALERTS:
-        _render_section(out, "Alerts", alerts, ack_ts, blink_on, SINGLE_VIEW_CAP)
+        _render_section(out, "Alerts", alerts, ack_ts, blink_on, SINGLE_VIEW_CAP, cols)
     elif view == VIEW_MONITOR:
-        _render_section(out, "Monitor", monitor, ack_ts, blink_on, SINGLE_VIEW_CAP, is_monitor=True)
+        _render_section(out, "Monitor", monitor, ack_ts, blink_on, SINGLE_VIEW_CAP, cols, is_monitor=True)
     else:
         alert_max = min(ALERT_CAP_SPLIT, max(3, usable - MONITOR_CAP_SPLIT - 4))
-        _render_section(out, "Alerts", alerts, ack_ts, blink_on, alert_max, show_counts=False)
+        _render_section(out, "Alerts", alerts, ack_ts, blink_on, alert_max, cols, show_counts=False)
         out.write("\n")
-        _render_section(out, "Monitor", monitor, ack_ts, blink_on, MONITOR_CAP_SPLIT, show_counts=False, is_monitor=True)
+        _render_section(out, "Monitor", monitor, ack_ts, blink_on, MONITOR_CAP_SPLIT, cols, show_counts=False, is_monitor=True)
 
 
 def _get_alert_channels():

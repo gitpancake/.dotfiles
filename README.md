@@ -47,7 +47,6 @@ dotfiles/
 │   │   └── turn-cap-warn.sh          #   Tiered warnings at 30/50/75/100 turns
 │   ├── scripts/                      # Helpers called by commands / hooks
 │   │   ├── lane-pause.sh             #   Tag lane WAITING with reason code
-│   │   ├── lane-summary.sh           #   LLM 1-line summary of HEAD per lane
 │   │   ├── plan-lint.sh              #   Plan-vs-ticket coverage gate
 │   │   ├── verify-clean.sh           #   Pre-ship verification entry point
 │   │   ├── dag-parse.sh              #   Parse plan slice DAG
@@ -85,7 +84,7 @@ dotfiles/
 │   ├── commit-watcher.py             # Drives matrix state from git commits
 │   ├── audio-watcher.py              # Audio-event watcher daemon
 │   ├── git-watch.py                  # Lightweight git HEAD watcher
-│   ├── slack-tldr.py                 # Slack alerts → Haiku TLDR daemon
+│   ├── slack-tldr.py                 # Slack alerts → raw-text tmux pane daemon
 │   ├── slack-tldr-pane.sh            # Static tmux pane renderer
 │   ├── claude_oauth.py               # Claude Code OAuth → Anthropic API helper
 │   ├── redact_chatlogs.py            # Regex secret redactor for ~/.claude/projects
@@ -149,6 +148,8 @@ Thresholds: 0-25% green, 26-50% yellow, 51-75% orange, 76-100% red. Battery is i
 ```bash
 watch -tcn2 ~/.tmux/agent-board.sh
 ```
+
+Optional: set `AGENT_BOARD_WINDOW_NAME=<name>` (e.g. in the tmux pane's `send-keys` or your shell rc) to pin the surrounding tmux window's title. Unset → window name is left alone so your dev environment can keep its own label.
 
 One row per worktree, sorted by urgency, color-coded by state:
 
@@ -251,20 +252,18 @@ At session start Claude checks for a matching `org/` folder and applies it. When
 
 ## Slack Alerts → tmux pane
 
-Daemon subscribes to specific Slack channels via Socket Mode, runs each new message through Haiku for a one-line TLDR, writes the result to a state file rendered in a tmux pane.
+Daemon subscribes to specific Slack channels via Socket Mode, captures each message's raw text (flattened to one line, truncated with ellipsis) plus the resolved sender display name, writes the result to a state file rendered in a tmux pane.
 
 **Setup (one-time):**
 
 1. Create a Slack app at <https://api.slack.com/apps> → *From scratch*.
 2. **Socket Mode** → enable → generate App-Level Token (`xapp-…`) with scope `connections:write`.
-3. **OAuth & Permissions** → Bot Token Scopes: `channels:history`, `groups:history`, `im:history`, `mpim:history`, `channels:read`.
+3. **OAuth & Permissions** → Bot Token Scopes: `channels:history`, `groups:history`, `im:history`, `mpim:history`, `channels:read`, `users:read`, `usergroups:read`.
 4. **Event Subscriptions** → enable → subscribe bot to `message.channels` (+ `message.groups` / `message.im` if private channels / DMs).
 5. *Install to Workspace* → copy Bot Token (`xoxb-…`).
 6. `cp scripts/slack-tldr.config.example.json scripts/slack-tldr.config.local` — fill in tokens and the `channels` dict (maps channel names → IDs, split into `alerts` and `monitor` tabs).
 7. `/invite @your-bot` in each configured channel. Daemon verifies membership on startup and exits with an error if the bot is missing from any channel.
 8. Re-run `./install-mac.sh` (or `./rewire-symlinks.sh`) to install the launchd agent.
-
-**Auth:** API calls use Claude Code OAuth token from macOS keychain (service `Claude Code-credentials`). Falls back to `ANTHROPIC_API_KEY` if missing.
 
 **Pane:** in any tmux pane:
 
@@ -301,9 +300,9 @@ $EDITOR scripts/commit-watcher.config.local        # set repo_path + rules
 python3 scripts/commit-watcher.py                  # foreground
 ```
 
-LLM describer: `describer_enabled: true` + `ANTHROPIC_API_KEY`. Cached at `~/.local/share/art/describer-cache/<sha>.txt`. Full schema and burst-trigger details in `scripts/README.md`.
+Commit `message` is the raw subject line. Full schema and burst-trigger details in `scripts/README.md`.
 
-`scripts/git-watch.py` is the lighter-weight cousin — just polls HEAD and writes state, no LLM, no palette logic.
+`scripts/git-watch.py` is the lighter-weight cousin — just polls HEAD and writes state, no palette logic.
 
 ## Audio Watcher
 

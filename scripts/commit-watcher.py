@@ -17,8 +17,6 @@ Config schema (JSON):
   "remote": "origin",
   "poll_seconds": 30,
   "pr_poll_every_n_ticks": 5,
-  "describer_enabled": false,
-  "describer_model": "claude-haiku-4-5-20251001",
   "path_palette_rules": [
     {"prefix": "src/server/",    "palette": "green"},
     {"prefix": "src/app/",       "palette": "magenta"},
@@ -71,7 +69,6 @@ DEFAULT_STATE_PATH = os.environ.get(
     os.path.expanduser("~/.local/share/art/state.json"),
 )
 LOCK_PATH = os.path.expanduser("~/.local/share/art/commit-watcher.lock")
-DESCRIBER_CACHE_DIR = os.path.expanduser("~/.local/share/art/describer-cache")
 RECENT_RING_SIZE = 30
 EVENT_RING_SIZE = 20
 INTENSITY_BASELINE = 1.0
@@ -418,60 +415,6 @@ def fetch_pr_events(owner, repo, last_event_id):
 
 
 # ----------------------------------------------------------------------
-# Describer (optional Haiku poetic line, cached)
-# ----------------------------------------------------------------------
-
-def describe_commit(sha, subject, files, loc_delta, model):
-    cache_path = Path(DESCRIBER_CACHE_DIR) / f"{sha}.txt"
-    if cache_path.exists():
-        return cache_path.read_text().strip()
-
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        return subject
-
-    try:
-        import urllib.request
-        import urllib.error
-    except ImportError:
-        return subject
-
-    prompt = (
-        f"Commit subject: {subject}\n"
-        f"Files: {', '.join(files[:10])}\n"
-        f"LOC delta: {loc_delta}\n\n"
-        "Describe this commit in one short poetic line, max 12 words. "
-        "No filler. Just the line."
-    )
-    body = json.dumps({
-        "model": model,
-        "max_tokens": 60,
-        "messages": [{"role": "user", "content": prompt}],
-    }).encode()
-
-    req = urllib.request.Request(
-        "https://api.anthropic.com/v1/messages",
-        data=body,
-        headers={
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json",
-        },
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            data = json.loads(resp.read())
-        text = data.get("content", [{}])[0].get("text", "").strip()
-        if not text:
-            return subject
-        cache_path.parent.mkdir(parents=True, exist_ok=True)
-        cache_path.write_text(text)
-        return text
-    except (urllib.error.URLError, json.JSONDecodeError, KeyError, IndexError):
-        return subject
-
-
-# ----------------------------------------------------------------------
 # State writing
 # ----------------------------------------------------------------------
 
@@ -504,10 +447,6 @@ def build_commit_record(sha, ctx, recent):
     primary_palette, secondary_palette = palette_for_files(files, ctx["rules"])
     actor = commit_author(ctx["repo_path"], sha)
     message = subject
-    if ctx["describer_enabled"]:
-        message = describe_commit(
-            sha, subject, files, loc_delta, ctx["describer_model"],
-        )
     intensity = min(3.0, INTENSITY_BASELINE + loc_delta / LOC_INTENSITY_SCALE)
     recent_entry = {"sha": sha[:8], "palette": primary_palette, "subject": subject}
     deduped = [r for r in recent if r.get("sha") != sha[:8]]
@@ -542,8 +481,6 @@ def main():
     backfill_minutes = int(config.get("backfill_minutes", 30))
     backfill_stagger_ms = int(config.get("backfill_stagger_ms", 1500))
     pr_poll_every = max(1, int(config.get("pr_poll_every_n_ticks", 5)))
-    describer_enabled = bool(config.get("describer_enabled", False))
-    describer_model = config.get("describer_model", "claude-haiku-4-5-20251001")
     rules = config.get("path_palette_rules", [{"prefix": "", "palette": "green"}])
     state_path = DEFAULT_STATE_PATH
 
@@ -571,8 +508,6 @@ def main():
     ctx = {
         "repo_path": repo_path,
         "rules": rules,
-        "describer_enabled": describer_enabled,
-        "describer_model": describer_model,
         "state_path": state_path,
     }
 

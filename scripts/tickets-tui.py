@@ -95,6 +95,7 @@ TICKET ACTIONS
   n              new ticket → $EDITOR scratch → claude "/scope <text>"
   N              new from clipboard (pbpaste) → $EDITOR → claude "/scope"
   +/= / -        raise / lower priority (P0..P3, blank); writes frontmatter
+  i              toggle in-progress (sticky: pins `active` without a lane)
   d              toggle done   (sticky: trumps reconciler)
   x              toggle cancel (sticky terminal; ticket hides from default views)
   m              move ticket to a different area (numeric pick)
@@ -111,7 +112,7 @@ HIDE RULES
 STATUS LIFECYCLE
   draft → /scope plants it; reconciler preserves until a lane spawns
   open → default
-  active → derived from live worktree / branch (~/.claude/scripts/ticket-status-sync.py)
+  active → derived from live worktree / branch, OR sticky `i` mark in tix
   done → derived from merged PR OR sticky `d` mark in tix
   cancelled → sticky `x` mark; trumps every derived signal
 
@@ -659,7 +660,7 @@ class App:
                 pass
             return
         hints = ("⏎ open · p pickup · e edit · R rescope · n new · m move · "
-                 "+/− prio · d done · x cancel · ? help · q quit")
+                 "+/− prio · i wip · d done · x cancel · ? help · q quit")
         if self.query:
             hints = f"filter:/{self.query}   " + hints
         self._put(stdscr, y, 0, hints, self.attr("muted", curses.A_DIM))
@@ -942,6 +943,17 @@ class App:
         self.rebuild()
         self.reselect_path(path)
 
+    def toggle_inprogress(self, ticket):
+        """Flip active ↔ open in place. Sticky in the reconciler so a manual
+        mark survives without a live worktree — useful when work is happening
+        outside a `wt` lane (direct branch checkout, paired work, etc)."""
+        new_status = "open" if ticket.status.lower() == "active" else "active"
+        write_status(ticket.path, new_status)
+        ticket.status = new_status
+        path = ticket.path
+        self.rebuild()
+        self.reselect_path(path)
+
     def bump_priority(self, ticket, delta):
         """delta > 0 raises priority (toward P0); delta < 0 lowers it toward
         cleared. Writes frontmatter, then rebuilds so the new sort takes."""
@@ -1069,6 +1081,10 @@ class App:
                 row = self.current()
                 if row and row["type"] == "ticket":
                     self.toggle_done(row["ticket"])
+            elif ch == ord("i"):
+                row = self.current()
+                if row and row["type"] == "ticket":
+                    self.toggle_inprogress(row["ticket"])
             elif ch == ord("m"):
                 row = self.current()
                 if row and row["type"] == "ticket":
