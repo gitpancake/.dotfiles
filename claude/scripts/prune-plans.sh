@@ -1,9 +1,7 @@
 #!/bin/bash
-# Prunes Claude plan files older than 2 days from both ~/.claude/plans/
-# and the Obsidian vault mirror.
+# Prunes Claude plan files older than 2 days from ~/.claude/plans/.
 
 LOG="$HOME/.claude/logs/plan-prune.log"
-OBSIDIAN="${CLAUDE_OBSIDIAN_PLANS_DIR:-}"
 
 prune() {
   local dir="$1"
@@ -16,9 +14,5 @@ prune() {
 {
   date "+%Y-%m-%d %H:%M:%S plan-prune start"
   prune "$HOME/.claude/plans"
-  if [[ -n "$OBSIDIAN" && -d "$OBSIDIAN" ]]; then
-    prune "$OBSIDIAN"
-    prune "$OBSIDIAN/Agent Outputs"
-  fi
   date "+%Y-%m-%d %H:%M:%S plan-prune complete"
 } | tee -a "$LOG"
