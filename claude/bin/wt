@@ -360,17 +360,32 @@ JSON
     [[ -n "$s_initial" ]] && claude_cmd="$claude_bin $(printf '%q' "$s_initial")"
   fi
 
+  # Every lane gets an auto-attached monitor pane — see CLAUDE.md "Lane
+  # observability". Policy: no lane runs unmonitored. lane-watch detects
+  # ralph lanes via scripts/ralph/ and renders the right view.
+  # Opt out per-spawn with WT_NO_WATCH=1.
+  local watch_cmd=""
+  if [[ "${WT_NO_WATCH:-0}" != "1" ]]; then
+    watch_cmd="$HOME/.claude/scripts/lane-watch.sh $(printf '%q' "$s_wt")"
+  fi
+
   if [[ -n "${TMUX:-}" ]]; then
     case "$layout" in
       pane)
         tmux split-window -h -c "$s_wt" "$claude_cmd"
         tmux select-pane -T "$s_label" 2>/dev/null || true
+        [[ -n "$watch_cmd" ]] && tmux split-window -v -c "$s_wt" "$watch_cmd"
         ;;
       window)
         tmux new-window -n "$s_label" -c "$s_wt" "$claude_cmd"
+        if [[ -n "$watch_cmd" ]]; then
+          tmux split-window -t "$s_label" -h -p 35 -c "$s_wt" "$watch_cmd"
+          tmux select-pane -t "$s_label".0
+        fi
         ;;
       session)
         tmux new-session -d -s "wt-$s_label" -c "$s_wt" "$claude_cmd"
+        [[ -n "$watch_cmd" ]] && tmux split-window -t "wt-$s_label" -h -p 35 -c "$s_wt" "$watch_cmd"
         echo "wt: detached session 'wt-$s_label'. Attach: tmux attach -t wt-$s_label"
         ;;
       *)
@@ -392,6 +407,11 @@ JSON
     else
       tmux new-session -d -s "$target_sess" -n "$s_label" -c "$s_wt" "$claude_cmd"
       echo "wt: started tmux session '$target_sess' with window '$s_label'."
+    fi
+    if [[ -n "$watch_cmd" ]]; then
+      tmux split-window -t "$target_sess:$s_label" -h -p 35 -c "$s_wt" "$watch_cmd"
+      tmux select-pane -t "$target_sess:$s_label".0 2>/dev/null || true
+      echo "    Monitor pane attached (ralph-watch)."
     fi
     echo "    Attach: tmux attach -t $target_sess"
     echo "  worktree: $s_wt"

@@ -42,6 +42,17 @@ Slash commands often dispatch subagents internally, but they aren't the same reg
 
 One epic shape feeds the loop. An epic is a folder with an `_epic.md`; its `<!-- epic-stories -->` block carries the authoritative, human-confirmed ordered story list. `/epic <epic-slug> <BASE>` confirms that list and spawns the lane — at spawn, `claude/scripts/epic-parse.sh` projects `_epic.md` into `scripts/ralph/prd.json` inside the worktree. `ralph.sh` then grinds one story per fresh-context iteration (memory via git + `progress.txt` + `prd.json`), executing the confirmed list — it never decomposes.
 
+## Lane observability — monitor pane
+
+Policy: **no lane runs unmonitored.** Every `wt` spawn auto-attaches a split-pane monitor running `claude/scripts/lane-watch.sh <wt>`. The watcher polls every 10s and renders:
+
+- **Ralph lane** (scripts/ralph/ present): story-completion table from `userStories[].passes`, iteration count, tail of `iterations/latest.log`. Notifies on each story completion + overall done.
+- **Generic lane**: agent-state, ctx tokens, branch, last 5 commits, short git status. Notifies on `WAITING:*` transitions.
+
+Layout: ralph and non-ralph lanes alike get a 35% right-side pane (in `window` and `session` modes) or a vertical split-below (in `pane` mode). Opt out per spawn with `WT_NO_WATCH=1` — but the default is monitored, intentionally.
+
+Why strict: orchestrator agents previously lost track of spawned lanes (nohup detach, no scrollback). The pane is the visible contract. Notifications fire via `terminal-notifier` / `osascript` so the user knows the moment a lane hits `WAITING` or completes.
+
 ## Lane state machine
 
 `<wt>/.claude/agent-state` is the single source of truth for `agent-board.sh`. Writers:
