@@ -1,39 +1,67 @@
 # scripts
 
-Standalone terminal toys. Pure Python, `curses`-based, no dependencies beyond the stdlib.
+User-facing helpers + terminal toys. Most are on `PATH` via `~/.dotfiles/scripts` exported in `.zshenv`.
 
 ## Files
 
 | Script | What it does |
 | --- | --- |
-| `city.py` | Animated ASCII night city skyline — twinkling stars, lit windows. |
-| `hologram.py` | Rotating 3D wireframe cube with holographic-style effects. |
-| `matrix.py` | Falling green glyph rain — half-width katakana digital downpour. Reactive to a shared state file. |
-| `commit-watcher.py` | Watches a git repo's main branch and writes the shared state file `matrix.py` reads. |
+| `tickets-tui.py` | `tix` — terminal ticket explorer for `~/.claude/tickets/`. Split-pane preview, priority/status edits, pickup → `wt`. |
+| `slack-tldr.py` | Socket-Mode daemon: subscribes to configured Slack channels, writes raw text alerts to a state file rendered by `slack-watch`. |
+| `slack-tldr-pane.sh` | Static (passive) renderer for the alert state. `watch -tcn2 ~/.dotfiles/scripts/slack-tldr-pane.sh`. |
+| `git-watch.py` | Lightweight git HEAD watcher. Writes commit feed state. Lighter cousin of `commit-watcher.py`. |
+| `commit-watcher.py` | Watches a git remote, computes palette/intensity from changed paths + LOC delta, writes shared state for reactive art renderers. |
+| `audio-watcher.py` | Audio-event watcher daemon. Configurable. |
+| `claude_oauth.py` | Claude Code OAuth → Anthropic API helper. Reads tokens from the macOS keychain. |
+| `redact_chatlogs.py` | Regex secret redactor for `~/.claude/projects/` transcripts. Run before sharing. |
+| `watch.py` | Generic file-change watcher. |
+| `city.py` | Animated ASCII night-city skyline. |
+| `hologram.py` | Rotating 3D wireframe cube with holographic effects. |
 
-## Run
+## Slack alerts → tmux pane
+
+Daemon subscribes to Slack channels via Socket Mode, captures each message's raw text (flattened, truncated), writes the result to a state file rendered in a tmux pane.
+
+**Setup (one-time):**
+
+1. Create a Slack app at <https://api.slack.com/apps> → *From scratch*.
+2. **Socket Mode** → enable → generate App-Level Token (`xapp-…`) with scope `connections:write`.
+3. **OAuth & Permissions** → Bot Token Scopes: `channels:history`, `groups:history`, `im:history`, `mpim:history`, `channels:read`, `users:read`, `usergroups:read`.
+4. **Event Subscriptions** → enable → subscribe bot to `message.channels` (+ `message.groups` / `message.im` if private channels / DMs).
+5. *Install to Workspace* → copy Bot Token (`xoxb-…`).
+6. `cp scripts/slack-tldr.config.example.json scripts/slack-tldr.config.local` — fill in tokens and the `channels` dict (maps channel names → IDs, split into `alerts` and `monitor` tabs).
+7. `/invite @your-bot` in each configured channel. Daemon verifies membership on startup and exits with an error if the bot is missing.
+8. Re-run `./install-mac.sh` (or `./rewire-symlinks.sh`) to load the launchd agent.
+
+**Live pane** (interactive — `q`/Ctrl-C exits, any key acks blinking alerts):
 
 ```bash
-python3 scripts/city.py
-python3 scripts/hologram.py
-python3 scripts/matrix.py
+slack-watch
 ```
 
-Press `q` or `Ctrl+C` to exit.
+**Passive pane:**
+
+```bash
+watch -tcn2 ~/.dotfiles/scripts/slack-tldr-pane.sh
+```
+
+**Dismiss / ack:**
+
+```bash
+slack-tldr ack           # mark all current alerts seen
+slack-tldr dismiss 2     # dismiss the 2nd active alert
+slack-tldr dismiss-all   # clear everything
+```
+
+**State + logs:**
+- `~/.local/share/slack-tldr/state.json` — active alerts + dismissed ring
+- `/tmp/slack-tldr.{out,err}` — daemon stdout/stderr
 
 ## Reactive matrix (commit-driven art installation)
 
-`matrix.py` polls `~/.local/share/art/state.json` (override via `ART_STATE_FILE`).
-When present, palette / intensity / burst / commit log stack are applied live.
-Every running `matrix.py` reading the same state stays in sync — drop one across
-multiple tmux panes and they all wave together.
+`commit-watcher.py` is the driver. Polls a remote, computes palette from changed file paths and LOC delta → intensity, optionally calls the Anthropic API for a poetic 1-line description, writes shared state.
 
-The bottom of each pane renders `state.recent` as a stack of log lines:
-newest commit on the bottom row, older commits above (dimmer with age).
-Lines short enough to fit show static; long lines scroll left at ~3 chars/sec
-with a per-row stagger so rows feel like independent log streams. Each new
-commit landing on `main` pushes the stack up by one row, so the space slowly
-fills as commits accumulate.
+State file: `~/.local/share/art/state.json` (override via `ART_STATE_FILE`). Any compatible curses renderer can poll it for coordinated animation across panes.
 
 State schema:
 
@@ -50,33 +78,21 @@ State schema:
 }
 ```
 
-### commit-watcher
+On boot, replays commits from the last `backfill_minutes` (default 30) oldest→newest with `backfill_stagger_ms` delay between each, so panes show a ripple of recent history immediately. Empty window → seeds from `HEAD`.
 
-Driver process. Polls a remote, computes palette from changed file paths,
-LOC delta → intensity, optionally calls the Anthropic API for a poetic
-1-line description.
-
-On boot, replays commits from the last `backfill_minutes` (default 30)
-oldest→newest with a `backfill_stagger_ms` delay between each, so panes
-show a visible ripple of recent history immediately instead of waiting
-for the next push. If the window is empty, seeds from `HEAD` so the
-initial palette/message reflect current truth.
-
-Config lives at `~/.dotfiles/scripts/commit-watcher.config.local`
-(gitignored — copy `commit-watcher.config.example.json` and edit).
+Config:
 
 ```bash
 cp scripts/commit-watcher.config.example.json scripts/commit-watcher.config.local
 $EDITOR scripts/commit-watcher.config.local        # set repo_path + rules
 python3 scripts/commit-watcher.py                  # foreground
-# or background it:
+# or background:
 nohup python3 scripts/commit-watcher.py >/tmp/watcher.log 2>&1 &
 ```
 
-LLM describer: set `describer_enabled: true` and export `ANTHROPIC_API_KEY`.
-Descriptions are cached by sha at `~/.local/share/art/describer-cache/<sha>.txt`.
+LLM describer: set `describer_enabled: true` and export `ANTHROPIC_API_KEY`. Descriptions cached by sha at `~/.local/share/art/describer-cache/<sha>.txt`.
 
-### Manually trigger a burst (testing)
+**Manually trigger a burst (testing):**
 
 ```bash
 python3 -c '
@@ -89,4 +105,19 @@ json.dump(s, open(p, "w"), indent=2)
 '
 ```
 
-Every `matrix.py` instance picks it up within ~0.5s.
+## Audio watcher
+
+`audio-watcher.py` is a daemon that watches for audio events. See `audio-watcher.config.example.json` for setup.
+
+## Secret redaction
+
+`redact_chatlogs.py` scrubs `~/.claude/projects/` transcripts of common secret patterns (Anthropic / OpenAI / GitHub / Slack / AWS / Google / Stripe / Sendgrid / Twilio / JWTs / PEM / SSH private keys / DB URLs / bearer tokens / `KEY=value` env). In-place, regex-based. Run before sharing a transcript.
+
+## Terminal toys
+
+```bash
+python3 scripts/city.py
+python3 scripts/hologram.py
+```
+
+`q` / Ctrl-C to exit.
