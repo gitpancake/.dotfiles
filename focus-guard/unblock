@@ -1,3 +1,4 @@
 #!/bin/bash
-sudo rm -f /usr/local/var/focus/override
-sudo switch-hosts.sh unblock && sudo /usr/local/bin/focus-guard.sh
+# Manual override: clear the override and re-apply the schedule. Inside focus
+# hours the next tick re-blocks (~10 min); outside, it stays open.
+exec sudo /usr/local/bin/focus-guard.sh unblock

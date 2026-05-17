@@ -111,7 +111,7 @@ if command -v sudo &>/dev/null; then
   sudo mkdir -p /usr/local/bin /usr/local/var/focus/certs /usr/local/var/log
 
   # Scripts + commands
-  for f in focus-guard.sh cert-gen.sh block unblock; do
+  for f in focus-guard.sh focus-doctor.sh cert-gen.sh block unblock; do
     sudo cp "$DOTFILES_DIR/focus-guard/$f" "/usr/local/bin/$f"
     sudo chmod +x "/usr/local/bin/$f"
   done
@@ -135,14 +135,25 @@ if command -v sudo &>/dev/null; then
   sudo /opt/homebrew/bin/nginx -t
   sudo /usr/local/bin/focus-guard.sh
 
-  # LaunchDaemons
+  # LaunchDaemons (root — only root can write /etc/hosts on the 10-min tick;
+  # LaunchAgents run as the user and silently fail the swap). Use the modern
+  # bootstrap/bootout API: legacy `launchctl load` is a no-op for system
+  # daemons on current macOS, which is why the scheduler was never running.
   for plist in local.focus-guard.plist local.focus-nginx.plist; do
+    label="${plist%.plist}"
     sudo cp "$DOTFILES_DIR/focus-guard/$plist" "/Library/LaunchDaemons/$plist"
-    sudo launchctl unload "/Library/LaunchDaemons/$plist" 2>/dev/null || true
-    sudo launchctl load "/Library/LaunchDaemons/$plist"
+    sudo chown root:wheel "/Library/LaunchDaemons/$plist"
+    sudo chmod 644 "/Library/LaunchDaemons/$plist"
+    sudo launchctl bootout "system/$label" 2>/dev/null || true
+    sudo launchctl bootstrap system "/Library/LaunchDaemons/$plist"
+    sudo launchctl enable "system/$label"
   done
 
-  echo "  Focus Guard installed and running"
+  if sudo /usr/local/bin/focus-doctor.sh; then
+    echo "  Focus Guard installed and healthy"
+  else
+    echo "  Focus Guard installed — focus-doctor reported issues (see above)"
+  fi
 else
   echo "  Skipping Focus Guard (sudo not available)"
 fi

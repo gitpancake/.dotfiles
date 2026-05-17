@@ -13,6 +13,9 @@ org/
 # Machine-local secrets / overrides. The canonical file lives at ~/.zshenv.local
 # outside this repo, but this catches any *.local file dropped inside.
 *.local
+# Per-lane dev-server port (wt writes <wt>/.env.local.port; .local glob misses
+# it — trailing .port). Never commit lane-local runtime state.
+.env.local.port
 # macOS noise
 .DS_Store
 
