@@ -59,7 +59,7 @@ Tool calls re-read full context. Loops compound.
 - **20 soft**: wrap in-flight. No new scope.
 - **30 HARD HALT** by cwd:
   - Normal: tell user `/clear`. No tools.
-  - `wt` lane (`<repo>/.claude/worktrees/`): one `git add -A && git commit` max, stop. user `/resume`s fresh lane.
+  - `wt` lane (`<repo>/.claude/worktrees/`): one `git add -A && git commit` max, stop. User runs `/resume` in fresh lane.
   - Ralph lane (lane + `scripts/ralph/`): end iteration silently. `ralph.sh` spawns next w/ fresh ctx.
 - **Past 30**: directive re-fires every prompt. Cost = quadratic. No push-through.
 

@@ -10,7 +10,7 @@ Spawns `wt --ralph` — a lane running the Ralph autonomous loop over an epic.
 An **epic** is a folder with an `_epic.md` at its root — the durable, Ralph-ready PRD
 (contract: `~/.claude/tickets/README.md`). `_epic.md` carries the `<!-- epic-stories:start -->`
 block: the authoritative ordered story list + dependency DAG. `/epic` confirms that order with
-user, then spawns the lane. The lane runs `epic-parse.sh` to project `_epic.md` into
+the user, then spawns the lane. The lane runs `epic-parse.sh` to project `_epic.md` into
 `scripts/ralph/prd.json` and executes it — **Ralph never decomposes; it executes a confirmed
 list.** There is one epic shape. No `.epics.json`, no in-lane `/prd` + `/ralph` synthesis.
 
@@ -28,9 +28,9 @@ edit project source — this command only prepares and spawns.
 ## 2. Resolve the epic
 
 `wt --print-brief <EPIC>` → `EPIC_MD`.
-- **Non-zero exit / no path** → stop. Tell user to `/scope` it into an epic first.
+- **Non-zero exit / no path** → stop. Tell the user to `/scope` it into an epic first.
 - **Resolved, but the path is not an `_epic.md`** → it's a single ticket, not an epic. Stop.
-  Tell user: `/scope` it into an epic folder first (an `_epic.md` + `NN-<child>.md`
+  Tell User: `/scope` it into an epic folder first (an `_epic.md` + `NN-<child>.md`
   children), or `wt <EPIC>` to work it as a single ticket.
 
 `EPIC_DIR` = the directory holding `EPIC_MD`. `SLUG` = its basename.
@@ -63,9 +63,9 @@ It rides with the epic — every Ralph iteration reads `_epic.md`.
 
 Read the `<!-- epic-stories:start -->` block in `EPIC_MD`. Print a terse numbered list —
 `priority  id  title`, plus each story's `needs` edges. This block *is* the decomposition;
-user confirms it before the lane runs. Ralph will not re-plan it.
+the user confirms it before the lane runs. Ralph will not re-plan it.
 
-Ask: spawn the Ralph lane with this order, or stop so he can edit the block in `EPIC_MD`
+Ask: spawn the Ralph lane with this order, or stop so the user can edit the block in `EPIC_MD`
 first? **Wait for "go".**
 
 ## 6. Spawn
@@ -90,7 +90,7 @@ Branch type defaults to `feature/` — override with `wt --ralph --type <prefix>
 ## Stop conditions
 
 - Missing `EPIC` / `BASE`, or epic not found — ask or report, stop.
-- Resolved to a single ticket, not an `_epic.md` — stop; tell user to `/scope` it into an epic.
+- Resolved to a single ticket, not an `_epic.md` — stop; tell the user to `/scope` it into an epic.
 - ff-merge failure — surface, stop.
-- user doesn't confirm the story order — stop, leave `EPIC_MD` for him to edit.
+- User doesn't confirm the story order — stop, leave `EPIC_MD` for the user to edit.
 - After spawn — done. Don't follow the lane.

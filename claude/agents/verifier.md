@@ -116,7 +116,7 @@ Tag the lane:
 ~/.claude/scripts/lane-pause.sh verify "<short reason, e.g. UI 500 on /orders/new>"
 ```
 
-Print the failing block of `verify.log` prominently to stdout (the last `===` section). user's `agent-board.sh` pane will turn red on the `WAITING:verify` state — that's the signal.
+Print the failing block of `verify.log` prominently to stdout (the last `===` section). The user's `agent-board.sh` pane will turn red on the `WAITING:verify` state — that's the signal.
 
 ## Output to stdout
 
@@ -130,8 +130,8 @@ ok: <wt>/.claude/verify.ok | (none)
 
 ## Anti-patterns
 
-- **Do not edit project source.** Edit is not in your toolset for a reason. If the verifier wants to "just fix" something, the answer is FAIL → user decides.
+- **Do not edit project source.** Edit is not in your toolset for a reason. If the verifier wants to "just fix" something, the answer is FAIL → the user decides.
 - **Do not skip a class** because it's "probably fine." If the diff touched it, you exercise it.
 - **Do not trust type-check / lint as verification.** Those are pre-conditions, not evidence.
 - **Do not log secrets.** Redact to last 4 chars before writing to `verify.log`.
-- **Do not invent verification commands.** If a project doesn't expose a way to run a worker locally, FAIL with reason "no local runner" — user will tell you the right hook.
+- **Do not invent verification commands.** If a project doesn't expose a way to run a worker locally, FAIL with reason "no local runner" — the user will tell you the right hook.

@@ -87,7 +87,7 @@ If `.github/PULL_REQUEST_TEMPLATE.md` exists, fill its sections with this bullet
 Default shape (prepend `Linear:` line only when `$AE_ID` non-empty):
 
 ```
-Linear: https://linear.app/<org>/issue/AE-NNNN
+Linear: https://linear.app/<workspace>/issue/AE-NNNN
 
 ## Changed
 - <structural change>
@@ -133,6 +133,6 @@ Clean nothing-to-do → say so in one line.
 
 ## 6. Stop
 
-Do not auto-fix. Do not amend the PR description. Do not request reviewers. user decides.
+Do not auto-fix. Do not amend the PR description. Do not request reviewers. User decides.
 Single-character blocker spotted (typo, obvious null guard) → call it out with the exact
 fix, still wait for "go" before editing.

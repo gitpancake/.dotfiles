@@ -1,5 +1,5 @@
 ---
-description: Refine local ticket brief w/ user's notes. Brief edit only.
+description: Refine local ticket brief w/ the user's notes. Brief edit only.
 argument-hint: <ticket> [free-text adjustments]
 ---
 
@@ -17,8 +17,8 @@ If only the ticket is given, show the brief then **ask** for adjustments and sto
 
 `wt --print-brief <ticket>` → the brief path (the one resolver `wt` uses — do not
 re-implement the lookup).
-- **Non-zero exit / no path** → tell user to `/scope` it first, stop.
-- **Found** → render the current frontmatter + body verbatim so user sees what changes.
+- **Non-zero exit / no path** → tell the user to `/scope` it first, stop.
+- **Found** → render the current frontmatter + body verbatim so the user sees what changes.
 
 ## 2. Decide depth
 

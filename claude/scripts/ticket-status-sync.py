@@ -151,7 +151,7 @@ def run(cmd, cwd=None, any_exit=False):
 
 
 def discover_repos():
-    """Repo roots user works in. `wt` lanes live at <repo>/.claude/worktrees/
+    """Repo roots the user works in. `wt` lanes live at <repo>/.claude/worktrees/
     <slug>, so to know whether a worktree exists for a ticket we must know the
     repos. There is no registry — but every repo Claude has run in leaves a
     dir under ~/.claude/projects/, and `find` over $HOME is bounded and fast

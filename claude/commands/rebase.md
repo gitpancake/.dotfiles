@@ -26,10 +26,10 @@ Validate:
 ## 1. Pre-flight (parallel)
 
 `MODE=local`:
-- `git status --porcelain` — must be clean. Dirty → stop, surface files, ask user to commit/stash.
+- `git status --porcelain` — must be clean. Dirty → stop, surface files, ask the user to commit/stash.
 - `git branch --show-current` → `STARTING_BRANCH`.
 - `git rev-parse "$FEATURE"@{u} 2>/dev/null` → `FEATURE_UPSTREAM`.
-- Ongoing rebase (`.git/rebase-merge` or `.git/rebase-apply`) → stop, tell user to `--abort` or `--continue`.
+- Ongoing rebase (`.git/rebase-merge` or `.git/rebase-apply`) → stop, tell the user to `--abort` or `--continue`.
 
 `MODE=worktree`:
 - Skip clean-tree check (worktree is isolated).
@@ -94,7 +94,7 @@ Loop until rebase finishes or escalates:
 
   Escalation path → STOP. Print:
   ```
-  Rebase paused — ambiguous conflicts need user:
+  Rebase paused — ambiguous conflicts need User:
     <file>:<line-range> — <one-line reason>
     ...
   Worktree: $WT   (MODE=worktree only)
@@ -111,7 +111,7 @@ git push -u origin "$FEATURE"
 ```
 
 If rebase rewrote history (local SHAs differ from `FEATURE_UPSTREAM`):
-- **Confirm with user before force-pushing.** Show:
+- **Confirm with the user before force-pushing.** Show:
   ```
   Force-push required (rebase rewrote $FEATURE history).
   Upstream: $FEATURE_UPSTREAM
@@ -119,7 +119,7 @@ If rebase rewrote history (local SHAs differ from `FEATURE_UPSTREAM`):
   Run `git push --force-with-lease`? [y/N]
   ```
   `y` → `git push --force-with-lease origin "$FEATURE"`.
-  Otherwise stop. Print the command. Skip cleanup so user can push from `$WT` if needed.
+  Otherwise stop. Print the command. Skip cleanup so the user can push from `$WT` if needed.
 
 Fast-forward only → plain `git push`.
 
@@ -150,4 +150,4 @@ Worktree: <removed | $WT preserved>
 
 ## 8. Stop
 
-Do not amend pre-existing commits. Do not open a PR. Do not trigger review. Ambiguous conflicts → user resolves.
+Do not amend pre-existing commits. Do not open a PR. Do not trigger review. Ambiguous conflicts → the user resolves.

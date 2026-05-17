@@ -14,7 +14,7 @@ Pick up where a previous session left off. `/handoff` writes durable docs to
 ls -t ~/.claude/handoffs/*.md 2>/dev/null
 ```
 
-- **No files** → tell user there are no handoffs and stop.
+- **No files** → tell the user there are no handoffs and stop.
 - **`$ARGUMENTS` empty** → take the most recent (first line of `ls -t`).
 - **`$ARGUMENTS` non-empty** → treat it as a description. Match it against the filename
   slugs (case-insensitive substring).
@@ -42,7 +42,7 @@ blindly execute.
 
 Invoke the skills the handoff suggests, then carry on with the work it describes. Give a
 two-line orientation ("Resumed from `<file>`. Picking up: `<next step>`.") and proceed —
-no need to re-summarise the whole handoff back to user.
+no need to re-summarise the whole handoff back to the user.
 
 ## Stop conditions
 

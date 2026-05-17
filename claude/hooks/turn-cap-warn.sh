@@ -54,8 +54,8 @@ if (( current >= 30 )); then
     visible="🛑 TURN ${current} — HALT (Ralph lane). End this iteration. ralph.sh will start the next with fresh context."
     directive="MANDATORY HALT — turn ${current} reached inside a Ralph autonomous iteration. End this iteration NOW. Your ONLY allowed response is a short status line, then stop. Do NOT call any tool. The ralph.sh loop will pick up the next story with fresh context and the committed progress.txt + git state already capture what landed. The auto-handoff doc at ${handoffRef} is the backup. Reply pattern: 'Turn ${current} hard-halt. Iteration ended — ralph.sh next loop has fresh context. Progress committed.'"
   elif (( isLane == 1 )); then
-    visible="🛑 TURN ${current} — HALT (autonomous lane). Stop and wait for user to /resume in a fresh session."
-    directive="MANDATORY HALT — turn ${current} reached inside an autonomous wt lane (cwd: ${cwd}). The lane ends here. Your ONLY allowed response is a short status line — commit any uncommitted work first if it is safe (one Bash call max to \`git status\` / \`git add -A && git commit\` is permitted, NOTHING else), then stop. Auto-handoff at ${handoffRef} captures live state. Reply pattern: 'Turn ${current} hard-halt — autonomous lane ending. Auto-handoff at <path>. user: /resume in a fresh wt or cockpit session to continue.'"
+    visible="🛑 TURN ${current} — HALT (autonomous lane). Stop and wait for the user to /resume in a fresh session."
+    directive="MANDATORY HALT — turn ${current} reached inside an autonomous wt lane (cwd: ${cwd}). The lane ends here. Your ONLY allowed response is a short status line — commit any uncommitted work first if it is safe (one Bash call max to \`git status\` / \`git add -A && git commit\` is permitted, NOTHING else), then stop. Auto-handoff at ${handoffRef} captures live state. Reply pattern: 'Turn ${current} hard-halt — autonomous lane ending. Auto-handoff at <path>. User: /resume in a fresh wt or cockpit session to continue.'"
   else
     visible="🛑 TURN ${current} — HALT. Auto-handoff written. Run /clear now to start fresh."
     [[ -n "$handoffPath" ]] && visible+=$'\nHandoff: '"$handoffPath"

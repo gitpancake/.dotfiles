@@ -459,7 +459,7 @@ if [[ "$mode" == "single" || "$mode" == "ralph" || "$mode" == "loop" ]]; then
     plan="$HOME/.claude/plans/${plan_slug}.md"
     initial="Autonomous mode. Plan at ${plan}. Read it — it carries its own Done-when. Implement every slice end-to-end: per slice run type-check + tests, commit per layer. Follow the plan's Done-when for shipping — \`/ship\`, or \`/ship <PR#>\` to re-review an existing PR. ${review_rule} Stop only when the plan's Done-when is met, or a genuine blocker (ambiguity not in the plan, repeated test failure same root cause, missing credential)."
   elif [[ -n "$ticket" ]]; then
-    initial="Autonomous mode. No brief found for ${ticket} — and no plan at ~/.claude/plans/${plan_slug}.md. Tell user to /scope it first, then stop. Do not invent a brief."
+    initial="Autonomous mode. No brief found for ${ticket} — and no plan at ~/.claude/plans/${plan_slug}.md. Tell the user to /scope it first, then stop. Do not invent a brief."
   fi
 
   spawn_lane "$slug" "$branch" "$wt_path" "$initial" "${ticket:-$slug}"

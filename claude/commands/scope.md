@@ -5,7 +5,7 @@ argument-hint: <free-text problem statement>
 
 # /scope $ARGUMENTS
 
-user's standard ask: "scope this out, ready for engineering." Output is a **local brief** a
+User's standard ask: "scope this out, ready for engineering." Output is a **local brief** a
 `wt` lane can pick up without redoing discovery — it carries the surface area, the mirror
 reference, the gotchas. Refine the request, don't restate it.
 
@@ -130,5 +130,5 @@ For an epic:
 
 - After §1 clarifying questions — wait for answers.
 - After §5 draft — wait for "go".
-- After §6 write — done. user runs `wt <slug>` (or `/epic <epic-slug>`) next. Never edit
+- After §6 write — done. the user runs `wt <slug>` (or `/epic <epic-slug>`) next. Never edit
   code from this command.

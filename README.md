@@ -156,9 +156,9 @@ One row per worktree, sorted by urgency, color-coded by state:
 ```
 LANE                          STATE              AGE    CTX    PORT
 ----------------------------------------------------------------
-team-1571 harden webhook        ACTIVE:Bash        0s     231K   3116
-team-1568 skip modal no-input   W:ambiguity        4m     78K    3115
-team-1555 cleanup auth          DONE               12m    -      3104
+example-1 harden webhook        ACTIVE:Bash        0s     231K   3116
+example-2 skip modal no-input   W:ambiguity        4m     78K    3115
+example-3 cleanup auth          DONE               12m    -      3104
 ```
 
 - **STATE** — `ACTIVE`, `WAITING:<code>`, `RUNNING:precheck`, `FAILED:<step>`, `DONE`, `IDLE`. Codes documented in `claude/agent-state-vocab.md`.
