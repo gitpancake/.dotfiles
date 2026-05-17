@@ -112,11 +112,21 @@ def _ci_status(checks):
     for c in checks:
         s = (c.get("status") or "").upper()
         conclusion = (c.get("conclusion") or "").upper()
-        if conclusion in ("FAILURE", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED"):
+        # StatusContext (e.g. Vercel) uses `state` instead of status/conclusion.
+        state = (c.get("state") or "").upper()
+        if conclusion in ("FAILURE", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED") \
+                or state in ("FAILURE", "ERROR"):
             dominated_by_failure = True
-        elif s in ("IN_PROGRESS", "QUEUED", "PENDING", "WAITING", "REQUESTED"):
+        elif s in ("IN_PROGRESS", "QUEUED", "PENDING", "WAITING", "REQUESTED") \
+                or state in ("PENDING", "EXPECTED"):
             has_pending = True
-        elif conclusion not in ("SUCCESS", "SKIPPED", "NEUTRAL"):
+        elif conclusion:
+            if conclusion not in ("SUCCESS", "SKIPPED", "NEUTRAL"):
+                has_pending = True
+        elif state:
+            if state != "SUCCESS":
+                has_pending = True
+        else:
             has_pending = True
     if dominated_by_failure:
         return "fail"
