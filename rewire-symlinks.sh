@@ -43,30 +43,14 @@ else
 fi
 echo "  launchd: OK"
 
-# Focus Guard — scripts live in /usr/local/bin (root-owned, not symlinked),
-# daemons in /Library/LaunchDaemons. Re-copy + re-bootstrap so edits in the
-# repo actually take effect. Needs sudo; skip cleanly if unavailable.
-if [ -d "$DOTFILES_DIR/focus-guard" ] && command -v sudo &>/dev/null \
+# focus-guard — only refresh if already installed at the system level.
+# Standalone installer + uninstaller live at focus-guard/{install,uninstall}.sh.
+if [ -f /Library/LaunchDaemons/local.focus-guard.plist ] && command -v sudo &>/dev/null \
    && sudo -n true 2>/dev/null; then
-  for f in focus-guard.sh focus-doctor.sh cert-gen.sh block unblock; do
-    sudo cp "$DOTFILES_DIR/focus-guard/$f" "/usr/local/bin/$f"
-    sudo chmod +x "/usr/local/bin/$f"
-  done
-  sudo cp "$DOTFILES_DIR/focus-guard/focus.conf" /opt/homebrew/etc/nginx/focus.conf
-  for plist in local.focus-guard.plist local.focus-nginx.plist; do
-    label="${plist%.plist}"
-    sudo cp "$DOTFILES_DIR/focus-guard/$plist" "/Library/LaunchDaemons/$plist"
-    sudo chown root:wheel "/Library/LaunchDaemons/$plist"
-    sudo chmod 644 "/Library/LaunchDaemons/$plist"
-    sudo launchctl bootout "system/$label" 2>/dev/null || true
-    sudo launchctl bootstrap system "/Library/LaunchDaemons/$plist"
-    sudo launchctl enable "system/$label"
-  done
-  sudo /opt/homebrew/bin/nginx -s reload 2>/dev/null || true
-  echo "  focus-guard: refreshed + daemons re-bootstrapped"
+  "$DOTFILES_DIR/focus-guard/install.sh"
+  echo "  focus-guard: refreshed"
 else
-  echo "  focus-guard: skipped (needs passwordless sudo — run install-mac.sh"
-  echo "    or: sudo rewire-symlinks.sh, to refresh /usr/local/bin + daemons)"
+  echo "  focus-guard: skipped (not installed, or sudo unavailable)"
 fi
 
 # Clean up empty ~/Documents/code if it exists

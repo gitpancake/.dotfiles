@@ -71,14 +71,35 @@ original "Unblocked page while still blocked" incident.
 
 ## Setup
 
-1. `brew install nginx mkcert nss`.
-2. `mkcert -install` once (adds the local CA to the system trust store).
-3. Copy `hosts.blocked.example` → `/etc/hosts.blocked`, add your domains.
-4. Run `install-mac.sh` (or `rewire-symlinks.sh` with passwordless sudo) — it
-   copies scripts to `/usr/local/bin`, wires the nginx config, and
-   `bootstrap`s both LaunchDaemons.
-5. Verify: `focus-doctor.sh` (all ✓), then `block` and visit a blocked
-   domain — status page over HTTPS, no cert warning.
+focus-guard is opt-in — not part of the main dotfiles install. Install it on
+its own:
+
+```bash
+./focus-guard/install.sh
+```
+
+That installs nginx/mkcert/nss via brew, runs `mkcert -install`, copies the
+scripts to `/usr/local/bin`, wires the nginx config, and `bootstrap`s both
+LaunchDaemons. Re-running it is a refresh — safe to invoke after editing the
+source files in this repo.
+
+After installing:
+
+1. Edit `/etc/hosts.blocked` and add the domains you want blocked.
+2. `sudo /usr/local/bin/cert-gen.sh && sudo /opt/homebrew/bin/nginx -s reload`.
+3. `focus-doctor.sh` (all ✓), then `block` and visit a blocked domain —
+   status page over HTTPS, no cert warning.
+
+To remove:
+
+```bash
+./focus-guard/uninstall.sh
+```
+
+Tears down both LaunchDaemons, removes the scripts + nginx config + runtime
+state, restores `/etc/hosts` to its open form (with a `.bak.focus-uninstall`
+backup). Brew formulae (mkcert/nss/nginx) are left in place — remove
+manually with `brew uninstall` if no longer needed.
 
 ## Manual control
 

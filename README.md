@@ -316,6 +316,8 @@ Time-aware site blocker that swaps `/etc/hosts` and serves a status page for blo
 
 **How it works:** nginx runs persistently on ports 80 + 443. `/etc/hosts` redirects blocked domains to `127.0.0.1`, so every request lands on nginx and gets the status page. A mkcert-issued cert (trusted via macOS Keychain) means HTTPS sites show the page cleanly.
 
+**Install / uninstall:** opt-in, not part of `install-mac.sh`. Run `./focus-guard/install.sh` to install, `./focus-guard/uninstall.sh` to remove. See `focus-guard/README.md`.
+
 **Manual overrides:**
 ```bash
 unblock   # unblock immediately — auto re-blocks within 10 min
