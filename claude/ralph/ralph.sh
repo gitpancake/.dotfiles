@@ -38,6 +38,8 @@ PRD_FILE="$SCRIPT_DIR/prd.json"
 PROGRESS_FILE="$SCRIPT_DIR/progress.txt"
 ARCHIVE_DIR="$SCRIPT_DIR/archive"
 LAST_BRANCH_FILE="$SCRIPT_DIR/.last-branch"
+ITER_LOG_DIR="$SCRIPT_DIR/iterations"
+mkdir -p "$ITER_LOG_DIR"
 
 # Archive previous run if branch changed
 if [ -f "$PRD_FILE" ] && [ -f "$LAST_BRANCH_FILE" ]; then
@@ -87,12 +89,23 @@ for i in $(seq 1 $MAX_ITERATIONS); do
   echo "  Ralph Iteration $i of $MAX_ITERATIONS ($TOOL)"
   echo "==============================================================="
 
+  # Per-iteration log capture. agent-board reads iteration count from this dir
+  # and `tail -f iterations/latest.log` gives live visibility from any pane.
+  ITER_LOG="$ITER_LOG_DIR/$(printf '%03d' "$i").log"
+  ln -sf "$(basename "$ITER_LOG")" "$ITER_LOG_DIR/latest.log"
+  {
+    echo "# Ralph iteration $i / $MAX_ITERATIONS"
+    echo "# Started: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "# Tool: $TOOL"
+    echo "---"
+  } > "$ITER_LOG"
+
   # Run the selected tool with the ralph prompt
   if [[ "$TOOL" == "amp" ]]; then
-    OUTPUT=$(cat "$SCRIPT_DIR/prompt.md" | amp --dangerously-allow-all 2>&1 | tee /dev/stderr) || true
+    OUTPUT=$(cat "$SCRIPT_DIR/prompt.md" | amp --dangerously-allow-all 2>&1 | tee /dev/stderr | tee -a "$ITER_LOG") || true
   else
     # Claude Code: use --dangerously-skip-permissions for autonomous operation, --print for output
-    OUTPUT=$(claude --dangerously-skip-permissions --print < "$SCRIPT_DIR/CLAUDE.md" 2>&1 | tee /dev/stderr) || true
+    OUTPUT=$(claude --dangerously-skip-permissions --print < "$SCRIPT_DIR/CLAUDE.md" 2>&1 | tee /dev/stderr | tee -a "$ITER_LOG") || true
   fi
   
   # Check for completion signal

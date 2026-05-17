@@ -127,6 +127,20 @@ get_ctx_tokens() {
   _ctx_from_jsonl "$latest" "$cache_file"
 }
 
+# Ralph state for a lane. Prints "r<iter>/<total>" if scripts/ralph/ exists,
+# empty otherwise. Iter = count of iterations/*.log files; total = prd.json
+# story count. Cheap — just an ls and a jq.
+ralph_state_for() {
+  local wt=$1
+  local ralph_dir="$wt/scripts/ralph"
+  [[ -d "$ralph_dir" && -f "$ralph_dir/prd.json" ]] || return
+  local iter total
+  iter=$(ls "$ralph_dir/iterations"/*.log 2>/dev/null | grep -cv latest.log)
+  total=$(jq -r '(.userStories // .stories // []) | length' "$ralph_dir/prd.json" 2>/dev/null)
+  [[ -z "$total" || "$total" == "0" ]] && total="?"
+  printf 'r%s/%s' "${iter:-0}" "$total"
+}
+
 fmt_ctx() {
   local n=${1:-}
   [[ -z "$n" || "$n" == 0 ]] && return
@@ -233,7 +247,19 @@ render_row() {
   [[ -n "$lane_pid" ]] && display=$(tmux_window_for_pid "$lane_pid")
   [[ -z "$display" ]] && display=$(basename "$lane_dir")
   [[ -z "$display" ]] && display="$label"
-  [[ ${#display} -gt 28 ]] && display="${display:0:25}..."
+
+  # Append ralph progress marker so epic lanes are distinguishable at a glance.
+  local ralph
+  ralph=$(ralph_state_for "$lane_dir")
+  if [[ -n "$ralph" ]]; then
+    # Reserve room for the marker before truncating the label.
+    local max_label=$((28 - ${#ralph} - 1))
+    (( max_label < 1 )) && max_label=1
+    [[ ${#display} -gt $max_label ]] && display="${display:0:$((max_label - 3))}..."
+    display="$display $ralph"
+  else
+    [[ ${#display} -gt 28 ]] && display="${display:0:25}..."
+  fi
 
   local prio
   if (( is_stale )); then
