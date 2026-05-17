@@ -9,7 +9,7 @@ tmux configuration with intuitive keybindings, gruvbox dark theme, system-stats 
 | `.tmux.conf` | Main config: pane splits (`\|` / `-`), pane navigation (Alt+Arrow), tab navigation (Ctrl+Left/Right), pane border titles showing git branch per pane, gruvbox color scheme. |
 | `tmux-status.sh` | Right-side status renderer. BAT / CPU / MEM / DSK with dynamic color thresholds. Runs every `status-interval` (5s). |
 | `agent-board.sh` | Single-pane status board for parallel worktree lanes (see below). |
-| `grid-4x2.sh` | Quick 4×2 tmux pane grid layout. Bound to `prefix + l`. |
+| `grid-4x2.sh` | Quick 4×2 tmux pane grid layout. Bound to `prefix + l`. Re-tiles after every split so the next `split-window` always targets a viable pane — a single end-of-loop tile fails when the starting layout has slivers. |
 
 ## Color thresholds
 

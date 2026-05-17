@@ -150,3 +150,14 @@ Session start → match `org/` folder → load `context.md`. Subagent dispatch �
 - After changing `settings.json` — restart open Claude Code sessions.
 - After changing a hook — next event picks it up.
 - Keep `statusline-command.sh` fast; runs on every refresh.
+
+## Gotchas
+
+- **Node-based hooks need `node` on `/bin/sh` PATH.** Claude Code spawns hooks under `/bin/sh`, which never sources `.zshrc` — so nvm's lazy zsh loader doesn't apply. Plugin hooks shipped as `.mjs` (e.g. omc, anything wrapping `node "$CLAUDE_PLUGIN_ROOT"/…`) fail silently with `node: command not found`. Fix once: symlink nvm's node into a homebrew PATH dir.
+  ```bash
+  ln -s ~/.nvm/versions/node/<version>/bin/node /opt/homebrew/bin/node
+  ln -s ~/.nvm/versions/node/<version>/bin/npm  /opt/homebrew/bin/npm
+  ln -s ~/.nvm/versions/node/<version>/bin/npx  /opt/homebrew/bin/npx
+  ```
+  Re-link after `nvm use` switches versions.
+- **Marketplace hooks fire from `extraKnownMarketplaces`, not just `enabledPlugins`.** Registering a marketplace that ships a `hooks/hooks.json` is enough to attach its per-event commands — disabling individual plugins doesn't stop them. Audit before adding new marketplaces; remove the `extraKnownMarketplaces` entry to fully detach.
