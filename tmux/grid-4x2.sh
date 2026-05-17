@@ -19,13 +19,16 @@ if [ "$n" -gt "$TARGET" ]; then
   exit 1
 fi
 
+# Normalize up front so the first split has room even if the current
+# layout has slivers (e.g. a 1-row pane after manual resizes).
+tmux select-layout -t "$win" tiled >/dev/null
+
 while [ "$n" -lt "$TARGET" ]; do
   tmux split-window -t "$win" -c "#{pane_current_path}" >/dev/null
+  # Re-tile every iteration so the next split always targets a viable pane.
+  tmux select-layout -t "$win" tiled >/dev/null
   n=$((n + 1))
 done
-
-# Normalize first so split-window pane sizes don't fail validation.
-tmux select-layout -t "$win" tiled >/dev/null
 
 pids=()
 while IFS= read -r line; do
