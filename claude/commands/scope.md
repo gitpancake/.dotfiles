@@ -16,15 +16,24 @@ If `$ARGUMENTS` is empty, infer the problem from conversation context — what w
 discussed, debugged, or decided. Summarize your interpretation in 1–2 sentences and proceed.
 No relevant context either → ask for a problem statement and stop.
 
-## 1. Clarify before exploring
+## 1. Clarify before exploring — grill cadence
 
-If `$ARGUMENTS` is under ~15 words **or** missing any of the below, ask up to 3 questions and
-stop. Skip what you can already answer.
+If `$ARGUMENTS` is under ~15 words **or** missing any of the below, grill.
+
+**One question at a time. Each Q ships w/ your recommended answer.** User affirms → next Q.
+User overrides → record + next. Skip what you can already answer from context.
 
 - **Who hits this**: customer / internal user / engineer?
 - **End state** in one sentence.
 - **Surface area hint**: workflow / vendor / UI / infra / prompt — even rough.
 - **Epic or single ticket?**
+
+Format per Q:
+> Q: Who hits this?
+> Recommended: internal user (you mentioned ops dashboard). Affirm or override.
+
+Walk decision tree — resolve dependencies one branch at a time. Codebase-answerable Q → grep
+instead of asking. Stop when above four resolved + no fuzzy terms remain.
 
 ## 2. Codebase exploration — the refinement
 
@@ -44,7 +53,15 @@ work → search OpenViking first (`mcp__openviking__search resources/<org>/<vend
 - Imports / callers of the affected types and functions.
 - Project `CLAUDE.md` "Gotchas" entries that apply — quote them verbatim.
 
-### 2c. Mechanism honesty
+### 2c. Glossary check
+
+Scan `CONTEXT.md` (root or per-context via `CONTEXT-MAP.md`) for terms in the request. Term
+conflicts with existing definition → call out + resolve before drafting. Fuzzy/overloaded
+term ("account" = Customer or User?) → propose canonical, get confirmation, update
+`CONTEXT.md` inline. No `CONTEXT.md` yet → create lazily only when first term resolves.
+Brief must not ship with terms that contradict glossary.
+
+### 2d. Mechanism honesty
 
 Env vars / secrets, external setup (vendor account, webhook, OAuth app), new infra (background
 task, endpoint, collection) — list as prerequisites, flag anything unconfirmed. Never invent
