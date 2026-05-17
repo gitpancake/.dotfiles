@@ -1,6 +1,6 @@
 ---
 description: Pickup local ticket brief — sync base, fold context, spawn wt lane.
-argument-hint: <TICKET> <BASE-BRANCH> [extra context...]
+argument-hint: <TICKET> <BASE-BRANCH> [--fork] [extra context...]
 ---
 
 # /pickup $ARGUMENTS
@@ -11,11 +11,13 @@ command only prepares and spawns.
 
 ## 1. Parse
 
-`$ARGUMENTS` = `<TICKET> <BASE> [context...]`:
+`$ARGUMENTS` = `<TICKET> <BASE> [--fork] [context...]`:
 - **token 1** — `TICKET` (required). A ticket slug, a Linear id, or an epic folder name —
   `wt` resolves all three. Empty → ask, stop.
-- **token 2** — `BASE` (required). Base branch to spawn off. `.` = use the cockpit's
-  current branch as-is.
+- **token 2** — `BASE` (required). Base branch to spawn off (or land onto — see §4).
+  `.` = use the cockpit's current branch as-is.
+- **`--fork`** (optional flag, anywhere after token 2) — force fork-off mode even when BASE
+  is already checked out elsewhere. See §4.
 - **rest** — `CONTEXT` (optional). Free-text notes for the lane.
 
 ## 2. Locate the brief
@@ -35,7 +37,31 @@ Append to `BRIEF` under `## Local notes` (create that section at end of file if 
 
 It rides with the brief — the lane reads it, and it survives `/handoff`.
 
-## 4. Sync the cockpit to BASE
+## 4. Resolve mode — fork-off vs onto
+
+Two modes:
+
+- **fork-off** (default for `main` / `master` / `develop` / `staging`, or when `--fork`
+  passed): cockpit syncs to BASE, `wt` branches `<type>/<TICKET>` off BASE. Commits land on
+  the new branch.
+- **onto** (default for feature-branch BASE already checked out in another worktree):
+  cockpit is untouched, `wt --branch <BASE> <TICKET>` reuses that worktree. Commits land on
+  BASE itself — the right shape for "more commits on an open PR."
+
+### Detect
+
+```bash
+existing_wt=$(git worktree list --porcelain \
+  | awk -v b="refs/heads/<BASE>" '/^worktree /{w=substr($0,10)} /^branch /{if($2==b){print w; exit}}')
+```
+
+- `existing_wt` non-empty AND `--fork` not set AND BASE not in `main|master|develop|staging`
+  → **onto mode**. Announce pivot:
+  > BASE `<BASE>` checked out at `<existing_wt>` — landing commits onto BASE itself.
+  > Override w/ `--fork` to branch off instead.
+- Otherwise → **fork-off mode**. Continue below.
+
+### Fork-off: sync the cockpit to BASE
 
 Skip if `BASE` == `.`.
 
@@ -48,24 +74,49 @@ git merge --ff-only "origin/<BASE>"
 
 ff-merge fails (dirty tree / diverged) → stop, surface it. Never force.
 
+### Onto: skip cockpit sync
+
+Cockpit ff-merge would fail anyway (git refuses to check out a branch held by another
+worktree). Skip §4 sync entirely. Existing worktree is the source of truth; `wt` will
+reuse it as-is.
+
 ## 5. Spawn the lane
 
-Run via the Bash tool — it opens a new tmux window with claude in autonomous mode:
+Run via the Bash tool — opens a new tmux window w/ claude in autonomous mode.
 
-```bash
-wt <TICKET>
-```
+- **fork-off**:
+  ```bash
+  wt <TICKET>
+  ```
+  Branches `<type>/<TICKET>` off current `BASE`, creates worktree + per-lane port. Branch
+  type defaults to `feature/` — for `fix/` or `refactor/`, run `wt --type <prefix> <TICKET>`
+  directly.
 
-`wt` branches off the now-current `BASE`, creates the worktree + per-lane port, and the lane
-reads `BRIEF` as its brief. Branch type defaults to `feature/` — for a `fix/` or `refactor/`
-lane, run `wt --type <prefix> <TICKET>` directly instead.
+- **onto**:
+  ```bash
+  wt --branch <BASE> <TICKET>
+  ```
+  Reuses existing worktree of `<BASE>` (line 296 of `wt` auto-detects). Lane reads `BRIEF`,
+  commits land on `<BASE>`.
 
 Report, then stop:
 
-> Lane spawned off `<BASE>`. Autonomous dev loop running in new tmux window. This pane is done.
+> Lane spawned (`<mode>`) on `<BASE>`. Autonomous dev loop running in new tmux window. This pane is done.
 
 ## Stop conditions
 
 - Missing `TICKET` / `BASE`, or brief not found — ask or report, stop.
-- ff-merge failure — surface, stop.
+- ff-merge failure (fork-off mode) — surface, stop.
 - After spawn — done. Don't follow the lane.
+
+## Example — your case
+
+```
+/pickup restore-slack-drop-teams-pipedream feature/settings-connections-carriers | icons in /integrations or /carriers
+```
+
+- BASE = `feature/settings-connections-carriers`, already checked out at
+  `.claude/worktrees/settings-connections-carriers/`.
+- Not in `main|master|develop|staging` + no `--fork` → **onto mode**.
+- Skip cockpit sync. Spawn `wt --branch feature/settings-connections-carriers restore-slack-drop-teams-pipedream`.
+- Lane reuses existing worktree. Commits land on `feature/settings-connections-carriers` → PR #3459 gets them.
