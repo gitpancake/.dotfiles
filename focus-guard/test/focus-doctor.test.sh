@@ -18,7 +18,7 @@ new_sandbox() {
 127.0.0.1       localhost
 255.255.255.255 broadcasthost
 ::1             localhost
-127.0.0.1	youtube.com
+127.0.0.1	example.com
 EOF
   awk '/^[[:space:]]*127\.0\.0\.1[[:space:]]+/{if($2=="localhost"){print;next}print "#"$0;next}{print}' \
     "$SB/hosts.blocked" > "$SB/hosts.open"

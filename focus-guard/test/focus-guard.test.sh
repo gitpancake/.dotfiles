@@ -35,9 +35,9 @@ new_sandbox() {
 127.0.0.1       localhost
 255.255.255.255 broadcasthost
 ::1             localhost
-127.0.0.1	youtube.com
-127.0.0.1	www.youtube.com
-127.0.0.1	reddit.com
+127.0.0.1	example.com
+127.0.0.1	www.example.com
+127.0.0.1	example.org
 EOF
   printf '127.0.0.1       localhost\n255.255.255.255 broadcasthost\n::1             localhost\n' \
     > "$SB/hosts.live"
@@ -60,8 +60,8 @@ new_sandbox
 open_out="$(FG_FORCE_FOCUS=0 bash -c 'source "$0"; derive_open_from_blocked' "$SCRIPT")"
 assert_contains   "derive: keeps localhost"            "$open_out" "127.0.0.1       localhost"
 assert_contains   "derive: keeps broadcasthost"        "$open_out" "255.255.255.255 broadcasthost"
-assert_contains   "derive: comments youtube"           "$open_out" "#127.0.0.1	youtube.com"
-assert_not_contains "derive: no active youtube block"  "$open_out" $'\n127.0.0.1\tyoutube.com'
+assert_contains   "derive: comments example"           "$open_out" "#127.0.0.1	example.com"
+assert_not_contains "derive: no active example block"  "$open_out" $'\n127.0.0.1\texample.com'
 
 # --- tick: open target (outside focus, no override) ----------------------
 new_sandbox
@@ -69,8 +69,8 @@ out="$(FG_FORCE_FOCUS=0 run)"; rc=$?
 assert_rc        "tick open: rc 0"                 0 "$rc"
 assert_eq        "tick open: state=open"           "open" "$(cat "$SB/state/state")"
 assert_contains  "tick open: html Unblocked"       "$(cat "$SB/state/index.html")" "Unblocked"
-assert_not_contains "tick open: live has no block" "$(cat "$SB/hosts.live")" $'\n127.0.0.1\tyoutube.com'
-assert_contains  "tick open: refreshes hosts.open" "$(cat "$SB/hosts.open")" "#127.0.0.1	youtube.com"
+assert_not_contains "tick open: live has no block" "$(cat "$SB/hosts.live")" $'\n127.0.0.1\texample.com'
+assert_contains  "tick open: refreshes hosts.open" "$(cat "$SB/hosts.open")" "#127.0.0.1	example.com"
 
 # --- tick: blocked target (inside focus) ---------------------------------
 new_sandbox
@@ -78,7 +78,7 @@ out="$(FG_FORCE_FOCUS=1 run)"; rc=$?
 assert_rc        "tick blocked: rc 0"              0 "$rc"
 assert_eq        "tick blocked: state=blocked"     "blocked" "$(cat "$SB/state/state")"
 assert_contains  "tick blocked: html Focus"        "$(cat "$SB/state/index.html")" "Focus Mode"
-assert_contains  "tick blocked: live blocks yt"    "$(cat "$SB/hosts.live")" $'127.0.0.1\tyoutube.com'
+assert_contains  "tick blocked: live blocks yt"    "$(cat "$SB/hosts.live")" $'127.0.0.1\texample.com'
 
 # --- self-heal: live drifted to blocked while target=open ----------------
 new_sandbox
@@ -87,7 +87,7 @@ echo "blocked" > "$SB/state/state"               # stale state
 out="$(FG_FORCE_FOCUS=0 run)"; rc=$?
 assert_rc        "self-heal: rc 0"                 0 "$rc"
 assert_eq        "self-heal: state corrected"      "open" "$(cat "$SB/state/state")"
-assert_not_contains "self-heal: block removed"     "$(cat "$SB/hosts.live")" $'\n127.0.0.1\tyoutube.com'
+assert_not_contains "self-heal: block removed"     "$(cat "$SB/hosts.live")" $'\n127.0.0.1\texample.com'
 assert_contains  "self-heal: html Unblocked"       "$(cat "$SB/state/index.html")" "Unblocked"
 
 # --- verify-or-degrade: copy lands wrong → degraded page + rc 1 ----------
@@ -107,7 +107,7 @@ out="$(FG_FORCE_FOCUS=0 run block)"; rc=$?
 assert_rc        "block cmd: rc 0"                 0 "$rc"
 assert_eq        "block cmd: override=blocked"     "blocked" "$(cat "$SB/state/override")"
 assert_eq        "block cmd: state=blocked"        "blocked" "$(cat "$SB/state/state")"
-assert_contains  "block cmd: live blocks yt"       "$(cat "$SB/hosts.live")" $'127.0.0.1\tyoutube.com'
+assert_contains  "block cmd: live blocks yt"       "$(cat "$SB/hosts.live")" $'127.0.0.1\texample.com'
 
 # --- override beats schedule: override=blocked wins outside focus --------
 new_sandbox
