@@ -511,6 +511,11 @@ class App:
         # Title — bold, single line, truncated.
         self._put(stdscr, y, x0, t.title[:w], curses.A_BOLD, maxx=x0 + w)
         y += 1
+        # Pickup slug — exact arg for `wt`/`/pickup`. Surfaces what `p` will run.
+        if y - y0 < h:
+            self._put(stdscr, y, x0, f"pickup: {t.slug}"[:w],
+                      self.attr("accent", curses.A_DIM), maxx=x0 + w)
+            y += 1
         meta_bits = [b for b in (t.area, t.status, t.priority) if b]
         if meta_bits:
             color = t.meta[1] if not t.is_epic else "accent"
@@ -826,15 +831,32 @@ class App:
 
     # ---- ticket actions ----------------------------------------------
     def pickup_ticket(self, stdscr, ticket):
-        """Always foreground-suspend for pickup. `wt` is fast (sets up the
-        worktree, then spawns the lane into its own tmux window per WT_LAYOUT)
-        and returns — wrapping it in our own `tmux new-window` would just add a
-        transient flash window before wt's real one."""
+        """Always foreground-suspend for pickup. Mirrors `/pickup <slug> main`:
+        sync the cockpit to main, then hand off to `wt`. `wt` itself spawns the
+        lane into its own tmux window per WT_LAYOUT and returns — wrapping that
+        in our own `tmux new-window` would add a flash window before wt's real
+        one."""
         wt = shutil.which("wt") or "wt"
         curses.def_prog_mode()
         curses.endwin()
         try:
-            subprocess.run([wt, ticket.slug])
+            # Confirm cwd is a git repo — else wt would fail silently and no
+            # lane window would spawn, which is the exact symptom we're fixing.
+            in_repo = subprocess.run(
+                ["git", "rev-parse", "--show-toplevel"],
+                capture_output=True, text=True,
+            )
+            if in_repo.returncode != 0:
+                print("tix: cwd is not a git repo — run tix from the cockpit.")
+                input("press enter to return…")
+            else:
+                # /pickup-style base sync: fetch + checkout main + ff merge.
+                # Each step is best-effort; wt still runs even on partial sync
+                # so a transient fetch failure doesn't block the lane.
+                subprocess.run(["git", "fetch", "--quiet", "origin"])
+                subprocess.run(["git", "checkout", "main"])
+                subprocess.run(["git", "merge", "--ff-only", "origin/main"])
+                subprocess.run([wt, ticket.slug])
         except OSError:
             pass
         curses.reset_prog_mode()
