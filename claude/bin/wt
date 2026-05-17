@@ -379,22 +379,21 @@ JSON
         ;;
     esac
   elif command -v tmux >/dev/null 2>&1; then
-    # Not inside tmux, but a server may already be running. Attach a new window
-    # to the existing default session, or boot a new "wt" session. This stops
-    # callers (orchestrator agents) from improvising with nohup, which detaches
-    # the process from any pane and loses scrollback.
-    local target_sess
-    if tmux ls >/dev/null 2>&1; then
-      target_sess=$(tmux ls -F '#{session_name}' 2>/dev/null | head -n1)
+    # Not inside tmux. Target a dedicated `wt` session (override w/
+    # WT_TMUX_SESSION). Predictable home for lane windows — no alphabetical
+    # guessing, no pollution of the user's cockpit session. Create the session
+    # if missing, else attach a new window to it. Stops callers (orchestrator
+    # agents) from improvising with nohup, which detaches the process from
+    # any pane and loses scrollback.
+    local target_sess="${WT_TMUX_SESSION:-wt}"
+    if tmux has-session -t "$target_sess" 2>/dev/null; then
       tmux new-window -t "$target_sess" -n "$s_label" -c "$s_wt" "$claude_cmd"
-      echo "wt: spawned in tmux session '$target_sess', window '$s_label'."
-      echo "    Attach: tmux attach -t $target_sess"
+      echo "wt: spawned window '$s_label' in tmux session '$target_sess'."
     else
-      target_sess="wt"
       tmux new-session -d -s "$target_sess" -n "$s_label" -c "$s_wt" "$claude_cmd"
-      echo "wt: started tmux session '$target_sess', window '$s_label'."
-      echo "    Attach: tmux attach -t $target_sess"
+      echo "wt: started tmux session '$target_sess' with window '$s_label'."
     fi
+    echo "    Attach: tmux attach -t $target_sess"
     echo "  worktree: $s_wt"
     echo "  port:     $port"
     echo "  branch:   $s_branch"

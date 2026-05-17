@@ -127,18 +127,26 @@ get_ctx_tokens() {
   _ctx_from_jsonl "$latest" "$cache_file"
 }
 
-# Ralph state for a lane. Prints "r<iter>/<total>" if scripts/ralph/ exists,
-# empty otherwise. Iter = count of iterations/*.log files; total = prd.json
-# story count. Cheap — just an ls and a jq.
+# Ralph state for a lane. Prints "r<done>/<total>" if scripts/ralph/ exists,
+# empty otherwise. Done = userStories with passes==true (ralph's authoritative
+# completion marker). All done → "r✓<total>". Cheap — one jq call.
 ralph_state_for() {
   local wt=$1
   local ralph_dir="$wt/scripts/ralph"
   [[ -d "$ralph_dir" && -f "$ralph_dir/prd.json" ]] || return
-  local iter total
-  iter=$(ls "$ralph_dir/iterations"/*.log 2>/dev/null | grep -cv latest.log)
-  total=$(jq -r '(.userStories // .stories // []) | length' "$ralph_dir/prd.json" 2>/dev/null)
-  [[ -z "$total" || "$total" == "0" ]] && total="?"
-  printf 'r%s/%s' "${iter:-0}" "$total"
+  local counts done total
+  counts=$(jq -r '
+    (.userStories // .stories // []) as $s
+    | "\($s | map(select(.passes == true)) | length) \($s | length)"
+  ' "$ralph_dir/prd.json" 2>/dev/null)
+  [[ -z "$counts" ]] && return
+  read -r done total <<<"$counts"
+  [[ -z "$total" || "$total" == "0" ]] && return
+  if [[ "$done" == "$total" ]]; then
+    printf 'r✓%s' "$total"
+  else
+    printf 'r%s/%s' "$done" "$total"
+  fi
 }
 
 fmt_ctx() {
