@@ -25,6 +25,12 @@ command only prepares and spawns.
 `wt --print-brief <TICKET>` → `BRIEF`. This is the one resolver `wt` itself uses (Linear id →
 slug → epic folder name) — do **not** re-implement the lookup here.
 - **Non-zero exit / no path printed** → stop. Tell user to `/scope` it first.
+- **`basename "$BRIEF"` == `_epic.md`** → it's an epic, wrong command. Stop:
+  > Resolved to epic `<TICKET>`. Use `/epic <TICKET> <BASE>` to confirm story order +
+  > spawn Ralph lane. `/pickup` is for single tickets only.
+
+  Story-order confirmation in `/epic` is the contract that makes Ralph deterministic —
+  don't bypass it by auto-routing.
 
 ## 3. Fold in context — only if `CONTEXT` non-empty
 
@@ -106,6 +112,7 @@ Report, then stop:
 ## Stop conditions
 
 - Missing `TICKET` / `BASE`, or brief not found — ask or report, stop.
+- Resolved to an epic (`_epic.md`) — stop, redirect to `/epic`.
 - ff-merge failure (fork-off mode) — surface, stop.
 - After spawn — done. Don't follow the lane.
 
