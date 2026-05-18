@@ -39,8 +39,8 @@ for f in "$DOTFILES_DIR/claude/bin/"*; do
   ln -sf "$f" ~/.local/bin/"$(basename "$f")"
 done
 # claude/scripts → ~/.claude/scripts — referenced by absolute path from wt,
-# hooks, and tix (e.g. epic-parse.sh, ticket-status-sync.py), so they must
-# resolve at a stable location.
+# hooks, and the TIX_PRELOAD_HOOK env var (e.g. epic-parse.sh,
+# ticket-status-sync.py), so they must resolve at a stable location.
 for f in "$DOTFILES_DIR/claude/scripts/"*; do
   [ -e "$f" ] || continue
   case "$f" in *.sh|*.py) chmod +x "$f" ;; esac

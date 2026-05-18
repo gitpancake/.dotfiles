@@ -6,7 +6,7 @@ User-facing helpers + terminal toys. Most are on `PATH` via `~/.dotfiles/scripts
 
 | Script | What it does |
 | --- | --- |
-| `tickets-tui.py` | `tix` — terminal ticket explorer for `~/.claude/tickets/`. Split-pane preview, priority/status edits, pickup → `wt`. |
+| _(tix moved out)_ | `tix` now ships from github.com/gitpancake/tix — install with `pipx install tix-cli`. `status:` derivation stays here in `claude/scripts/ticket-status-sync.py`, wired up via `TIX_PRELOAD_HOOK` in `zsh/.zshenv`. |
 | `slack-tldr.py` | Socket-Mode daemon: subscribes to configured Slack channels, writes raw text alerts to a state file rendered by `slack-watch`. |
 | `slack-tldr-pane.sh` | Static (passive) renderer for the alert state. `watch -tcn2 ~/.dotfiles/scripts/slack-tldr-pane.sh`. |
 | `git-watch.py` | Lightweight git HEAD watcher. Writes commit feed state. Lighter cousin of `commit-watcher.py`. |

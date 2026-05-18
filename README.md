@@ -37,8 +37,8 @@ Each top-level folder has its own README with the deep dive — this tree is jus
 │                            #   parallel-lane agent board  → tmux/README.md
 ├── claude/                  # Claude Code: settings, hooks,
 │                            #   agents, commands, skills,
-│                            #   wt / ralph / tix, cost     → claude/README.md
-├── scripts/                 # Slack TLDR, tix, git-watch,
+│                            #   wt / ralph, cost           → claude/README.md
+├── scripts/                 # Slack TLDR, git-watch,
 │                            #   reactive art, redactor     → scripts/README.md
 ├── focus-guard/             # macOS time-aware site blocker
 │                            #   (opt-in install)           → focus-guard/README.md
@@ -72,5 +72,6 @@ Each top-level folder has its own README with the deep dive — this tree is jus
 - [Claude Code](https://claude.ai/code)
 - [jq](https://jqlang.org/) — required by statusline + cost + warn hooks
 - [tmux](https://github.com/tmux/tmux), [zoxide](https://github.com/ajeetdsouza/zoxide), [fzf](https://github.com/junegunn/fzf), [glow](https://github.com/charmbracelet/glow)
+- [`tix`](https://github.com/gitpancake/tix) — ticket explorer. `pipx install tix-cli`. `TIX_PRELOAD_HOOK` (set in `zsh/.zshenv`) points it at `claude/scripts/ticket-status-sync.py`.
 - [mkcert](https://github.com/FiloSottile/mkcert) + [nginx](https://nginx.org/) — focus-guard only
 - Python 3 stdlib (`curses`) — terminal toys

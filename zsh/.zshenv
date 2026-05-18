@@ -10,6 +10,11 @@ if [[ -s "$NVM_DIR/alias/default" ]]; then
   unset nvm_ver
 fi
 
+# tix preload hook — run the dotfiles' status reconciler before each tix launch.
+# tix itself is a pure reader (see github.com/gitpancake/tix); status: derivation
+# from live worktrees + merged PRs lives here in claude/scripts/ticket-status-sync.py.
+export TIX_PRELOAD_HOOK="$HOME/.claude/scripts/ticket-status-sync.py"
+
 # Machine-local secrets and env overrides. Lives outside the dotfiles repo so it's
 # never tracked. Optional — absent on fresh machines until you populate it.
 [[ -f "$HOME/.zshenv.local" ]] && source "$HOME/.zshenv.local"
