@@ -349,10 +349,12 @@ def render(out, rows, first_seen, blink_on=True, cols=None):
         if show_ci:
             ci_badge = CI_BADGES.get(r.get("ci", "none"), CI_BADGES["none"])
             prefix = f"{bar} {ci_badge} "
+            row_title_w = title_w
         else:
-            prefix = f"{bar} " + (" " * ci_col_w)
+            prefix = f"{bar} "
+            row_title_w = title_w + ci_col_w
 
-        title_disp = trunc(r["title"], title_w).ljust(title_w)
+        title_disp = trunc(r["title"], row_title_w).ljust(row_title_w)
 
         s_open = subj_sgr
         s_close = RESET if subj_sgr else ""
