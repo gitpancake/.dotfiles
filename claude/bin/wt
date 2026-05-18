@@ -326,6 +326,10 @@ spawn_lane() {
 
   mkdir -p "$s_wt/.claude"
   echo "IDLE" > "$s_wt/.claude/agent-state"
+  # Authoritative label for agent-board. Trusted over tmux window-name walk,
+  # which can pick up an unrelated parent window (e.g. cockpit) when the lane
+  # was spawned via `pane` layout or launched manually.
+  printf '%s\n' "$s_label" > "$s_wt/.claude/tmux-window"
 
   # Flip the ticket's status: → active. ticket-status-sync owns `status:`;
   # this is its cheap single-slug fast path. Detached + silenced so it never

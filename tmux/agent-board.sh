@@ -247,12 +247,21 @@ render_row() {
     esac
   fi
 
-  # Prefer tmux window name (human-set lane label) over git HEAD subject,
-  # which on a fresh lane is just the base commit and misnames the row.
+  # Lane label preference:
+  #  1. wt-written sentinel (<lane>/.claude/tmux-window) — authoritative.
+  #  2. tmux window name via pid walk — only when sentinel missing.
+  #  3. basename(lane_dir) — last resort.
+  # The sentinel exists because tmux_window_for_pid can mis-label lanes whose
+  # Claude pid lives in the cockpit window (manual launch or pane layout).
   local display=""
-  local lane_pid
-  lane_pid=$(cat "$pid_file" 2>/dev/null)
-  [[ -n "$lane_pid" ]] && display=$(tmux_window_for_pid "$lane_pid")
+  if [[ -f "$lane_dir/.claude/tmux-window" ]]; then
+    display=$(cat "$lane_dir/.claude/tmux-window" 2>/dev/null)
+  fi
+  if [[ -z "$display" ]]; then
+    local lane_pid
+    lane_pid=$(cat "$pid_file" 2>/dev/null)
+    [[ -n "$lane_pid" ]] && display=$(tmux_window_for_pid "$lane_pid")
+  fi
   [[ -z "$display" ]] && display=$(basename "$lane_dir")
   [[ -z "$display" ]] && display="$label"
 
@@ -292,14 +301,28 @@ if command -v tmux >/dev/null 2>&1; then
   tmux_pane_map=$(tmux list-panes -a -F '#{pane_pid}|#{window_name}' 2>/dev/null)
 fi
 
-# Walk parent chain of $1 until a pid matches a tmux pane_pid; print its window name.
+# Reserved tmux window names that must never be treated as a lane label.
+# Cockpit/board panes regularly host lane Claude processes (manual launch or
+# pane layout) and would otherwise overwrite the real lane label.
+TMUX_WINDOW_RESERVED=$'\ncockpit\nagent-board\nagents\n'
+[[ -n "${AGENT_BOARD_WINDOW_NAME:-}" ]] && \
+  TMUX_WINDOW_RESERVED+="${AGENT_BOARD_WINDOW_NAME}"$'\n'
+
+# Walk parent chain of $1 until a pid matches a tmux pane_pid; print its window
+# name. Skips reserved names (cockpit, agent-board, etc.) — those mean the pid
+# lives in a shared pane, not a dedicated lane window.
 tmux_window_for_pid() {
   local pid=$1
   [[ -n "$tmux_pane_map" ]] || return
   local cur=$pid hops=0 win
   while [[ -n "$cur" && "$cur" != 0 && "$cur" != 1 && $hops -lt 16 ]]; do
     win=$(printf '%s\n' "$tmux_pane_map" | awk -F'|' -v p="$cur" '$1==p{print $2; exit}')
-    [[ -n "$win" ]] && { printf '%s' "$win"; return; }
+    if [[ -n "$win" ]]; then
+      if [[ "$TMUX_WINDOW_RESERVED" != *$'\n'"$win"$'\n'* ]]; then
+        printf '%s' "$win"
+        return
+      fi
+    fi
     cur=$(ps -o ppid= -p "$cur" 2>/dev/null | tr -d ' ')
     hops=$((hops + 1))
   done
