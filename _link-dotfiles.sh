@@ -38,9 +38,12 @@ for f in "$DOTFILES_DIR/claude/bin/"*; do
   chmod +x "$f"
   ln -sf "$f" ~/.local/bin/"$(basename "$f")"
 done
-# claude/scripts → ~/.claude/scripts — referenced by absolute path from wt,
-# hooks, and the TIX_PRELOAD_HOOK env var (e.g. epic-parse.sh,
-# ticket-status-sync.py), so they must resolve at a stable location.
+# claude/scripts → ~/.claude/scripts — referenced by absolute path from
+# hooks and the TIX_PRELOAD_HOOK / WT_TICKET_SYNC env vars (e.g.
+# ticket-status-sync.py, plan-lint.sh), so they must resolve at a stable
+# location. Lane-orchestration scripts moved to the wt-lanes repo
+# (github.com/gitpancake/wt-lanes) — its install.sh writes into the same
+# ~/.claude/scripts/ namespace alongside the ones still here.
 for f in "$DOTFILES_DIR/claude/scripts/"*; do
   [ -e "$f" ] || continue
   case "$f" in *.sh|*.py) chmod +x "$f" ;; esac
@@ -51,7 +54,9 @@ done
 mkdir -p ~/.tmux
 ln -sf "$DOTFILES_DIR/tmux/.tmux.conf" ~/.tmux.conf
 ln -sf "$DOTFILES_DIR/tmux/tmux-status.sh" ~/.tmux/tmux-status.sh
-ln -sf "$DOTFILES_DIR/tmux/agent-board.sh" ~/.tmux/agent-board.sh
+# agent-board.sh moved out — owned by wt-lanes (github.com/gitpancake/wt-lanes).
+# Install it via ~/Documents/code/wt-lanes/install.sh, which symlinks it into
+# ~/.tmux/agent-board.sh.
 [ -f "$DOTFILES_DIR/tmux/grid-4x2.sh" ] && ln -sf "$DOTFILES_DIR/tmux/grid-4x2.sh" ~/.tmux/grid-4x2.sh
 
 # vim

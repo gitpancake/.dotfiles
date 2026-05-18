@@ -21,9 +21,8 @@ Configuration, hooks, agents, commands, skills, and lane primitives for [Claude 
 | `commands/` | Slash commands available in every project (see catalog below). |
 | `skills/` | Skills — `grill-with-docs`, `to-issues`, `tdd`, `diagnose`, `handoff`. Each is a dir with `SKILL.md`. |
 | `hooks/` | Shell hooks invoked on session events (notification, tool use, stop, user-prompt-submit). |
-| `scripts/` | Helper scripts called by hooks / commands — incl. `epic-parse.sh`, `ticket-status-sync.py`, `lane-pause.sh`, `lane-watch.sh`, `plan-lint.sh`, `verify-clean.sh`. |
-| `bin/` | PATH-exposed lane primitives — `wt`, `wt-gc`, `ralph-bootstrap`, `git-watch`, `slack-tldr`, `slack-watch`. (`tix` now ships separately — see github.com/gitpancake/tix; `pipx install tix-cli`.) |
-| `ralph/` | Vendored Ralph autonomous-loop orchestrator. Not symlinked — `bin/ralph-bootstrap` copies it into target repos. |
+| `scripts/` | Remaining helper scripts — `ticket-status-sync.py` (used by `TIX_PRELOAD_HOOK` and `WT_TICKET_SYNC`), `plan-lint.sh`, `verify-clean.sh`, `prune-*.sh`. Lane-orchestration scripts moved to **[wt-lanes](https://github.com/gitpancake/wt-lanes)**. |
+| `bin/` | PATH-exposed leftover tools — `git-watch`, `slack-tldr`, `slack-watch`. Lane bins (`wt`, `wt-gc`, `ralph-bootstrap`) moved to **[wt-lanes](https://github.com/gitpancake/wt-lanes)**. `tix` ships from **[tix](https://github.com/gitpancake/tix)** (`pipx install tix-cli`). |
 
 LaunchAgent plists (installed into `~/Library/LaunchAgents/`):
 
@@ -36,7 +35,9 @@ LaunchAgent plists (installed into `~/Library/LaunchAgents/`):
 
 ## Parallel worktree lanes
 
-`bin/wt <slug-or-epic>` spawns one parallel lane per ticket. Each lane is fire-and-forget: reads the local brief, works it through to a PR, then stops.
+Lane orchestration (`wt`, `wt-gc`, `ralph-bootstrap`, `agent-board`, hooks, Ralph) now lives in **[wt-lanes](https://github.com/gitpancake/wt-lanes)**. Install with `git clone https://github.com/gitpancake/wt-lanes ~/.wt-lanes && ~/.wt-lanes/install.sh`. The rest of this section describes how this dotfiles repo uses it.
+
+`wt <slug-or-epic>` spawns one parallel lane per ticket. Each lane is fire-and-forget: reads the local brief, works it through to a PR, then stops.
 
 What `wt` produces:
 

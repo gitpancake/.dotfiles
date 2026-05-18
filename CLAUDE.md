@@ -19,8 +19,8 @@ This file is the project memory layer for Claude — it captures the gotchas and
 `install.sh` / `install-mac.sh` use `ln -sf`. Editing files in this repo updates the live config — no rebuild step. Touch points:
 
 - `~/.zshrc`, `~/.zshenv` → `zsh/.zshrc`, `zsh/.zshenv`
-- `~/.tmux.conf`, `~/.tmux/agent-board.sh`, `~/.tmux/tmux-status.sh` → `tmux/`
-- `~/.claude/CLAUDE.md`, `settings.json`, `agents/`, `commands/`, `hooks/`, `scripts/`, `skills/`, `bin/` → `claude/`
+- `~/.tmux.conf`, `~/.tmux/tmux-status.sh` → `tmux/` (lane-orchestration `~/.tmux/agent-board.sh` now owned by [wt-lanes](https://github.com/gitpancake/wt-lanes))
+- `~/.claude/CLAUDE.md`, `settings.json`, `agents/`, `commands/`, `hooks/`, `scripts/`, `skills/`, `bin/` → `claude/` (some `hooks/`, `scripts/`, `bin/` entries now come from wt-lanes — both repos write into the same target dirs)
 - `~/.dotfiles/scripts/*` is on PATH via `.zshenv` so `slack-watch`, `slack-tldr` etc. resolve from any cwd
 - `~/Library/LaunchAgents/local.*.plist` → `claude/local.*.plist` (user agents)
 - focus-guard plists are **LaunchDaemons** — `install-mac.sh`/`rewire-symlinks.sh` *copy* (not symlink) `focus-guard/local.focus-*.plist` → `/Library/LaunchDaemons/` (root) and `bootstrap` them; scripts copied to `/usr/local/bin`. Editing the repo files does **not** hot-update — re-run install or `sudo rewire-symlinks.sh`.
@@ -37,34 +37,13 @@ Easy to confuse — they're different things:
 
 Slash commands often dispatch subagents internally, but they aren't the same registry.
 
-## Ralph autonomous loop
+## Lane orchestration — owned by wt-lanes
 
-`claude/ralph/` holds the vendored `ralph.sh` orchestrator + `CLAUDE.md.template` (Ralph's per-iteration prompt). It is **not** symlinked — `claude/bin/ralph-bootstrap` copies it into a target repo/worktree's `scripts/ralph/` and excludes that dir from git so the loop's runtime churn (`prd.json`, `progress.txt`, `archive/`) never lands on the feature branch. `wt --ralph` runs the bootstrap + loop inside a lane.
+Lane infrastructure (`wt`, `wt-gc`, `ralph-bootstrap`, `agent-board`, state-writer hooks, Ralph orchestrator, lane-watch, lane-pause, epic-parse, dag-parse) now lives in [gitpancake/wt-lanes](https://github.com/gitpancake/wt-lanes). Install: `git clone https://github.com/gitpancake/wt-lanes ~/.wt-lanes && ~/.wt-lanes/install.sh`. Its install.sh symlinks files into the same `~/.claude/scripts`, `~/.claude/hooks`, `~/.local/bin`, and `~/.tmux/` namespaces as the dotfiles, alongside the bits still here.
 
-One epic shape feeds the loop. An epic is a folder with an `_epic.md`; its `<!-- epic-stories -->` block carries the authoritative, human-confirmed ordered story list. `/epic <epic-slug> <BASE>` confirms that list and spawns the lane — at spawn, `claude/scripts/epic-parse.sh` projects `_epic.md` into `scripts/ralph/prd.json` inside the worktree. `ralph.sh` then grinds one story per fresh-context iteration (memory via git + `progress.txt` + `prd.json`), executing the confirmed list — it never decomposes.
+This repo still owns `claude/scripts/ticket-status-sync.py` (status derivation). Both the tix preload (`$TIX_PRELOAD_HOOK`) and wt spawn (`$WT_TICKET_SYNC`) point at it — both env vars exported from `zsh/.zshenv`.
 
-## Lane observability — monitor pane
-
-Policy: **no lane runs unmonitored.** Every `wt` spawn auto-attaches a split-pane monitor running `claude/scripts/lane-watch.sh <wt>`. The watcher polls every 10s and renders:
-
-- **Ralph lane** (scripts/ralph/ present): story-completion table from `userStories[].passes`, iteration count, tail of `iterations/latest.log`. Notifies on each story completion + overall done.
-- **Generic lane**: agent-state, ctx tokens, branch, last 5 commits, short git status. Notifies on `WAITING:*` transitions.
-
-Layout: ralph and non-ralph lanes alike get a 35% right-side pane (in `window` and `session` modes) or a vertical split-below (in `pane` mode). Opt out per spawn with `WT_NO_WATCH=1` — but the default is monitored, intentionally.
-
-Why strict: orchestrator agents previously lost track of spawned lanes (nohup detach, no scrollback). The pane is the visible contract. Notifications fire via `terminal-notifier` / `osascript` so the user knows the moment a lane hits `WAITING` or completes.
-
-## Lane state machine
-
-`<wt>/.claude/agent-state` is the single source of truth for `agent-board.sh`. Writers:
-
-- `claude/hooks/agent-state-active.sh` (PreToolUse) → `ACTIVE:<tool>`
-- `claude/hooks/agent-state-idle.sh` (Stop) → `IDLE`
-- `claude/hooks/agent-state-waiting.sh` (Notification) → `WAITING:<code>:<detail>`
-- `claude/hooks/precheck-stop.sh` (Stop) → forks `<wt>/.claude/precheck.sh` which writes `RUNNING:precheck` → `DONE` / `FAILED:<step>`
-- `claude/scripts/lane-pause.sh <code> <detail>` — call before pausing for human input to tag a reason code (vocab in `claude/agent-state-vocab.md`)
-
-`agent-board.sh` self-heals: if the recorded `<wt>/.claude/agent-pid` is dead, it resets the row to `IDLE` and preserves mtime. CTX column reads `~/.claude/projects/<encoded>/*.jsonl` and caches by jsonl mtime+size.
+For lane semantics (state machine vocab, monitor pane contract, Ralph loop), read wt-lanes' own README + CLAUDE.md. Don't duplicate that doctrine here.
 
 ## Auto-handoff (turn-cap fallback)
 
@@ -75,7 +54,6 @@ Why strict: orchestrator agents previously lost track of spawned lanes (nohup de
 - `zsh/*.zsh*`: `zsh -n <file>` to syntax-check after editing.
 - `claude/statusline-command.sh`: keep fast — runs on every Claude Code refresh.
 - `tmux/tmux-status.sh`: keep fast — runs every 5s (`status-interval 5`).
-- `tmux/agent-board.sh`: keep fast — pinned in a `watch -n2` pane. CTX column already caches via `<wt>/.claude/ctx-cache`; preserve that contract for any new per-row data.
 - `claude/CLAUDE.md` (the global one, not this file): edits land instantly — Claude reads it at session start. No reload needed.
 - `claude/settings.json`: restart open Claude sessions after editing.
 - `claude/hooks/*.sh`: next event picks them up — no restart.

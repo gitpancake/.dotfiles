@@ -15,6 +15,10 @@ fi
 # from live worktrees + merged PRs lives here in claude/scripts/ticket-status-sync.py.
 export TIX_PRELOAD_HOOK="$HOME/.claude/scripts/ticket-status-sync.py"
 
+# wt-lanes (github.com/gitpancake/wt-lanes): tell `wt` to flip a ticket's
+# status: → active on spawn by invoking the same reconciler with the slug.
+export WT_TICKET_SYNC="$HOME/.claude/scripts/ticket-status-sync.py"
+
 # Machine-local secrets and env overrides. Lives outside the dotfiles repo so it's
 # never tracked. Optional — absent on fresh machines until you populate it.
 [[ -f "$HOME/.zshenv.local" ]] && source "$HOME/.zshenv.local"
