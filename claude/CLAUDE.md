@@ -16,7 +16,11 @@ Self-describe via Agent/skills schemas — don't list. Run `/simplify` at chunk 
 
 ## Ticket Lifecycle
 
+**Source of truth: `~/.claude/tickets/`. NOT Linear.** Status/scope/progress/"what's left" → read local tree (`ls`/`grep`/`Read`). Never `mcp__linear-server__list_issues`/`get_issue` for state — lags + duplicates local. Linear = write-only sink: post link on PR open (`/ship`). User says "ticket"/"epic"/"AE-####" → check `~/.claude/tickets/` first, Linear never.
+
 `~/.claude/tickets/` = DB. Contract: its `README.md`. Slug filename; epic = folder w/ `_epic.md`. Brief missing → `/scope` it.
+
+**Slug rule.** No numbers in ticket/epic slugs. Use descriptors, not IDs. `pr3475-split` → `pr-token-pricing-split`. `issue-1284-fix` → `fix-auth-timeout`. Reason: IDs rot (PR# changes pre-merge, issue# meaningless out of tracker), descriptors carry meaning when grepping `tickets/`. Exception: epic-child file ordering prefix (`NN-<child>.md`) — structural, not part of slug.
 
 - **Single**: `/scope` → brief `<area>/<slug>.md`. `wt <slug>` (or `/pickup <slug> <BASE> [ctx]`) → autonomous lane: reads brief, plans slices, uses `grill-with-docs`/`tdd`/`handoff`, commits per layer, `/ship`.
 - **Epic**: `/scope` → `<area>/<epic-slug>/_epic.md` + `NN-<child>.md`. `/epic <slug> <BASE> [ctx]` confirms order + spawns `wt --ralph`. Ralph: one story/iteration, fresh context, memory via git + `progress.txt` + `prd.json`. `epic-parse.sh` projects `_epic.md` → `prd.json`. Executes confirmed list, never decomposes.
