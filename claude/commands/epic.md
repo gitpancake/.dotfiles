@@ -8,7 +8,7 @@ argument-hint: <EPIC> <BASE-BRANCH> [extra context...]
 Spawns `wt --ralph` — a lane running the Ralph autonomous loop over an epic.
 
 An **epic** is a folder with an `_epic.md` at its root — the durable, Ralph-ready PRD
-(contract: `~/.claude/tickets/README.md`). `_epic.md` carries the `<!-- epic-stories:start -->`
+(contract: `$TICKETS_DIR/README.md`). `_epic.md` carries the `<!-- epic-stories:start -->`
 block: the authoritative ordered story list + dependency DAG. `/epic` confirms that order with
 the user, then spawns the lane. The lane runs `epic-parse.sh` to project `_epic.md` into
 `scripts/ralph/prd.json` and executes it — **Ralph never decomposes; it executes a confirmed

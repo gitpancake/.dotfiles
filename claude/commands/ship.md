@@ -45,7 +45,7 @@ Goal: every PR carries `[AE-NNNN] <desc>` so it links to a ticket with descripti
 reasoning, implementation, and assignee.
 
 1. **Resolve brief** from current branch. Reuse `wt --resolve` if available; else
-   `grep -rlE "^linear:" ~/.claude/tickets/ --include='*.md'` and match by branch slug
+   `grep -rlE "^linear:" "${TICKETS_DIR:-$HOME/.claude/tickets}" --include='*.md'` and match by branch slug
    in filename or `## Local notes`. Found → `BRIEF_FILE=<path>`.
 2. **Read `linear:` frontmatter** from `$BRIEF_FILE` (if any). Non-empty → `AE_ID=<that>`,
    **skip to §3**.

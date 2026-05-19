@@ -1,5 +1,5 @@
 ---
-description: Free-text problem → engineered ticket brief under ~/.claude/tickets/. Writes on "go".
+description: Free-text problem → engineered ticket brief under $TICKETS_DIR. Writes on "go".
 argument-hint: <free-text problem statement>
 ---
 
@@ -9,8 +9,7 @@ User's standard ask: "scope this out, ready for engineering." Output is a **loca
 `wt` lane can pick up without redoing discovery — it carries the surface area, the mirror
 reference, the gotchas. Refine the request, don't restate it.
 
-Contract + templates: `~/.claude/tickets/README.md`. This command writes only markdown under
-`~/.claude/tickets/` — the brief *is* the ticket. There is no upstream tracker.
+Contract + templates: `$TICKETS_DIR/README.md` (default `$TICKETS_DIR/<project>/`, set by zsh `chpwd` hook from git repo basename; flat `$TICKETS_DIR/` outside a repo). This command writes only markdown under `$TICKETS_DIR` — the brief *is* the ticket. There is no upstream tracker.
 
 If `$ARGUMENTS` is empty, infer the problem from conversation context — what was just
 discussed, debugged, or decided. Summarize your interpretation in 1–2 sentences and proceed.
@@ -76,17 +75,18 @@ test command, vendor-proxy routing). Org-specific specifics live in that gitigno
 No counter, no `DRAFT-N`. **The filename is the handle.**
 
 - **Slug** — kebab-case, ≤40 chars, descriptive. Derive it from the end state:
-  `auth-refactor`, not `draft-7`.
-- **Area** — one of the buckets in `~/.claude/tickets/` (`integrations`, `platform`, `ops`,
+  `auth-refactor`, not `draft-7`. **No numbers in slugs** — no PR#/issue#/ticker IDs.
+  `pr3475-split` → `pr-token-pricing-split`. IDs rot; descriptors survive grep.
+- **Area** — one of the buckets in `$TICKETS_DIR/` (`integrations`, `platform`, `ops`,
   `tooling`, `spikes`). Pick the closest; ask only if genuinely ambiguous.
 - **Shape** — single ticket or epic (from §1).
 
 Target path — a ticket lives in its area from creation; `status: draft` marks it unrefined
 (there is no `_drafts/` staging folder — "draft" is a state, not a location):
 
-- **Single ticket** → `~/.claude/tickets/<area>/<slug>.md`
-- **Epic** → `~/.claude/tickets/<area>/<epic-slug>/_epic.md` (the PRD) plus
-  `~/.claude/tickets/<area>/<epic-slug>/NN-<child-slug>.md` for each sub-issue, `NN` =
+- **Single ticket** → `$TICKETS_DIR/<area>/<slug>.md`
+- **Epic** → `$TICKETS_DIR/<area>/<epic-slug>/_epic.md` (the PRD) plus
+  `$TICKETS_DIR/<area>/<epic-slug>/NN-<child-slug>.md` for each sub-issue, `NN` =
   execution order.
 
 Slug and epic-folder name both match `wt`'s resolver, so `wt <slug>` spawns a lane.
@@ -95,9 +95,9 @@ Slug and epic-folder name both match `wt`'s resolver, so `wt <slug>` spawns a la
 
 Copy the templates. Do not freehand the frontmatter.
 
-- Single ticket → `~/.claude/tickets/_TEMPLATE.md`
-- Epic root → `~/.claude/tickets/_EPIC-TEMPLATE.md`
-- Epic child → `~/.claude/tickets/_CHILD-TEMPLATE.md`
+- Single ticket → `$TICKETS_DIR/_TEMPLATE.md`
+- Epic root → `$TICKETS_DIR/_EPIC-TEMPLATE.md`
+- Epic child → `$TICKETS_DIR/_CHILD-TEMPLATE.md`
 
 Every ticket uses the same shape, so lanes read it identically. Set `created` to now,
 `status: draft`. Leave `linear:` empty — it's only a breadcrumb on tickets that predate the
@@ -119,11 +119,11 @@ write yet.
 
 `mkdir -p` the parent dir, write the markdown file(s). Return:
 
-> Brief at `~/.claude/tickets/<area>/<slug>.md`. Run `wt <slug>` to start a lane.
+> Brief at `$TICKETS_DIR/<area>/<slug>.md`. Run `wt <slug>` to start a lane.
 
 For an epic:
 
-> Epic at `~/.claude/tickets/<area>/<epic-slug>/`. Run `/epic <epic-slug> <base>` to review
+> Epic at `$TICKETS_DIR/<area>/<epic-slug>/`. Run `/epic <epic-slug> <base>` to review
 > the story order and spawn the Ralph lane.
 
 ## Stop conditions

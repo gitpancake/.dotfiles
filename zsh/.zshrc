@@ -53,6 +53,19 @@ _update_tmux_pane_title() {
 
 add-zsh-hook precmd _update_tmux_pane_title
 
+_tix_tickets_dir() {
+  local root base
+  root=$(git rev-parse --show-toplevel 2>/dev/null) || { unset TICKETS_DIR; return; }
+  base=${root:t}
+  if [[ -d "$HOME/.claude/tickets/$base" ]]; then
+    export TICKETS_DIR="$HOME/.claude/tickets/$base"
+  else
+    unset TICKETS_DIR
+  fi
+}
+add-zsh-hook chpwd _tix_tickets_dir
+_tix_tickets_dir
+
 # Aliases
 alias config="vim ~/.zshrc"
 alias reload="source ~/.zshrc"
@@ -60,6 +73,7 @@ alias ll="ls -la"
 alias cdsp="claude --dangerously-skip-permissions"
 alias cls="clear"
 alias agent-watch="watch -tcn2 ~/.tmux/agent-board.sh"
+alias monkeytype="$HOME/projects/monkeytype-tui/target/release/monkeytype"
 
 # `g` is oh-my-zsh's `git` alias by default. Override with a function so
 # `g checkout <branch>` cds to the worktree when that branch is already

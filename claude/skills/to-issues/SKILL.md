@@ -6,7 +6,7 @@ description: Plan/PRD/spec → tracer-bullet vertical tickets in local tree. Tri
 # To Issues
 
 Break a plan into independently-grabbable tickets using vertical slices (tracer bullets),
-written into the local ticket tree at `~/.claude/tickets/`.
+written into the local ticket tree at `$TICKETS_DIR/`.
 
 This is the *decomposition* job: take a plan that already exists (in conversation, or a
 written brief) and split it into sibling slice tickets. It is distinct from `/scope`, which
@@ -14,15 +14,15 @@ engineers a single brief — or a whole `_epic.md` folder — from free text. If
 sequenced epic, use `/scope`'s epic mode instead; `to-issues` produces a flat set of sibling
 tickets in one area.
 
-The contract for what a ticket file looks like is `~/.claude/tickets/README.md` — read it
-before writing. Frontmatter comes from `~/.claude/tickets/_TEMPLATE.md`; do not freehand it.
+The contract for what a ticket file looks like is `$TICKETS_DIR/README.md` — read it
+before writing. Frontmatter comes from `$TICKETS_DIR/_TEMPLATE.md`; do not freehand it.
 
 ## Process
 
 ### 1. Gather context
 
 Work from whatever plan is already in the conversation context. If the user passes a brief
-reference (a ticket slug or a path under `~/.claude/tickets/`) as an argument, read its full
+reference (a ticket slug or a path under `$TICKETS_DIR/`) as an argument, read its full
 body first.
 
 ### 2. Explore the codebase (optional)
@@ -68,7 +68,7 @@ Iterate until the user approves the breakdown.
 
 ### 5. Write the tickets to the local tree
 
-For each approved slice, write `~/.claude/tickets/<area>/<slug>.md` using the frontmatter
+For each approved slice, write `$TICKETS_DIR/<area>/<slug>.md` using the frontmatter
 from `_TEMPLATE.md` and the body template below. Write in dependency order (blockers first)
 so the "Blocked by" field can reference real sibling slugs.
 

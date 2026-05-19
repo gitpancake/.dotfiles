@@ -47,7 +47,7 @@ What `wt` produces:
 - `.claude/agent-state` seeded to `IDLE` (visible to `tmux/agent-board.sh`)
 - new tmux window running `claude --dangerously-skip-permissions --model opus` (override with `WT_CLAUDE=…` or `WT_MODEL=…`)
 
-`wt` resolves its arg against `~/.claude/tickets/` as a filename slug, a `linear:` breadcrumb, or an epic folder name (in that order). Brief missing → lane asks you to `/scope` it first.
+`wt` resolves its arg against `$TICKETS_DIR` (default `~/.claude/tickets`; zsh `chpwd` hook scopes it to `~/.claude/tickets/<project>/` inside a repo) as a filename slug, a `linear:` breadcrumb, or an epic folder name (in that order). Brief missing → lane asks you to `/scope` it first.
 
 Modes:
 
@@ -65,10 +65,10 @@ Layout default = new tmux window; override `WT_LAYOUT=pane|session`. Monitor pan
 
 ## Workflow
 
-The filesystem is the database — there is no external tracker. Briefs live in `~/.claude/tickets/<area>/`; a single ticket is a `<slug>.md`, an epic is a folder with an `_epic.md`. Contract: `~/.claude/tickets/README.md`.
+The filesystem is the database — there is no external tracker. Briefs live in `$TICKETS_DIR/<area>/` (centralized layout: `~/.claude/tickets/<project>/<area>/`); a single ticket is a `<slug>.md`, an epic is a folder with an `_epic.md`. Contract: `$TICKETS_DIR/README.md`.
 
 ```
-/scope <free text>           → engineer a local brief at ~/.claude/tickets/<area>/<slug>.md
+/scope <free text>           → engineer a local brief at $TICKETS_DIR/<area>/<slug>.md
                                (single ticket, or an _epic.md + NN-<child>.md folder)
 tix                          → terminal ticket explorer (github.com/gitpancake/tix).
                                status: derivation runs via $TIX_PRELOAD_HOOK →
