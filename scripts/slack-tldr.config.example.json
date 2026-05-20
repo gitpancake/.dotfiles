@@ -10,5 +10,10 @@
       "monitor-channel-1": "CXXXXXXXXXX"
     }
   },
-  "max_active": 50
+  "max_active": 50,
+  "scope": {
+    "allowed_users": ["UXXXXXXXX"],
+    "inbox_dir": "~/.claude/tickets/inbox",
+    "default_area": "integrations"
+  }
 }

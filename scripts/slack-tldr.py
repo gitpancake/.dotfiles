@@ -20,7 +20,12 @@ via $SLACK_TLDR_CONFIG):
       "monitor": {"name": "C_ID", …}  # monitor-tab channels
     },
     "backfill_hours": 24,              # backfill window on startup
-    "max_active":     50
+    "max_active":     50,
+    "scope": {                         # @bot scope <title> → inbox stub
+      "allowed_users": ["U..."],       # Slack user IDs allowed to scope
+      "inbox_dir":     "~/.claude/tickets/inbox",
+      "default_area":  "integrations"
+    }
   }
 
 State at $SLACK_TLDR_STATE (default ~/.local/share/slack-tldr/state.json):
@@ -169,6 +174,13 @@ def load_config():
     cfg["_id_to_name"] = {v: k for m in (alert_map, monitor_map) for k, v in m.items()}
 
     cfg.setdefault("max_active", DEFAULT_MAX_ACTIVE)
+
+    scope = cfg.get("scope") or {}
+    scope.setdefault("allowed_users", [])
+    scope.setdefault("inbox_dir", "~/.claude/tickets/inbox")
+    scope.setdefault("default_area", "integrations")
+    scope["inbox_dir"] = os.path.expanduser(scope["inbox_dir"])
+    cfg["scope"] = scope
     return cfg
 
 
@@ -448,6 +460,145 @@ SKIP_SUBTYPES = {
 }
 
 
+# ----------------------------------------------------------------------
+# Scope-from-Slack: @bot scope <title — body> → ticket stub in inbox/
+# ----------------------------------------------------------------------
+
+SCOPE_TRIGGER_RE = re.compile(r"^\s*scope\b[:\s]*(.+)", re.IGNORECASE | re.DOTALL)
+SLUG_NONWORD_RE = re.compile(r"[^a-z0-9]+")
+
+
+def _strip_leading_mention(text, bot_user_id):
+    """Drop the leading `<@UBOT>` (with optional `|label`) Slack inserts in
+    app_mention payloads. Leaves the rest of the text untouched."""
+    if not text:
+        return ""
+    pat = re.compile(rf"^\s*<@{re.escape(bot_user_id)}(?:\|[^>]+)?>\s*")
+    return pat.sub("", text, count=1)
+
+
+def _slugify(title, max_words=6):
+    words = SLUG_NONWORD_RE.sub(" ", title.lower()).split()
+    slug = "-".join(words[:max_words])
+    return slug[:60].strip("-") or "untitled"
+
+
+def _split_title_body(text):
+    """First line (or first 80 chars before a dash/colon/newline) = title.
+    Remainder = body context."""
+    text = text.strip()
+    for sep in ("\n", " — ", " -- "):
+        if sep in text:
+            head, _, tail = text.partition(sep)
+            return head.strip(), tail.strip()
+    if len(text) <= 80:
+        return text, ""
+    return text[:80].rstrip(), text[80:].strip()
+
+
+def _scope_permalink(web, channel, ts):
+    try:
+        resp = web.chat_getPermalink(channel=channel, message_ts=ts)
+        return resp.get("permalink") or ""
+    except Exception as e:
+        sys.stderr.write(f"slack-tldr: getPermalink failed: {e}\n")
+        return ""
+
+
+def _write_scope_stub(inbox_dir, area, title, body, sender, channel_name, permalink):
+    os.makedirs(inbox_dir, exist_ok=True)
+    now = time.strftime("%Y-%m-%dT%H:%M:%S%z") or time.strftime("%Y-%m-%dT%H:%M:%S")
+    stamp = time.strftime("%Y%m%d-%H%M")
+    slug = _slugify(title)
+    fname = f"{stamp}-{slug}.md"
+    path = os.path.join(inbox_dir, fname)
+    # Avoid collisions on rapid double-scopes.
+    n = 2
+    while os.path.exists(path):
+        path = os.path.join(inbox_dir, f"{stamp}-{slug}-{n}.md")
+        n += 1
+
+    quoted = "\n".join(f"> {line}" for line in (body or title).splitlines()) or "> (no body)"
+    link_line = f"- source: [{channel_name} / {sender or '?'}]({permalink})" if permalink else \
+                f"- source: {channel_name} / {sender or '?'}"
+
+    content = (
+        f"---\n"
+        f"linear:\n"
+        f"title: {title[:80]}\n"
+        f"status: draft\n"
+        f"epic:\n"
+        f"area: {area}\n"
+        f"labels: [from-slack]\n"
+        f"created: {now}\n"
+        f"---\n\n"
+        f"## Context\n"
+        f"Scoped from Slack via @bot mention.\n\n"
+        f"{link_line}\n\n"
+        f"{quoted}\n\n"
+        f"## Acceptance criteria\n"
+        f"- TODO — `/scope` this stub to flesh out.\n\n"
+        f"## Local notes\n"
+        f"- Auto-generated stub. Promote to `<area>/<slug>.md` via `/rescope` once acceptance criteria are real.\n"
+    )
+    with open(path, "w") as f:
+        f.write(content)
+    return path
+
+
+def handle_scope_mention(web, event, cfg, user_resolver, name_cache, bot_user_id):
+    """Process an app_mention event. Returns True if it was a scope command
+    (authorized or not), False if the mention wasn't a scope command."""
+    raw = flatten_message_text(event, {}, user_resolver) or event.get("text", "")
+    after_mention = _strip_leading_mention(raw, bot_user_id)
+    m = SCOPE_TRIGGER_RE.match(after_mention)
+    if not m:
+        return False
+
+    scope_cfg = cfg["scope"]
+    user_id = event.get("user") or ""
+    channel = event.get("channel") or ""
+    ts = event.get("ts") or ""
+    thread_ts = event.get("thread_ts") or ts
+
+    allowed = set(scope_cfg.get("allowed_users") or [])
+    if not allowed:
+        msg = "scope: no `scope.allowed_users` configured — refusing."
+        sys.stderr.write(f"slack-tldr: {msg}\n")
+        _safe_reply(web, channel, thread_ts, f":lock: {msg}")
+        return True
+    if user_id not in allowed:
+        sys.stderr.write(f"slack-tldr: scope denied for user {user_id}\n")
+        _safe_reply(web, channel, thread_ts, ":lock: not authorized to scope tickets.")
+        return True
+
+    body_text = m.group(1).strip()
+    if not body_text:
+        _safe_reply(web, channel, thread_ts, "usage: `@bot scope <title> — <details>`")
+        return True
+
+    title, body = _split_title_body(body_text)
+    permalink = _scope_permalink(web, channel, ts)
+    channel_name = get_channel_name(web, channel, name_cache)
+    sender = user_resolver(user_id) if user_id else ""
+
+    path = _write_scope_stub(
+        scope_cfg["inbox_dir"], scope_cfg["default_area"],
+        title, body, sender, channel_name, permalink,
+    )
+    sys.stderr.write(f"slack-tldr: scope stub → {path}\n")
+    rel = path.replace(os.path.expanduser("~"), "~", 1)
+    _safe_reply(web, channel, thread_ts, f":memo: ticket stub written → `{rel}`")
+    return True
+
+
+def _safe_reply(web, channel, thread_ts, text):
+    try:
+        web.chat_postMessage(channel=channel, thread_ts=thread_ts, text=text)
+    except Exception as e:
+        sys.stderr.write(f"slack-tldr: chat_postMessage failed: {e}\n")
+
+
 def _is_thread_reply(ev):
     """True for replies inside a thread — i.e. `thread_ts` is set and is
     not the message's own `ts`. Parent messages have either no `thread_ts`
@@ -557,6 +708,14 @@ def run_daemon():
 
     user_resolver = lambda uid: get_user_name(web, uid, user_cache)
 
+    try:
+        auth = web.auth_test()
+        bot_user_id = auth.get("user_id") or ""
+        sys.stderr.write(f"slack-tldr: bot user id = {bot_user_id}\n")
+    except Exception as e:
+        bot_user_id = ""
+        sys.stderr.write(f"slack-tldr: auth_test failed: {e}\n")
+
     channel_set = set(cfg["_channel_ids"])
     sys.stderr.write(
         f"slack-tldr: {len(channel_set)} configured channel(s)\n"
@@ -592,6 +751,15 @@ def run_daemon():
         ev_type = event.get("type")
 
         if ev_type == "member_joined_channel":
+            return
+
+        if ev_type == "app_mention":
+            try:
+                handle_scope_mention(
+                    web, event, cfg, user_resolver, name_cache, bot_user_id,
+                )
+            except Exception as e:
+                sys.stderr.write(f"slack-tldr: scope handler crashed: {e}\n")
             return
 
         if ev_type != "message":
