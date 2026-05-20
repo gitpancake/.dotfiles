@@ -26,6 +26,7 @@ import fcntl
 import json
 import os
 import select
+import shutil
 import subprocess
 import sys
 import termios
@@ -212,12 +213,33 @@ def with_state_lock(fn):
         return fn()
 
 
+def reap_merged_worktrees():
+    """A PR just transitioned to MERGED — sweep merged lanes' worktrees via
+    `wt-gc --reap-merged` (safety-checked: clean tree + pushed/merged; branch
+    preserved; logged to ~/.claude/logs/wt-gc.log). Detached + non-blocking so
+    the watch UI never stalls. No-op if wt-gc isn't installed."""
+    wt_gc = shutil.which("wt-gc")
+    if not wt_gc:
+        return
+    try:
+        subprocess.Popen(
+            [wt_gc, "--reap-merged", "--quiet"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except OSError:
+        pass
+
+
 def update_fresh(rows):
     now = time.time()
     newly_detected = 0
+    newly_merged = 0
 
     def mutate():
-        nonlocal newly_detected
+        nonlocal newly_detected, newly_merged
         state = load_state()
         known = state["pr_states"]
         fresh = [
@@ -242,6 +264,8 @@ def update_fresh(rows):
                     })
                     fresh_keys.add(fk)
                     newly_detected += 1
+                    if current_state == "MERGED":
+                        newly_merged += 1
             known[key] = current_state
 
         state["pr_states"] = known
@@ -250,6 +274,9 @@ def update_fresh(rows):
         return fresh
 
     fresh = with_state_lock(mutate)
+    # Fire after the lock releases — never hold the state lock across a subprocess.
+    if newly_merged > 0:
+        reap_merged_worktrees()
     first_seen = {
         (f["repo"], f["number"]): float(f["first_seen_ts"])
         for f in fresh
