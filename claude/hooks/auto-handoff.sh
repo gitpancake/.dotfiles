@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
-# UserPromptSubmit hook: at turn 30 (first crossing), mechanically generate a
-# handoff doc from the transcript + git state without involving Claude.
+# UserPromptSubmit hook: when turn count >= 30 OR context tokens >= 300k
+# (whichever hits first), mechanically generate a handoff doc from the
+# transcript + git state without involving Claude.
 #
 # Why: turn-cap-warn fires at 30/50/75/100 but historical obedience is ~0%.
 # /handoff invocations in the last 7d = 0; /clear = 315. Claude (and the user)
 # /clear away long sessions and lose state. This hook decouples handoff
 # creation from compliance — the doc exists before /clear is plausible.
+#
+# Context threshold catches sessions that balloon token-wise without many
+# turns (large file reads, big tool outputs) — same cache_read cost problem,
+# different shape than turn-count-driven blow-ups.
 #
 # Output: ~/.claude/handoffs/<UTC>-auto-<branch>.md, picked up by /resume.
 # systemMessage announces the path so the user knows /clear is safe.
@@ -30,7 +35,18 @@ current=$(cat "$counterFile" 2>/dev/null || echo 0)
 # turn-cap-warn.sh runs after us and will increment the counter. Match its
 # +1 semantic so we agree on the turn number being recorded this prompt.
 current=$((current + 1))
-(( current < 30 )) && exit 0
+
+# Effective context = last assistant message's input + cache_creation + cache_read.
+# That's the prompt size billed on the next turn and what blows up cache_read cost.
+ctxTokens=$(jq -rc 'select(.type=="assistant") | .message.usage // empty' "$transcriptPath" 2>/dev/null \
+  | tail -1 \
+  | jq -r '((.input_tokens // 0) + (.cache_creation_input_tokens // 0) + (.cache_read_input_tokens // 0))' 2>/dev/null)
+ctxTokens=${ctxTokens:-0}
+
+trigger=""
+(( current >= 30 )) && trigger="turn"
+(( ctxTokens >= 300000 )) && trigger="${trigger:+${trigger}+}ctx"
+[[ -z "$trigger" ]] && exit 0
 
 # Fire once per session.
 [[ -f "$warnedFile" ]] && grep -qx "auto-handoff" "$warnedFile" && exit 0
@@ -93,12 +109,14 @@ echo "$promptsLower" | grep -qE '(review|feedback|address)' && skills+="- addres
 [[ -z "$skills" ]] && skills="- (none inferred)"
 
 {
-  echo "# Auto-handoff — session ${sessionId:0:8} @ turn ${current}"
+  echo "# Auto-handoff — session ${sessionId:0:8} @ turn ${current} (ctx ${ctxTokens} tok)"
   echo ""
-  echo "Generated mechanically by \`auto-handoff.sh\` because the turn count crossed 50 and live state is at risk of being \`/clear\`ed away. Treat verbatim sections as the primary source — the structure is a dump, not a summary."
+  echo "Generated mechanically by \`auto-handoff.sh\` (trigger: **${trigger}**) because turn count >= 30 or context >= 300k tokens — live state is at risk of being \`/clear\`ed away. Treat verbatim sections as the primary source — the structure is a dump, not a summary."
   echo ""
   echo "**CWD:** \`${cwd:-?}\`  "
   echo "**Branch:** \`${branch:-?}\`  "
+  echo "**Turn:** ${current}  "
+  echo "**Context tokens:** ${ctxTokens}  "
   echo "**UTC:** ${ts}"
   echo ""
   echo "## Suggested skills for next session"
