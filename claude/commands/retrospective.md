@@ -1,11 +1,11 @@
 ---
-description: Retro on completed integration/feature. Linear + GH PRs + git → Notion.
+description: Retro on completed integration/feature. GH PRs + git + local ticket tree → Notion.
 argument-hint: <integration-name or free-text scope>
 ---
 
 # /retrospective $ARGUMENTS
 
-Data-driven retrospective on a completed feature or integration. Pulls from GitHub PRs, git commits, and (optionally) Linear tickets to build a structured retro, then publishes to Notion under the Engineering page.
+Data-driven retrospective on a completed feature or integration. Pulls from GitHub PRs, git commits, and the local ticket tree (`$TICKETS_DIR`) to build a structured retro, then publishes to Notion under the Engineering page. Linear is **not** a read source here — it has no MCP in this setup (write-only via `scripts/linear-ticket.py`); ticket state comes from the local tree, which is the source of truth.
 
 If `$ARGUMENTS` is empty, infer from conversation context — what integration or feature was just discussed, shipped, or closed. State the inferred scope in one sentence and proceed to §1. If no context either, ask and stop.
 
@@ -75,7 +75,7 @@ These are scope-creep or "we got scared to split this" signals.
 
 ### 3f. Author distribution
 
-Group branches by prefix convention (e.g., `agent/`, `feature/`, `henry/`, `fix/`). If Linear data is available, break down by assignee too.
+Group branches by prefix convention (e.g., `agent/`, `feature/`, `henry/`, `fix/`). Assignee data isn't available locally (no Linear read path) — derive ownership from branch prefix + commit author.
 
 ## §4. Draft retro
 
@@ -170,4 +170,4 @@ Write to `~/.claude/retros/<slugified-name>.md` (create `retros/` dir if needed)
 - §1: scope ambiguous → ask, stop, wait for answers.
 - §4: after presenting draft → stop. Do not publish without explicit approval.
 - Never auto-publish. Never skip the §4 draft review.
-- If Linear MCP or Notion MCP is missing: warn once, continue with available sources, offer fallback at §5.
+- If Notion MCP is missing: warn once, continue with available sources, offer fallback at §5.
