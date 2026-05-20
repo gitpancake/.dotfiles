@@ -21,3 +21,7 @@ org/
 
 # Caveman compress backup
 *.original.md
+
+# Python bytecode cache
+__pycache__/
+*.pyc
