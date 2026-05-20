@@ -45,9 +45,20 @@ This repo still owns `claude/scripts/ticket-status-sync.py` (status derivation).
 
 For lane semantics (state machine vocab, monitor pane contract, Ralph loop), read wt-lanes' own README + CLAUDE.md. Don't duplicate that doctrine here.
 
-## Auto-handoff (turn-cap fallback)
+## Turn-cap + handoff hooks
 
-`claude/hooks/auto-handoff.sh` (UserPromptSubmit, runs after `turn-cap-warn.sh`) — at turn ≥50, mechanically dumps last prompts + tool calls + active files + git state to `~/.claude/handoffs/<UTC>-auto-<branch>.md` and announces the path via `systemMessage`. Fires once per session (sentinel reuses `${TMPDIR}/claude-turn-cap-warn/session-<id>.warned`). Belt-and-suspenders for the documented turn-cap protocol — handoff doc exists *before* `/clear` is plausible, so /resume has a target even when the warning was ignored. Pure shell — no LLM call, no compliance dependency.
+Turn cap is **20 across the board** (was 30 halt / 50 gate). Soft nudge at 15. Tuned down because the self-audit showed 0% turn-cap obedience and `/clear`-dominant sessions (186 `/clear` vs 4 `/handoff` in 7d) — capture must be automatic, not compliance-dependent. Shared doc generator `claude/hooks/_handoff-doc.sh` (`write_handoff_doc` + `effective_ctx_tokens`) is sourced by both writers below so the handoff format lives in one place.
+
+- `turn-cap-warn.sh` (UserPromptSubmit) — soft reminder at 15; HARD HALT directive at 20, re-fires every turn past 20. cwd-aware (normal / wt lane / Ralph lane).
+- `auto-handoff.sh` (UserPromptSubmit, after turn-cap-warn) — at turn ≥20 **or** ctx ≥300k tokens, dumps last prompts + tool calls + active files + git state to `~/.claude/handoffs/<UTC>-auto-<branch>.md`. Once per session (sentinel `${TMPDIR}/claude-turn-cap-warn/session-<id>.warned`, tag `auto-handoff`).
+- `clear-handoff.sh` (SessionEnd, `session_end_reason=="clear"`) — captures state on **any** `/clear`, even below the cap, when turns ≥5 **or** ctx ≥100k. Skips trivial sessions and no-ops if a handoff already exists (marker `session-<id>.handoff`). Closes the "/clear at p50≈2 turns loses state" gap the cap can't see.
+- `handoff-gate.sh` (PreToolUse) — at turn ≥20, blocks tool use until a handoff doc exists. Normal path: auto-handoff already wrote one → no-op. Fail-safe: makes ignoring the halt impossible.
+
+All pure shell — no LLM call, no compliance dependency. The doc exists *before* `/clear` is plausible, so `/resume` always has a target.
+
+## Debug-intent router
+
+`claude/hooks/debug-router.sh` (UserPromptSubmit) — when a prompt reads like a free-form debugging request ("why is PR #X failing", "tests failing", "broken"), emits a `systemMessage` + `additionalContext` routing to `/why-failing` (failing PR/CI) or the `diagnose` skill (local repro→fix loop). Once per session; skips prompts that already start with a slash command. Closes the adoption gap the self-audit found — 18 debug openers in 7d, `/why-failing` invoked zero times.
 
 ## Editing rules
 

@@ -54,7 +54,7 @@ Modes:
 | Mode | When |
 | --- | --- |
 | `wt <slug>` | Single one-shot lane. Default. |
-| `wt --loop <slug>` | Outer shell loop wrapping `claude --print` iterations bridged by auto-handoff docs. Stays autonomous past the turn-30 halt. |
+| `wt --loop <slug>` | Outer shell loop wrapping `claude --print` iterations bridged by auto-handoff docs. Stays autonomous past the turn-20 halt. |
 | `wt --ralph <epic-slug>` | Ralph autonomous loop for epics — one story per fresh-context iteration, memory via git + `progress.txt` + `prd.json`. |
 | `wt --dag <slug>` | Parse plan DAG, spawn ready-set lanes (dormant until prereqs done). |
 | `wt --branch <name>` | Spawn a lane on an existing branch (e.g. a PR head). |
@@ -112,15 +112,17 @@ Model selection:
 
 ## Turn-cap protocol
 
-`hooks/turn-cap-warn.sh` hard-halts at turn 30. Soft warn at turn 20. `hooks/auto-handoff.sh` writes `~/.claude/handoffs/<UTC>-auto-<branch>.md` at turn 30 so `/clear` is safe and `/resume` has a target.
+`hooks/turn-cap-warn.sh` hard-halts at turn 20. Soft warn at turn 15. `hooks/auto-handoff.sh` writes `~/.claude/handoffs/<UTC>-auto-<branch>.md` at turn 20 (or ctx ≥300k) so `/clear` is safe and `/resume` has a target. `hooks/clear-handoff.sh` (SessionEnd, `reason=clear`) captures state on any `/clear` ≥5 turns / ≥100k ctx, even below the cap. `hooks/handoff-gate.sh` (PreToolUse) blocks tools at turn ≥20 until a handoff doc exists. Doc format is shared via `hooks/_handoff-doc.sh`.
 
-Behavior by cwd at turn 30:
+Behavior by cwd at turn 20:
 
 | Where | Action |
 | --- | --- |
 | Normal session | Tell user `/clear`. No tools. |
 | `wt` lane (`<repo>/.claude/worktrees/`) | One `git add -A && git commit` max, then stop. User runs `/resume` in fresh lane. |
 | Ralph lane (lane + `scripts/ralph/`) | End iteration silently. `ralph.sh` spawns next w/ fresh ctx. |
+
+`hooks/debug-router.sh` (UserPromptSubmit) — routes free-form debug prompts ("why is PR #X failing", "tests failing") to `/why-failing` or the `diagnose` skill, once per session.
 
 ## Lane state machine
 

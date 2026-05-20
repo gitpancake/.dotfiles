@@ -4,12 +4,12 @@
 # growth, the dominant cost driver in long Opus sessions.
 #
 # Thresholds:
-#   - 20 prompts → gentle reminder (soft, once)
-#   - 30 prompts → HARD HALT: inject mandatory directive forcing Claude to
+#   - 15 prompts → gentle reminder (soft, once)
+#   - 20 prompts → HARD HALT: inject mandatory directive forcing Claude to
 #                  tell user to /clear, no other tool use this turn. The
 #                  companion auto-handoff.sh has already written a handoff
 #                  doc, so /clear is safe.
-#   - 50/75/100 → re-fire halt directive (every turn past 30)
+#   - past 20 → re-fire halt directive every turn (escalation, not once-only)
 #
 # Halts use hookSpecificOutput.additionalContext so the directive lands in
 # Claude's context as a system instruction it must obey, plus a visible
@@ -46,8 +46,8 @@ if [[ -n "$cwd" && "$cwd" == */.claude/worktrees/* ]]; then
   [[ -d "$cwd/scripts/ralph" ]] && isRalph=1
 fi
 
-if (( current >= 30 )); then
-  # HARD HALT. Fires every turn past 30 — escalation, not once-only.
+if (( current >= 20 )); then
+  # HARD HALT. Fires every turn past 20 — escalation, not once-only.
   handoffRef="${handoffPath:-~/.claude/handoffs/}"
 
   if (( isRalph == 1 )); then
@@ -72,8 +72,8 @@ if (( current >= 30 )); then
   exit 0
 fi
 
-if (( current >= 20 )) && shouldFireOnce "tier20" "$warnedFile"; then
-  msg=$'💡 TURN 20. Hard halt at turn 30 — wrap the in-flight task before then.'
+if (( current >= 15 )) && shouldFireOnce "tier15" "$warnedFile"; then
+  msg=$'💡 TURN 15. Hard halt at turn 20 — wrap the in-flight task before then.'
   jq -nc --arg m "$msg" '{systemMessage: $m}'
 fi
 

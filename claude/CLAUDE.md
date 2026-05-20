@@ -60,14 +60,14 @@ Tool calls re-read full context. Loops compound.
 
 ## Turn-Cap Protocol
 
-`turn-cap-warn.sh` hard-halts turn 30. Soft turn 20. `auto-handoff.sh` writes `~/.claude/handoffs/` at 30 → `/clear` safe, `/resume` reads back.
+`turn-cap-warn.sh` hard-halts turn 20. Soft turn 15. `auto-handoff.sh` writes `~/.claude/handoffs/` at 20 (or ctx ≥300k) → `/clear` safe, `/resume` reads back. `clear-handoff.sh` (SessionEnd reason=clear) captures state on any `/clear` ≥5 turns / ≥100k ctx, even below the cap.
 
-- **20 soft**: wrap in-flight. No new scope.
-- **30 HARD HALT** by cwd:
+- **15 soft**: wrap in-flight. No new scope.
+- **20 HARD HALT** by cwd:
   - Normal: tell user `/clear`. No tools.
   - `wt` lane (`<repo>/.claude/worktrees/`): one `git add -A && git commit` max, stop. User runs `/resume` in fresh lane.
   - Ralph lane (lane + `scripts/ralph/`): end iteration silently. `ralph.sh` spawns next w/ fresh ctx.
-- **Past 30**: directive re-fires every prompt. Cost = quadratic. No push-through.
+- **Past 20**: directive re-fires every prompt; `handoff-gate.sh` blocks tools until a handoff doc exists. Cost = quadratic. No push-through.
 
 `/handoff` skill = richer; auto doc = safety net.
 

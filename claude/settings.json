@@ -54,6 +54,21 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/turn-cap-warn.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/debug-router.sh"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/clear-handoff.sh"
           }
         ]
       }
