@@ -1,6 +1,7 @@
 ---
 description: Commit + push + open PR + trigger @claude review. Pass PR# to re-trigger only.
 argument-hint: [optional: PR number or URL to skip create and review-only]
+model: claude-sonnet-4-6
 ---
 
 # /ship $ARGUMENTS
@@ -58,34 +59,36 @@ reasoning, implementation, and assignee.
      paragraphs (`git log --format='%b' origin/main..HEAD`) trimmed of empties.
    - **Implementation**: file-list summary from `git diff --stat origin/main...HEAD` —
      group by top-level dir, one line per group with file count + paths.
-5. **Authorize the Linear write**, then create the ticket. A PreToolUse guard
-   (`linear-issue-guard.sh`) blocks `mcp__linear-server__save_issue` everywhere
-   *except* `/ship`. Touch the one-shot sentinel immediately before the call:
+5. **Create the ticket** via the local script — no MCP. (`scripts/linear-ticket.py` hits
+   the Linear GraphQL API directly with `$LINEAR_API_KEY`; this keeps the Linear tool
+   schemas out of every lane's context — the tax that made `/ship` expensive.) Write the
+   step-4 body to a temp file, then run:
    ```
-   mkdir -p "${TMPDIR:-/tmp}/claude-linear-guard" && touch "${TMPDIR:-/tmp}/claude-linear-guard/ship-ok"
+   cat > "${TMPDIR:-/tmp}/ship-linear-body.md" <<'BODY'
+   ## Description
+   <bullets>
+
+   ## Reasoning
+   <paragraphs or brief Context>
+
+   ## Implementation
+   <grouped file summary>
+   BODY
+   ~/.dotfiles/scripts/linear-ticket.py create \
+     --team "Autonomy Eng" \
+     --title "<≤80 chars, no [AE-] prefix — Linear adds its own ID>" \
+     --state "In Progress" \
+     --assignee me \
+     --labels "<brief frontmatter labels:, comma-sep — omit flag if none>" \
+     --description-file "${TMPDIR:-/tmp}/ship-linear-body.md"
    ```
-   Then **create the ticket** via `mcp__linear-server__save_issue`:
-   - `team`: `Autonomy Eng`
-   - `title`: derive from branch slug + work; ≤80 chars; no `[AE-]` prefix (Linear adds
-     its own ID).
-   - `description`:
-     ```
-     ## Description
-     <bullets>
-
-     ## Reasoning
-     <paragraphs or brief Context>
-
-     ## Implementation
-     <grouped file summary>
-     ```
-   - `assignee`: `me`
-   - `state`: `In Progress` (work is done at this point — PR is the deliverable)
-   - `labels`: copy from brief frontmatter `labels:` if present, else `[]`
-6. **Capture `AE-NNNN`** from response → `AE_ID`. Write back into brief frontmatter
-   (`linear: AE-NNNN`) so future runs reuse it. Brief missing → skip writeback.
-7. **MCP failure** (network, perms, schema) → log the error in one line, set `AE_ID=""`,
-   continue with no-prefix title. Do not block ship.
+   `state` = `In Progress` because work is done at this point (PR is the deliverable).
+   stdout on success is `AE-NNNN<TAB>url`.
+6. **Capture `AE-NNNN`** from the script's stdout → `AE_ID`. Write back into brief
+   frontmatter (`linear: AE-NNNN`) so future runs reuse it. Brief missing → skip writeback.
+7. **Script failure** (nonzero exit: no key, network, team not found) → it prints the
+   reason to stderr. Log it in one line, set `AE_ID=""`, continue with no-prefix title.
+   Do not block ship.
 
 ## 3. PR body — tight bullet pattern
 

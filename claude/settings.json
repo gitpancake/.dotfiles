@@ -71,15 +71,6 @@
             "command": "bash ~/.claude/hooks/handoff-gate.sh"
           }
         ]
-      },
-      {
-        "matcher": "mcp__linear-server__save_issue",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/linear-issue-guard.sh"
-          }
-        ]
       }
     ],
     "PostToolUse": [

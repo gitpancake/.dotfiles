@@ -33,9 +33,9 @@ Run all in parallel. Use the resolved name to build keyword search strings.
 - `gh pr list --state all --limit 200 --json number,title,state,createdAt,mergedAt,headRefName,additions,deletions,closedAt,body --search "<keywords>"` — all PRs matching the integration name.
 - `git log --all --since="<start>" --until="<end>" --oneline --decorate` — full commit timeline in window.
 - `git log --all --since="<start>" --until="<end>" --format="%H %ad %s" --date=short | grep -iE "revert|rip|strip|drop|remove|undo|abandon"` — rework signals.
-- If Linear MCP available: `mcp__linear-server__list_issues` searching for the integration/feature name across all states — capture tickets at every stage (done, cancelled, backlog, in-progress).
+- `grep -rl "<keywords>" "${TICKETS_DIR:-$HOME/.claude/tickets}" --include='*.md'` then read matches — the local ticket tree (source of truth) for briefs at every stage (done, cancelled, backlog, in-progress).
 
-Gracefully skip any source that's unavailable (no `gh` auth, no Linear MCP, no git history). Note what was skipped.
+Gracefully skip any source that's unavailable (no `gh` auth, no ticket tree, no git history). Note what was skipped.
 
 ## §3. Analysis
 

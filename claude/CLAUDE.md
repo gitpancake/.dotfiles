@@ -18,7 +18,7 @@ Self-describe via Agent/skills schemas — don't list. Run `/simplify` at chunk 
 
 ## Ticket Lifecycle
 
-**Source of truth: `$TICKETS_DIR`. NOT Linear.** Layout: `~/.claude/tickets/<project>/<area>/...` — one centralized home tree, project subfolder = git repo basename. `$TICKETS_DIR` auto-sets via zsh `chpwd` hook when inside a project repo; outside repos / when unset, tools fall back to flat `~/.claude/tickets/`. Status/scope/progress/"what's left" → read local tree (`ls`/`grep`/`Read`). Never `mcp__linear-server__list_issues`/`get_issue` for state — lags + duplicates local. Linear = write-only sink: post link on PR open (`/ship`). User says "ticket"/"epic"/"AE-####" → check `$TICKETS_DIR` first, Linear never.
+**Source of truth: `$TICKETS_DIR`. NOT Linear.** Layout: `~/.claude/tickets/<project>/<area>/...` — one centralized home tree, project subfolder = git repo basename. `$TICKETS_DIR` auto-sets via zsh `chpwd` hook when inside a project repo; outside repos / when unset, tools fall back to flat `~/.claude/tickets/`. Status/scope/progress/"what's left" → read local tree (`ls`/`grep`/`Read`). Never read state from Linear — lags + duplicates local. Linear has no MCP here: it's a write-only sink reached by `~/.dotfiles/scripts/linear-ticket.py` (GraphQL + `$LINEAR_API_KEY`) — `/ship` creates the PR's ticket, agents post comments. User says "ticket"/"epic"/"AE-####" → check `$TICKETS_DIR` first, Linear never.
 
 `$TICKETS_DIR` = DB. Contract: its `README.md`. Slug filename; epic = folder w/ `_epic.md`. Brief missing → `/scope` it.
 
@@ -81,7 +81,7 @@ Re-read every lane resume / loop iteration — compounds. Brief = context + acce
 - Auto-commit per chunk. Separate: schema, backend, frontend.
 - Never push unless asked. PR title <70 chars. Squash merge.
 - Worktree default for non-trivial. Cleanup only on confirmed merge.
-- **Open PR via `/ship`, never raw `gh pr create`.** `/ship` §2.5 creates the PR's Linear team-reference ticket (composed from real commits+diff) — the linear-issue-guard only lets that one write through. Hand-rolling the PR skips the ticket and the team loses the reference. Guard fires on `save_issue` → that's the signal to run `/ship`, never "skip the ticket."
+- **Open PR via `/ship`, never raw `gh pr create`.** `/ship` §2.5 creates the PR's Linear team-reference ticket (composed from real commits+diff) via `scripts/linear-ticket.py create`. Hand-rolling the PR skips the ticket and the team loses the reference.
 
 ## Project CLAUDE.md
 

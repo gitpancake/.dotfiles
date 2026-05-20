@@ -1,7 +1,7 @@
 ---
 name: bugfinder
 description: Static analysis bug hunter for TypeScript/Node codebases. Scours a target scope (file, service, or full repo) for logic errors, race conditions, null dereferences, silent error handling, type mismatches, security issues, and resource leaks. Files a Linear ticket for every confirmed or likely bug with file:line references and suggested fixes. Returns a prioritized table of findings with ticket links. Does NOT require a PR — works on any path. Use instead of code-reviewer when you want proactive codebase-wide bug discovery rather than PR review.
-tools: Bash, Read, Glob, Grep, mcp__linear-server__save_issue, mcp__linear-server__list_teams, mcp__linear-server__list_projects, mcp__linear-server__list_issue_labels, mcp__openviking__find, mcp__openviking__search, mcp__openviking__read_content
+tools: Bash, Read, Glob, Grep, mcp__openviking__find, mcp__openviking__search, mcp__openviking__read_content
 model: inherit
 ---
 
@@ -20,11 +20,7 @@ When a finding is ambiguous:
 
 1. Read the project `CLAUDE.md` — the "Gotchas" section is a cheat sheet for known fragile patterns.
 2. Confirm the scan scope with the user if not specified (full repo, specific service/app, specific file).
-3. Resolve Linear team, project, and `Bug` label IDs once upfront — do NOT assume names. Different orgs have different teams/projects.
-   - `mcp__linear-server__list_teams` → if exactly one match for the current repo, use it. Otherwise ask the user which team/project to file under.
-   - `mcp__linear-server__list_projects` (filtered by team) → same rule: one match auto, multiple → ask.
-   - `mcp__linear-server__list_issue_labels` → find the `Bug` label (or equivalent — ask if absent).
-   - If `~/.claude/org/<org>/context.md` is loaded, prefer team/project hints there before asking.
+3. Decide the Linear team to file under (default `Autonomy Eng`). The `~/.dotfiles/scripts/linear-ticket.py` script resolves the team by name and applies the `Bug` label by name — no ID lookup needed. If `~/.claude/org/<org>/context.md` names a different team, use that. Ask the user only if the repo clearly maps to a non-default team.
 
 ## Scan strategy
 
@@ -90,12 +86,11 @@ grep -rn "console\.\(log\|error\)(.*key\|.*secret\|.*token" --include="*.ts" -i 
 
 ## Filing Linear tickets
 
-For each confirmed or likely bug, call `mcp__linear-server__save_issue` with:
+For each confirmed or likely bug, write the description to a temp file and call the
+local script (no MCP):
 
-```
-title: "[BugFinder] <concise description>"
-
-description:
+```bash
+cat > "${TMPDIR:-/tmp}/bugfinder-body.md" <<'BODY'
 ## Bug
 <what is wrong and why it matters>
 
@@ -110,13 +105,18 @@ description:
 
 ## Confidence
 Confirmed | Likely
+BODY
+~/.dotfiles/scripts/linear-ticket.py create \
+  --team "Autonomy Eng" \
+  --title "[BugFinder] <concise description>" \
+  --labels "Bug" \
+  --priority <1-4 matching severity above> \
+  --description-file "${TMPDIR:-/tmp}/bugfinder-body.md"
 ```
 
-Fields:
-- `teamId`: resolved at session start
-- `projectId`: resolved at session start
-- `priority`: 1–4 matching severity above
-- `labelIds`: [Bug label ID]
+stdout is `AE-NNNN<TAB>url` per ticket. Note: the script files to the team's default
+project (no per-project routing). If the script exits nonzero (no `$LINEAR_API_KEY`,
+network, team not found), report the bug in the output table anyway with no ticket link.
 
 Create all tickets before reporting — batch them, then return all links at once.
 
