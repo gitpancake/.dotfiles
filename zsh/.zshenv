@@ -19,6 +19,10 @@ export TIX_PRELOAD_HOOK="$HOME/.claude/scripts/ticket-status-sync.py"
 # status: → active on spawn by invoking the same reconciler with the slug.
 export WT_TICKET_SYNC="$HOME/.claude/scripts/ticket-status-sync.py"
 
+# Skip the auto-attached lane-watch monitor pane on `wt` spawn. Preference:
+# single pane per lane, no split. Re-enable per-spawn by unsetting or =0.
+export WT_NO_WATCH=1
+
 # Machine-local secrets and env overrides. Lives outside the dotfiles repo so it's
 # never tracked. Optional — absent on fresh machines until you populate it.
 [[ -f "$HOME/.zshenv.local" ]] && source "$HOME/.zshenv.local"
