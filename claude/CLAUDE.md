@@ -14,6 +14,8 @@ Direct, terse, opinionated. Match user energy. No disclaimers/hedging/preamble.
 
 Self-describe via Agent/skills schemas — don't list. Run `/simplify` at chunk boundaries (orchestrator only). Org preamble: known org codebase → prepend `~/.claude/org/<org>/preamble.md`.
 
+**Lane work → slash command, never manual.** Picking up a ticket/epic, shipping, addressing feedback = always the slash command (`/pickup`, `/epic`, `/scope`, `/ship`, `/address-feedback`). Never hand-roll the equivalent (manual `git worktree add` + branch, raw Agent spawn for the lane). The command owns worktree/branch/lane creation — a manual worktree collides with `wt`'s own and gets the lane killed. If unsure a command covers the task, invoke it and let it decide. (Read-only Explore/research agents are exempt — this is about lane lifecycle, not all agents.)
+
 ## Ticket Lifecycle
 
 **Source of truth: `$TICKETS_DIR`. NOT Linear.** Layout: `~/.claude/tickets/<project>/<area>/...` — one centralized home tree, project subfolder = git repo basename. `$TICKETS_DIR` auto-sets via zsh `chpwd` hook when inside a project repo; outside repos / when unset, tools fall back to flat `~/.claude/tickets/`. Status/scope/progress/"what's left" → read local tree (`ls`/`grep`/`Read`). Never `mcp__linear-server__list_issues`/`get_issue` for state — lags + duplicates local. Linear = write-only sink: post link on PR open (`/ship`). User says "ticket"/"epic"/"AE-####" → check `$TICKETS_DIR` first, Linear never.
@@ -79,6 +81,7 @@ Re-read every lane resume / loop iteration — compounds. Brief = context + acce
 - Auto-commit per chunk. Separate: schema, backend, frontend.
 - Never push unless asked. PR title <70 chars. Squash merge.
 - Worktree default for non-trivial. Cleanup only on confirmed merge.
+- **Open PR via `/ship`, never raw `gh pr create`.** `/ship` §2.5 creates the PR's Linear team-reference ticket (composed from real commits+diff) — the linear-issue-guard only lets that one write through. Hand-rolling the PR skips the ticket and the team loses the reference. Guard fires on `save_issue` → that's the signal to run `/ship`, never "skip the ticket."
 
 ## Project CLAUDE.md
 

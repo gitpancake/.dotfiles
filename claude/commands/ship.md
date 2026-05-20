@@ -58,7 +58,13 @@ reasoning, implementation, and assignee.
      paragraphs (`git log --format='%b' origin/main..HEAD`) trimmed of empties.
    - **Implementation**: file-list summary from `git diff --stat origin/main...HEAD` —
      group by top-level dir, one line per group with file count + paths.
-5. **Create ticket** via `mcp__linear-server__save_issue`:
+5. **Authorize the Linear write**, then create the ticket. A PreToolUse guard
+   (`linear-issue-guard.sh`) blocks `mcp__linear-server__save_issue` everywhere
+   *except* `/ship`. Touch the one-shot sentinel immediately before the call:
+   ```
+   mkdir -p "${TMPDIR:-/tmp}/claude-linear-guard" && touch "${TMPDIR:-/tmp}/claude-linear-guard/ship-ok"
+   ```
+   Then **create the ticket** via `mcp__linear-server__save_issue`:
    - `team`: `Autonomy Eng`
    - `title`: derive from branch slug + work; ≤80 chars; no `[AE-]` prefix (Linear adds
      its own ID).
