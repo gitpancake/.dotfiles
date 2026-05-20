@@ -92,14 +92,18 @@ renderUsageBucket() {
 # Pace ratio: actual 7d% / expected linear 7d% at this point in stint.
 # 100% = on pace. >100% = burning faster than sustainable. <100% = behind pace.
 # Stateless — pure function of current 7d% and reset timestamp.
+# Warm-up dead zone: until expected linear consumption clears paceWarmupPct,
+# the ratio is dominated by extrapolation noise (tiny denominator early in the
+# window turns normal usage into wild pace), so emit nothing and skip the bucket.
+paceWarmupPct=10
 paceRatio() {
   local pct=$1 resetAt=$2
-  awk -v p="$pct" -v r="$resetAt" -v n="$(date +%s)" 'BEGIN{
+  awk -v p="$pct" -v r="$resetAt" -v n="$(date +%s)" -v warm="$paceWarmupPct" 'BEGIN{
     days = (r - n) / 86400;
     if (days < 0) days = 0;
     if (days > 7) days = 7;
     expected = (1 - days / 7) * 100;
-    if (expected < 0.1) expected = 0.1;
+    if (expected < warm) exit;
     ratio = p / expected * 100;
     if (ratio < 0) ratio = 0;
     if (ratio > 999) ratio = 999;
@@ -129,7 +133,8 @@ isValidSize() { [[ "$1" =~ ^[0-9]+$ ]] && (( $1 > 1000 )); }
 if isValidPct "$ctxPct" && isValidSize "$ctxSize"; then
   renderContextBar
   if isValidPct "$sevenDayPct"; then
-    renderPaceBucket "$(paceRatio "$sevenDayPctRaw" "$sevenDayReset")"
+    pace=$(paceRatio "$sevenDayPctRaw" "$sevenDayReset")
+    [[ -n "$pace" ]] && renderPaceBucket "$pace"
   fi
   isValidPct "$fiveHrPct"   && renderUsageBucket "5h" "$fiveHrPct"   "$fiveHrReset"
   isValidPct "$sevenDayPct" && renderUsageBucket "7d" "$sevenDayPct" "$sevenDayReset"
