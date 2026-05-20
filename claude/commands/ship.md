@@ -1,7 +1,7 @@
 ---
 description: Commit + push + open PR + trigger @claude review. Pass PR# to re-trigger only.
 argument-hint: [optional: PR number or URL to skip create and review-only]
-model: claude-sonnet-4-6
+model: claude-opus-4-7
 ---
 
 # /ship $ARGUMENTS
