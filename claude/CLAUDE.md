@@ -83,6 +83,10 @@ Re-read every lane resume / loop iteration — compounds. Brief = context + acce
 - Worktree default for non-trivial. Cleanup only on confirmed merge.
 - **Open PR via `/ship`, never raw `gh pr create`.** `/ship` §2.5 creates the PR's Linear team-reference ticket (composed from real commits+diff) via `scripts/linear-ticket.py create`. Hand-rolling the PR skips the ticket and the team loses the reference.
 
+## Secrets / Env
+
+Need API key, token, or env var → check `.env.local` (project root) first, then `.env`. Don't ask the user for a value that's already there. Never hardcode secrets, never echo a full key to output/logs/commits — reference by name (`$OPENAI_API_KEY`), mask when shown. Missing from both → ask.
+
 ## Project CLAUDE.md
 
 After each chunk: update project `CLAUDE.md` (conventions, decisions, gotchas). Update `README.md` if user-facing behavior changes. ≤150 lines. Cut anything derivable from code.
