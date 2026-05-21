@@ -5,6 +5,8 @@ argument-hint: <free-text problem statement>
 
 # /scope $ARGUMENTS
 
+**Caveman: ultra for all chat (grill Qs, status, draft preamble). Brief content written normal prose — artifact, caveman rule exempts code/commits/PRs/briefs.**
+
 User's standard ask: "scope this out, ready for engineering." Output is a **local brief** a
 `wt` lane can pick up without redoing discovery — it carries the surface area, the mirror
 reference, the gotchas. Refine the request, don't restate it.
