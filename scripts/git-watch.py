@@ -332,7 +332,7 @@ def dispatch_pr_agent(repo, number, slashcmd):
         return f"not in tmux — run: claude \"{slashcmd}\" (in {repo})"
     try:
         subprocess.Popen(
-            ["tmux", "new-window", "-c", cwd, "-n", f"pr{number}-{verb}",
+            ["tmux", "new-window", "-d", "-c", cwd, "-n", f"pr{number}-{verb}",
              "claude", slashcmd],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
