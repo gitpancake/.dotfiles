@@ -489,28 +489,22 @@ def cmd_watch():
 
             r, _, _ = select.select([sys.stdin], [], [], FRAME_S)
             if r:
-                ch = sys.stdin.read(1)
-                if ch in ("q", "\x03", "\x04"):
+                # Read raw bytes off the fd — sys.stdin's buffering would hide
+                # the [A/[B tail of an arrow sequence from the next select().
+                data = os.read(fd, 8)
+                if data in (b"q", b"\x03", b"\x04"):
                     break
-                elif ch == "a":
+                elif data == b"a":
                     ack_fresh()
                     first_seen = {}
-                elif ch in ("\r", "\n"):
+                elif data in (b"\r", b"\n"):
                     shown = rows[:LIMIT]
                     if 0 <= cursor < len(shown):
                         open_url(shown[cursor]["url"])
-                elif ch == "j":
-                    cursor += 1
-                elif ch == "k":
+                elif data in (b"k", b"\x1b[A"):
                     cursor -= 1
-                elif ch == "\x1b":  # arrow keys: ESC [ A/B
-                    rr, _, _ = select.select([sys.stdin], [], [], 0.05)
-                    if rr:
-                        seq = sys.stdin.read(2)
-                        if seq == "[A":
-                            cursor -= 1
-                        elif seq == "[B":
-                            cursor += 1
+                elif data in (b"j", b"\x1b[B"):
+                    cursor += 1
                 n_shown = len(rows[:LIMIT])
                 cursor = max(0, min(cursor, n_shown - 1)) if n_shown else 0
             frame_idx += 1
