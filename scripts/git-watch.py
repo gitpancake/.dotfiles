@@ -2,7 +2,8 @@
 """Watch PRs across all repos in $CODE_DIR.
 
 Modes:
-  git-watch          interactive live pane (default; q / Ctrl-C exits)
+  git-watch          interactive live pane (default; ↑/↓ select a PR,
+                     ⏎ opens it in the browser, a acks, q / Ctrl-C exits)
   git-watch once     one-shot render (for `watch -tcn60 git-watch once`)
   git-watch loop     auto-refresh every $GIT_WATCH_POLL seconds (no alt-screen)
   git-watch ack      mark all fresh state changes as seen
@@ -292,6 +293,22 @@ def ack_fresh():
     with_state_lock(mutate)
 
 
+def open_url(url):
+    if not url:
+        return
+    opener = "open" if sys.platform == "darwin" else "xdg-open"
+    try:
+        subprocess.Popen(
+            [opener, url],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except OSError:
+        pass
+
+
 def trunc(s, n):
     if len(s) <= n:
         return s
@@ -318,7 +335,7 @@ def state_badge(st):
     return f"{dim}{color}{st:>6}{RESET}"
 
 
-def render(out, rows, first_seen, blink_on=True, cols=None):
+def render(out, rows, first_seen, blink_on=True, cols=None, cursor=None):
     if not rows:
         out.write(f"{BOLD}git-watch{RESET}  {GREEN}no PRs{RESET}\n")
         return
@@ -348,11 +365,13 @@ def render(out, rows, first_seen, blink_on=True, cols=None):
     has_ci = any(r["state"] in ("OPEN", "DRAFT") for r in shown)
     ci_col_w = 4 if has_ci else 0
     right_len = 2 + max_repo_w + 2 + max_num_w
-    title_w = max(20, cols - 2 - ci_col_w - right_len)
+    # -3: leading selection caret (1) + bar (1) + space (1)
+    title_w = max(20, cols - 3 - ci_col_w - right_len)
 
     now = time.time()
     prev_state = None
-    for r in shown:
+    for idx, r in enumerate(shown):
+        is_selected = (cursor == idx)
         if r["state"] != prev_state:
             if prev_state is not None:
                 out.write("\n")
@@ -372,19 +391,24 @@ def render(out, rows, first_seen, blink_on=True, cols=None):
             bar = " "
             subj_sgr = ""
 
+        caret = f"{CYAN}{BOLD}▸{RESET}" if is_selected else " "
         show_ci = r["state"] in ("OPEN", "DRAFT")
         if show_ci:
             ci_badge = CI_BADGES.get(r.get("ci", "none"), CI_BADGES["none"])
-            prefix = f"{bar} {ci_badge} "
+            prefix = f"{caret}{bar} {ci_badge} "
             row_title_w = title_w
         else:
-            prefix = f"{bar} "
+            prefix = f"{caret}{bar} "
             row_title_w = title_w + ci_col_w
 
         title_disp = trunc(r["title"], row_title_w).ljust(row_title_w)
 
-        s_open = subj_sgr
-        s_close = RESET if subj_sgr else ""
+        if is_selected:
+            s_open = f"\033[7m{CYAN}"
+            s_close = RESET
+        else:
+            s_open = subj_sgr
+            s_close = RESET if subj_sgr else ""
 
         out.write(
             f"{prefix}"
@@ -426,6 +450,7 @@ def cmd_watch():
     first_seen = {}
     last_poll = 0.0
     frame_idx = 0
+    cursor = 0
 
     try:
         tty.setcbreak(fd)
@@ -441,6 +466,8 @@ def cmd_watch():
                 if BELL and newly > 0:
                     sys.stdout.write("\a")
 
+            n_shown = len(rows[:LIMIT])
+            cursor = max(0, min(cursor, n_shown - 1)) if n_shown else 0
             blink_on = (frame_idx % 2 == 0)
 
             try:
@@ -451,11 +478,12 @@ def cmd_watch():
             buf = []
             class _Buf:
                 def write(self, s): buf.append(s)
-            render(_Buf(), rows, first_seen, blink_on=blink_on, cols=term_cols)
+            render(_Buf(), rows, first_seen, blink_on=blink_on,
+                   cols=term_cols, cursor=cursor)
             sys.stdout.write("\033[H\033[J")
             sys.stdout.write("".join(buf))
             sys.stdout.write(
-                f"\n{DIM}q quits · a acks fresh · poll {int(POLL_S)}s{RESET}\n"
+                f"\n{DIM}↑/↓ move · ⏎ open · a acks · q quits · poll {int(POLL_S)}s{RESET}\n"
             )
             sys.stdout.flush()
 
@@ -464,9 +492,27 @@ def cmd_watch():
                 ch = sys.stdin.read(1)
                 if ch in ("q", "\x03", "\x04"):
                     break
-                if ch == "a":
+                elif ch == "a":
                     ack_fresh()
                     first_seen = {}
+                elif ch in ("\r", "\n"):
+                    shown = rows[:LIMIT]
+                    if 0 <= cursor < len(shown):
+                        open_url(shown[cursor]["url"])
+                elif ch == "j":
+                    cursor += 1
+                elif ch == "k":
+                    cursor -= 1
+                elif ch == "\x1b":  # arrow keys: ESC [ A/B
+                    rr, _, _ = select.select([sys.stdin], [], [], 0.05)
+                    if rr:
+                        seq = sys.stdin.read(2)
+                        if seq == "[A":
+                            cursor -= 1
+                        elif seq == "[B":
+                            cursor += 1
+                n_shown = len(rows[:LIMIT])
+                cursor = max(0, min(cursor, n_shown - 1)) if n_shown else 0
             frame_idx += 1
     finally:
         sys.stdout.write("\033[?25h\033[?1049l")
