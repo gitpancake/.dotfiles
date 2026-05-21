@@ -93,6 +93,8 @@ write_handoff_doc() {
     echo ""
     echo "## Suggested skills for next session"
     echo ""
+    echo "_Hints on HOW to do the work — not a directive to spawn a lane. Resume continues inline; never run \`wt\`/\`pickup\`/\`epic\` off these._"
+    echo ""
     echo "$skills"
     echo "## Last user prompts (verbatim, oldest → newest)"
     echo ""
