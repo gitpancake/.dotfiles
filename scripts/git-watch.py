@@ -2,8 +2,17 @@
 """Watch PRs across all repos in $CODE_DIR.
 
 Modes:
-  git-watch          interactive live pane (default; ↑/↓ select a PR,
-                     ⏎ opens it in the browser, a acks, q / Ctrl-C exits)
+  git-watch          interactive live pane (default). Per-PR cockpit:
+                       ↑/↓ (j/k)  move selection
+                       ⏎          open PR in browser
+                       c          CI checks (gh pr checks, paged)
+                       v          comments / conversation (paged)
+                       w          dispatch /why-failing in a new tmux window
+                       f          dispatch /address-feedback in a new window
+                       m          squash-merge + delete branch (confirm)
+                       a          ack fresh state changes
+                       q / Ctrl-C exit
+                     w/f spawn an autonomous claude lane for the PR (needs tmux).
   git-watch once     one-shot render (for `watch -tcn60 git-watch once`)
   git-watch loop     auto-refresh every $GIT_WATCH_POLL seconds (no alt-screen)
   git-watch ack      mark all fresh state changes as seen
@@ -309,6 +318,31 @@ def open_url(url):
         pass
 
 
+def repo_cwd(repo):
+    return str(CODE_DIR / repo)
+
+
+def dispatch_pr_agent(repo, number, slashcmd):
+    """Fire-and-forget: open a tmux window running an autonomous claude lane
+    for this PR (e.g. /why-failing N, /address-feedback N). Returns a status
+    string. No-op fallback (returns the manual command) when not in tmux."""
+    cwd = repo_cwd(repo)
+    verb = slashcmd.lstrip("/").split()[0][:10]
+    if not os.environ.get("TMUX"):
+        return f"not in tmux — run: claude \"{slashcmd}\" (in {repo})"
+    try:
+        subprocess.Popen(
+            ["tmux", "new-window", "-c", cwd, "-n", f"pr{number}-{verb}",
+             "claude", slashcmd],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+        )
+    except OSError as e:
+        return f"dispatch failed: {e}"
+    return f"dispatched {slashcmd} → tmux window pr{number}-{verb}"
+
+
 def trunc(s, n):
     if len(s) <= n:
         return s
@@ -451,6 +485,48 @@ def cmd_watch():
     last_poll = 0.0
     frame_idx = 0
     cursor = 0
+    status = ""
+    status_until = 0.0
+
+    def leave_tui():
+        sys.stdout.write("\033[?25h\033[?1049l")
+        sys.stdout.flush()
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_attr)
+
+    def enter_tui():
+        nonlocal last_poll
+        tty.setcbreak(fd)
+        sys.stdout.write("\033[?25l\033[?1049h")
+        sys.stdout.flush()
+        last_poll = 0.0  # force a fresh poll on return
+
+    def suspend_run(shell_cmd, cwd):
+        """Drop out of the alt-screen, run a shell command (e.g. gh | less)
+        with the terminal restored, then re-enter the live pane."""
+        leave_tui()
+        try:
+            subprocess.run(shell_cmd, shell=True, cwd=cwd)
+        except (OSError, KeyboardInterrupt):
+            pass
+        enter_tui()
+
+    def confirm_merge(pr):
+        leave_tui()
+        try:
+            ans = input(
+                f"Merge #{pr['number']} '{pr['title']}' "
+                f"--squash --delete-branch? [y/N] "
+            )
+            if ans.strip().lower() in ("y", "yes"):
+                subprocess.run(
+                    ["gh", "pr", "merge", str(pr["number"]),
+                     "--squash", "--delete-branch"],
+                    cwd=repo_cwd(pr["repo"]),
+                )
+                input("— enter to return —")
+        except (EOFError, KeyboardInterrupt):
+            pass
+        enter_tui()
 
     try:
         tty.setcbreak(fd)
@@ -483,8 +559,11 @@ def cmd_watch():
             sys.stdout.write("\033[H\033[J")
             sys.stdout.write("".join(buf))
             sys.stdout.write(
-                f"\n{DIM}↑/↓ move · ⏎ open · a acks · q quits · poll {int(POLL_S)}s{RESET}\n"
+                f"\n{DIM}↑/↓ move · ⏎ browser · c checks · v comments · "
+                f"w why-fail · f feedback · m merge · a ack · q quit{RESET}\n"
             )
+            if status and now < status_until:
+                sys.stdout.write(f"{CYAN}{status}{RESET}\n")
             sys.stdout.flush()
 
             r, _, _ = select.select([sys.stdin], [], [], FRAME_S)
@@ -492,19 +571,40 @@ def cmd_watch():
                 # Read raw bytes off the fd — sys.stdin's buffering would hide
                 # the [A/[B tail of an arrow sequence from the next select().
                 data = os.read(fd, 8)
+                shown = rows[:LIMIT]
+                sel = shown[cursor] if 0 <= cursor < len(shown) else None
+
                 if data in (b"q", b"\x03", b"\x04"):
                     break
                 elif data == b"a":
                     ack_fresh()
                     first_seen = {}
-                elif data in (b"\r", b"\n"):
-                    shown = rows[:LIMIT]
-                    if 0 <= cursor < len(shown):
-                        open_url(shown[cursor]["url"])
+                elif data in (b"\r", b"\n") and sel:
+                    open_url(sel["url"])
                 elif data in (b"k", b"\x1b[A"):
                     cursor -= 1
                 elif data in (b"j", b"\x1b[B"):
                     cursor += 1
+                elif data == b"c" and sel:
+                    suspend_run(
+                        f"gh pr checks {sel['number']} | less -R",
+                        repo_cwd(sel["repo"]),
+                    )
+                elif data == b"v" and sel:
+                    suspend_run(
+                        f"gh pr view {sel['number']} --comments | less -R",
+                        repo_cwd(sel["repo"]),
+                    )
+                elif data == b"m" and sel:
+                    confirm_merge(sel)
+                elif data == b"w" and sel:
+                    status = dispatch_pr_agent(
+                        sel["repo"], sel["number"], f"/why-failing {sel['number']}")
+                    status_until = time.time() + 6
+                elif data == b"f" and sel:
+                    status = dispatch_pr_agent(
+                        sel["repo"], sel["number"], f"/address-feedback {sel['number']}")
+                    status_until = time.time() + 6
                 n_shown = len(rows[:LIMIT])
                 cursor = max(0, min(cursor, n_shown - 1)) if n_shown else 0
             frame_idx += 1
