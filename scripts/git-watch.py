@@ -40,8 +40,10 @@ import shutil
 import subprocess
 import sys
 import termios
+import threading
 import time
 import tty
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -146,45 +148,56 @@ def _ci_status(checks):
     return "pass"
 
 
-def collect():
+def _collect_repo(repo, cutoff):
     rows = []
-    if not CODE_DIR.is_dir():
+    text = run([
+        "gh", "pr", "list",
+        "--author", AUTHOR,
+        "--state", "all",
+        "--limit", "20",
+        "--json", "number,title,state,isDraft,updatedAt,headRefName,url,statusCheckRollup",
+    ], cwd=str(repo), timeout=15)
+    if not text:
         return rows
-    cutoff = time.time() - since_seconds()
+    try:
+        prs = json.loads(text)
+    except json.JSONDecodeError:
+        return rows
+    for pr in prs:
+        state = pr["state"]
+        if pr.get("isDraft") and state == "OPEN":
+            state = "DRAFT"
+        updated = parse_iso(pr.get("updatedAt", ""))
+        if state in ("MERGED", "CLOSED") and updated < cutoff:
+            continue
+        rows.append({
+            "ts": updated,
+            "repo": repo.name,
+            "number": pr["number"],
+            "state": state,
+            "ci": _ci_status(pr.get("statusCheckRollup", [])),
+            "title": pr["title"],
+            "branch": pr.get("headRefName", ""),
+            "url": pr.get("url", ""),
+        })
+    return rows
 
-    for repo in sorted(CODE_DIR.iterdir()):
-        if not repo.is_dir() or not (repo / ".git").exists():
-            continue
-        text = run([
-            "gh", "pr", "list",
-            "--author", AUTHOR,
-            "--state", "all",
-            "--limit", "20",
-            "--json", "number,title,state,isDraft,updatedAt,headRefName,url,statusCheckRollup",
-        ], cwd=str(repo), timeout=15)
-        if not text:
-            continue
-        try:
-            prs = json.loads(text)
-        except json.JSONDecodeError:
-            continue
-        for pr in prs:
-            state = pr["state"]
-            if pr.get("isDraft") and state == "OPEN":
-                state = "DRAFT"
-            updated = parse_iso(pr.get("updatedAt", ""))
-            if state in ("MERGED", "CLOSED") and updated < cutoff:
-                continue
-            rows.append({
-                "ts": updated,
-                "repo": repo.name,
-                "number": pr["number"],
-                "state": state,
-                "ci": _ci_status(pr.get("statusCheckRollup", [])),
-                "title": pr["title"],
-                "branch": pr.get("headRefName", ""),
-                "url": pr.get("url", ""),
-            })
+
+def collect():
+    if not CODE_DIR.is_dir():
+        return []
+    cutoff = time.time() - since_seconds()
+    repos = [
+        r for r in sorted(CODE_DIR.iterdir())
+        if r.is_dir() and (r / ".git").exists()
+    ]
+    if not repos:
+        return []
+
+    rows = []
+    with ThreadPoolExecutor(max_workers=min(8, len(repos))) as ex:
+        for repo_rows in ex.map(lambda r: _collect_repo(r, cutoff), repos):
+            rows.extend(repo_rows)
 
     state_order = {"OPEN": 0, "DRAFT": 1, "MERGED": 2, "CLOSED": 3}
     rows.sort(key=lambda r: (state_order.get(r["state"], 9), -r["ts"]))
@@ -480,13 +493,18 @@ def cmd_watch():
         return
 
     old_attr = termios.tcgetattr(fd)
-    rows = []
-    first_seen = {}
-    last_poll = 0.0
     frame_idx = 0
     cursor = 0
     status = ""
     status_until = 0.0
+
+    # Polling runs on a background thread so the input loop never blocks on
+    # `gh` network calls. The thread writes results into `shared` under a lock;
+    # the main loop only renders + handles keys, so keypresses stay instant.
+    shared = {"rows": [], "first_seen": {}, "bell": False, "loaded": False}
+    shared_lock = threading.Lock()
+    poll_now = threading.Event()
+    stop = threading.Event()
 
     def leave_tui():
         sys.stdout.write("\033[?25h\033[?1049l")
@@ -494,11 +512,10 @@ def cmd_watch():
         termios.tcsetattr(fd, termios.TCSADRAIN, old_attr)
 
     def enter_tui():
-        nonlocal last_poll
         tty.setcbreak(fd)
         sys.stdout.write("\033[?25l\033[?1049h")
         sys.stdout.flush()
-        last_poll = 0.0  # force a fresh poll on return
+        poll_now.set()  # force a fresh poll on return
 
     def suspend_run(shell_cmd, cwd):
         """Drop out of the alt-screen, run a shell command (e.g. gh | less)
@@ -528,19 +545,37 @@ def cmd_watch():
             pass
         enter_tui()
 
+    def poll_loop():
+        while not stop.is_set():
+            rows = collect()
+            first_seen, newly = update_fresh(rows)
+            with shared_lock:
+                shared["rows"] = rows
+                shared["first_seen"] = first_seen
+                shared["loaded"] = True
+                if BELL and newly > 0:
+                    shared["bell"] = True
+            poll_now.wait(POLL_S)
+            poll_now.clear()
+
+    poller = threading.Thread(target=poll_loop, daemon=True)
+
     try:
         tty.setcbreak(fd)
         sys.stdout.write("\033[?25l\033[?1049h")
         sys.stdout.flush()
+        poller.start()
 
         while True:
             now = time.time()
-            if now - last_poll >= POLL_S or last_poll == 0.0:
-                rows = collect()
-                first_seen, newly = update_fresh(rows)
-                last_poll = now
-                if BELL and newly > 0:
-                    sys.stdout.write("\a")
+            with shared_lock:
+                rows = shared["rows"]
+                first_seen = shared["first_seen"]
+                loaded = shared["loaded"]
+                ring_bell = shared["bell"]
+                shared["bell"] = False
+            if ring_bell:
+                sys.stdout.write("\a")
 
             n_shown = len(rows[:LIMIT])
             cursor = max(0, min(cursor, n_shown - 1)) if n_shown else 0
@@ -562,6 +597,8 @@ def cmd_watch():
                 f"\n{DIM}↑/↓ move · ⏎ browser · c checks · v comments · "
                 f"w why-fail · f feedback · m merge · a ack · q quit{RESET}\n"
             )
+            if not loaded:
+                sys.stdout.write(f"{DIM}polling…{RESET}\n")
             if status and now < status_until:
                 sys.stdout.write(f"{CYAN}{status}{RESET}\n")
             sys.stdout.flush()
@@ -578,6 +615,8 @@ def cmd_watch():
                     break
                 elif data == b"a":
                     ack_fresh()
+                    with shared_lock:
+                        shared["first_seen"] = {}
                     first_seen = {}
                 elif data in (b"\r", b"\n") and sel:
                     open_url(sel["url"])
@@ -609,6 +648,8 @@ def cmd_watch():
                 cursor = max(0, min(cursor, n_shown - 1)) if n_shown else 0
             frame_idx += 1
     finally:
+        stop.set()
+        poll_now.set()
         sys.stdout.write("\033[?25h\033[?1049l")
         sys.stdout.flush()
         termios.tcsetattr(fd, termios.TCSADRAIN, old_attr)
