@@ -60,6 +60,10 @@ All pure shell — no LLM call, no compliance dependency. The doc exists *before
 
 `claude/hooks/debug-router.sh` (UserPromptSubmit) — when a prompt reads like a free-form debugging request ("why is PR #X failing", "tests failing", "broken"), emits a `systemMessage` + `additionalContext` routing to `/why-failing` (failing PR/CI) or the `diagnose` skill (local repro→fix loop). Once per session; skips prompts that already start with a slash command. Closes the adoption gap the self-audit found — 18 debug openers in 7d, `/why-failing` invoked zero times.
 
+## Worktree write guard
+
+`claude/hooks/worktree-write-guard.sh` (PreToolUse, before `handoff-gate.sh`) — kills the recurring wt-lane **cwd→main leak**: a lane runs with cwd in its worktree but an Edit/Write fires with an absolute path rooted at the main checkout (or a sibling lane), so the edit lands outside the lane while the branch looks clean. Engages only for write tools (Edit/Write/NotebookEdit/MultiEdit) **and** only when cwd is a linked worktree (`git-dir != git-common-dir`). Blocks (exit 2) when the canonical target is under the main checkout but not under the current worktree — sibling worktrees caught for free. Passes relative paths, in-lane abs paths, `~/.claude/tickets` briefs, `/tmp`, and any normal main-repo session. Pure shell + one `python3 realpath` (resolves non-existent Write targets).
+
 ## Editing rules
 
 - `zsh/*.zsh*`: `zsh -n <file>` to syntax-check after editing.

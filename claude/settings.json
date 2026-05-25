@@ -83,6 +83,10 @@
           },
           {
             "type": "command",
+            "command": "bash ~/.claude/hooks/worktree-write-guard.sh"
+          },
+          {
+            "type": "command",
             "command": "bash ~/.claude/hooks/handoff-gate.sh"
           }
         ]
@@ -131,7 +135,7 @@
     }
   },
   "effortLevel": "high",
-  "fastMode": false,
+  "fastMode": true,
   "skipDangerousModePermissionPrompt": true,
   "theme": "dark",
   "fileCheckpointingEnabled": true,
