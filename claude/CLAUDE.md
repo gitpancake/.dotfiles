@@ -44,7 +44,7 @@ Self-describe via Agent/skills schemas — don't list. Run `/simplify` at chunk 
 - Bools as assertions: `isValid`, `hasChildren`. Ranges: `first`/`last`.
 - Complex conditions → named bools.
 - `const` default. Declare near first use.
-- Comment "why" not "what".
+- No code comments. Names + structure carry intent. Exceptions: license headers, tooling pragmas (`eslint-disable`, `ts-expect-error`, `@ts-ignore`), and public-API doc blocks (JSDoc/docstring) where the toolchain consumes them.
 - Composition > inheritance. Narrow interfaces.
 
 Detail: OV `resources/agents/code-structure-reference`.
