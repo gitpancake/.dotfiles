@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -116,6 +117,60 @@ def graphql(api_key: str, query: str, variables: dict | None = None) -> dict:
     return body["data"]
 
 
+def git_capture(args: list[str]) -> str:
+    try:
+        out = subprocess.run(
+            ["git", *args], capture_output=True, text=True, check=True
+        )
+        return out.stdout
+    except subprocess.CalledProcessError as exc:
+        die(f"git {' '.join(args)} failed: {exc.stderr.strip() or exc.returncode}")
+    except FileNotFoundError:
+        die("git not on PATH")
+
+
+def compose_body_from_git(base: str) -> str:
+    subjects_raw = git_capture(["log", f"{base}..HEAD", "--format=%s"]).splitlines()
+    seen: set[str] = set()
+    subjects: list[str] = []
+    for line in subjects_raw:
+        line = line.strip()
+        if line and line not in seen:
+            seen.add(line)
+            subjects.append(line)
+
+    bodies_raw = git_capture(["log", f"{base}..HEAD", "--format=%b"]).split("\n\n")
+    bodies = [b.strip() for b in bodies_raw if b.strip()]
+
+    stat_raw = git_capture(["diff", "--stat", f"{base}...HEAD"]).splitlines()
+    groups: dict[str, list[str]] = {}
+    for line in stat_raw:
+        if "|" not in line:
+            continue
+        path = line.split("|", 1)[0].strip()
+        if not path:
+            continue
+        top = path.split("/", 1)[0] if "/" in path else path
+        groups.setdefault(top, []).append(path)
+
+    impl: list[str] = []
+    for top, paths in sorted(groups.items()):
+        n = len(paths)
+        sample = ", ".join(paths[:5])
+        tail = " …" if n > 5 else ""
+        impl.append(f"- `{top}/` ({n} file{'s' if n != 1 else ''}): {sample}{tail}")
+
+    parts: list[str] = ["## Description"]
+    parts.extend(f"- {s}" for s in subjects) if subjects else parts.append("- (no commits)")
+    parts.append("")
+    parts.append("## Reasoning")
+    parts.extend(bodies if bodies else ["_See commit subjects above._"])
+    parts.append("")
+    parts.append("## Implementation")
+    parts.extend(impl if impl else ["_No file changes detected._"])
+    return "\n".join(parts) + "\n"
+
+
 def read_body(text: str | None, file_path: str | None) -> str:
     if text is not None:
         return text
@@ -168,7 +223,10 @@ def cmd_create(args: argparse.Namespace, api_key: str) -> None:
     team = pick_team(data["teams"]["nodes"], args.team)
 
     issue_input: dict = {"teamId": team["id"], "title": args.title}
-    description = read_body(args.description, args.description_file)
+    if args.auto_body:
+        description = compose_body_from_git(args.auto_body)
+    else:
+        description = read_body(args.description, args.description_file)
     if description.strip():
         issue_input["description"] = description
     if args.assignee == "me":
@@ -229,6 +287,11 @@ def main() -> None:
     create.add_argument("--labels", default="", help="comma-separated label names")
     create.add_argument("--description")
     create.add_argument("--description-file")
+    create.add_argument(
+        "--auto-body",
+        metavar="BASE",
+        help="compose description from BASE..HEAD git log + diff (overrides --description/--description-file)",
+    )
     create.add_argument("--json", action="store_true")
 
     comment = sub.add_parser("comment", help="post a comment on an issue by identifier")
