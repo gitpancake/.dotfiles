@@ -103,6 +103,10 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/tool-loop-warn.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/subagent-nudge.sh"
           }
         ]
       }

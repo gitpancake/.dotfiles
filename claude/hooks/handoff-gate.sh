@@ -31,7 +31,7 @@ sessionId=$(jq -r '.session_id // "unknown"' <<<"$input")
 toolName=$(jq -r '.tool_name // empty' <<<"$input")
 toolCmd=$(jq -r '.tool_input.command // empty' <<<"$input")
 
-logDir="${TMPDIR:-/tmp}/claude-turn-cap-warn"
+logDir="${HOME}/.claude/state/turn-counters"
 counterFile="${logDir}/session-${sessionId}.count"
 handoffMarker="${logDir}/session-${sessionId}.handoff"
 saveSentinel="${logDir}/session-${sessionId}.savedone"

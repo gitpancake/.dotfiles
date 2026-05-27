@@ -22,7 +22,7 @@ sessionId=$(jq -r '.session_id // "unknown"' <<<"$input")
 cwd=$(jq -r '.cwd // empty' <<<"$input")
 [[ "$sessionId" == "unknown" ]] && exit 0
 
-logDir="${TMPDIR:-/tmp}/claude-turn-cap-warn"
+logDir="${HOME}/.claude/state/turn-counters"
 mkdir -p "$logDir"
 counterFile="${logDir}/session-${sessionId}.count"
 warnedFile="${logDir}/session-${sessionId}.warned"

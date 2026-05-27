@@ -46,7 +46,7 @@ debugRe+='|(not working|won.?t (build|compile|run|start))'
 debugRe+='|(is broken|keeps (failing|crashing)|throwing|stack ?trace)'
 [[ "$promptLower" =~ $debugRe ]] || exit 0
 
-logDir="${TMPDIR:-/tmp}/claude-turn-cap-warn"
+logDir="${HOME}/.claude/state/turn-counters"
 mkdir -p "$logDir"
 warnedFile="${logDir}/session-${sessionId}.warned"
 touch "$warnedFile"

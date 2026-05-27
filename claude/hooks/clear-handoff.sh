@@ -28,7 +28,7 @@ cwd=$(jq -r '.cwd // empty' <<<"$input")
 
 source "$(dirname "$0")/_handoff-doc.sh"
 
-logDir="${TMPDIR:-/tmp}/claude-turn-cap-warn"
+logDir="${HOME}/.claude/state/turn-counters"
 counterFile="${logDir}/session-${sessionId}.count"
 handoffMarker="${logDir}/session-${sessionId}.handoff"
 
