@@ -49,6 +49,8 @@ For each **actionable** item, grep the named `file:line`. List the top files to 
 
 **Find bugs once (PP §66).** For each actionable item that names a *bug class* (null deref, missing guard, async race, stray `as any`, hardcoded constant), grep the rest of the repo for siblings of the same pattern. List peer hits under the surface area, even if the reviewer didn't flag them — fixing one and leaving five is how the class survives. The lane's slice for that comment then either includes the peers or explicitly defers with a `find-bugs-once: <pattern>` note + a follow-up ticket.
 
+**Bug-class scan via bugfinder.** When 2+ actionable items name distinct bug classes — OR a single class spans a wide blast radius (>5 files grepped, cross-package, hot path) — dispatch the `bugfinder` subagent in parallel: `Agent(subagent_type: "bugfinder", prompt: "Scan <scope> for siblings of: <pattern-1>, <pattern-2>. Don't file Linear tickets — return findings inline for plan §5.")`. The lane is fix-focused; bugfinder is scan-focused — two contexts, two budgets. Skip dispatch for single-line nits or stylistic feedback.
+
 **Don't program by coincidence (PP §44).** When a reviewer says "this is wrong" without saying *why*, the plan must name the contract that was violated, not just paraphrase the comment. If you cannot state the *why*, ask in the open-questions section rather than guessing — the lane will guess too if you don't.
 
 ## 5. Write plan — `~/.claude/plans/PR-<PR_NUM>-feedback.md`
