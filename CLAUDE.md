@@ -31,8 +31,8 @@ This file is the project memory layer for Claude — it captures the gotchas and
 
 Easy to confuse — they're different things:
 
-- `claude/agents/*.md` are **subagents** dispatched via the Agent tool with `subagent_type: "<name>"`. Available: `backend`, `frontend`, `database`, `fullstack`, `platform`, `infra`, `deploy`, `bugfinder`, `plan-lint`, `verifier`.
-- `claude/commands/*.md` are **slash commands** typed by the user. Available: `/scope`, `/rescope`, `/pickup`, `/epic`, `/ship`, `/address-feedback`, `/resume`, `/simplify`, `/retrospective`, `/rebase`, `/rebase-all`, `/verify`, `/why-failing`, `/explain-flow`, `/ryder-docs`.
+- `claude/agents/*.md` are **subagents** dispatched via the Agent tool with `subagent_type: "<name>"`. Available: `backend`, `frontend`, `infra`, `bugfinder`. (Dropped 2026-05-26: `database`, `fullstack`, `plan-lint`, `verifier` — lane IS those layers; self-delegation = ctx burn. 7d data showed 0 lane invocations.)
+- `claude/commands/*.md` are **slash commands** typed by the user. Available: `/scope`, `/rescope`, `/pickup`, `/epic`, `/ship`, `/address-feedback`, `/resume`, `/retrospective`, `/rebase`, `/rebase-all`, `/why-failing`. (Dropped 2026-05-26: `/simplify`, `/verify`, `/explain-flow`, `/ryder-docs` — 0 uses in 7d.)
 - `claude/skills/*/SKILL.md` are **skills** — symlinked into `~/.claude/skills/`. Available: `grill-with-docs`, `to-issues`, `tdd`, `diagnose`, `handoff`.
 
 Slash commands often dispatch subagents internally, but they aren't the same registry.
@@ -63,6 +63,10 @@ All pure shell — no LLM call, no compliance dependency. The doc exists *before
 ## Worktree write guard
 
 `claude/hooks/worktree-write-guard.sh` (PreToolUse, before `handoff-gate.sh`) — kills the recurring wt-lane **cwd→main leak**: a lane runs with cwd in its worktree but an Edit/Write fires with an absolute path rooted at the main checkout (or a sibling lane), so the edit lands outside the lane while the branch looks clean. Engages only for write tools (Edit/Write/NotebookEdit/MultiEdit) **and** only when cwd is a linked worktree (`git-dir != git-common-dir`). Blocks (exit 2) when the canonical target is under the main checkout but not under the current worktree — sibling worktrees caught for free. Passes relative paths, in-lane abs paths, `~/.claude/tickets` briefs, `/tmp`, and any normal main-repo session. Pure shell + one `python3 realpath` (resolves non-existent Write targets).
+
+## Linear ticket guard
+
+`claude/hooks/linear-ticket-guard.sh` (PreToolUse) — closes the **scope→Linear leak**: free-form work calling `~/.dotfiles/scripts/linear-ticket.py create` directly, producing orphan Linear issues with no PR, no `$TICKETS_DIR` brief, no local home. Doctrine: Linear is a write-only sink touched only by `/ship` (PR's reference ticket) and the `bugfinder` agent (one ticket per confirmed bug). Authorization is by inline env — the authorized call sites prefix the command with `LINEAR_TICKET_CREATE_OK=1` and pass through; any other invocation is blocked (exit 2) with a corrective message pointing back at `$TICKETS_DIR` + `/ship`. Subcommands other than `create` (e.g. `comment`, `update`) pass — that's the agent-comment path. Engages only for Bash tool calls.
 
 ## Editing rules
 

@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
-# UserPromptSubmit hook: when turn count >= 20 OR context tokens >= 300k
-# (whichever hits first), mechanically generate a handoff doc from the
-# transcript + git state without involving Claude.
+# UserPromptSubmit hook: when turn count >= 20 OR context tokens cross the
+# session's threshold (300k normal, 120k inside an autonomous wt lane),
+# mechanically generate a handoff doc from the transcript + git state without
+# involving Claude.
+#
+# Lane-aware threshold: lanes degrade earlier than cockpit sessions — Ralph
+# loop iterations + per-slice tool churn ramp context fast, and Claude
+# "gets dumb" past ~120k well before the 300k mark that suits exploratory
+# main sessions. Recycling cost is also lower in a lane (wt-loop spawns the
+# next iteration that /resumes the handoff), so cut over sooner.
 #
 # Why: turn-cap-warn fires the hard halt at 20 with ~0% historical obedience.
 # /clear-without-/handoff dominated the session log. This hook decouples
@@ -41,9 +48,15 @@ current=$((current + 1))
 
 ctxTokens=$(effective_ctx_tokens "$transcriptPath")
 
+# Lane detection matches turn-cap-warn.sh: cwd under <repo>/.claude/worktrees/.
+ctxThreshold=300000
+if [[ -n "$cwd" && "$cwd" == */.claude/worktrees/* ]]; then
+  ctxThreshold=120000
+fi
+
 trigger=""
 (( current >= 20 )) && trigger="turn"
-(( ctxTokens >= 300000 )) && trigger="${trigger:+${trigger}+}ctx"
+(( ctxTokens >= ctxThreshold )) && trigger="${trigger:+${trigger}+}ctx"
 [[ -z "$trigger" ]] && exit 0
 
 # Fire once per session.

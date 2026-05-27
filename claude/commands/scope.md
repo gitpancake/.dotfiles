@@ -21,6 +21,11 @@ No relevant context either → ask for a problem statement and stop.
 
 If `$ARGUMENTS` is under ~15 words **or** missing any of the below, grill.
 
+**Engine: the `grill-with-docs` skill is /scope's interview loop.** Invoke it here for the
+clarification + glossary pass — it owns Design-it-twice cues, `CONTEXT.md` term-pinning, and
+domain-vocab discipline. Lanes do not re-grill: this skill is /scope-owned, not lane-owned,
+so the brief that ships into `wt` is already sharp.
+
 **One question at a time. Each Q ships w/ your recommended answer.** User affirms → next Q.
 User overrides → record + next. Skip what you can already answer from context.
 
@@ -67,6 +72,23 @@ Brief must not ship with terms that contradict glossary.
 Env vars / secrets, external setup (vendor account, webhook, OAuth app), new infra (background
 task, endpoint, collection) — list as prerequisites, flag anything unconfirmed. Never invent
 paths, symbols, or env vars. "TBD — needs investigation" beats a guess.
+
+### 2e. Design it twice (POSD §11) — only for structural choices
+
+If the brief introduces a structural decision (new data model, new routing-key shape, new
+service boundary, vendor adapter, error-propagation strategy) — sketch ≥2 alternatives before
+writing the brief. Two bullets each: shape, cost, what it makes easy/hard. Pick one and say
+why. **Even when the answer feels obvious, force a second sketch.** First idea is rarely best
+for hard problems.
+
+For reversibility (PP §14): if the chosen approach is hard to back out of (DB column we'd
+have to migrate off, vendor we'd have to swap, public type shape), add a `## Reversibility`
+section. State: what locks us in, what would force a change, rough escape cost. If the choice
+deserves an ADR (hard to reverse + surprising + a real trade-off), say so — `/grill-with-docs`
+will offer to write it.
+
+Routine choices (which existing helper to call, which existing table to extend) — skip §2e.
+Reserve for decisions that survive past the PR.
 
 Apply your org's risk callouts where they fit — see `~/.claude/org/<org>/preamble.md` for the
 per-org checklist (LLM-cache thresholds, error-budget gates, infra-pairing rules, the project

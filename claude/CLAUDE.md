@@ -12,7 +12,7 @@ Direct, terse, opinionated. Match user energy. No disclaimers/hedging/preamble.
 
 ## Subagents & Slash Commands
 
-Self-describe via Agent/skills schemas — don't list. Run `/simplify` at chunk boundaries (orchestrator only). Org preamble: known org codebase → prepend `~/.claude/org/<org>/preamble.md`.
+Self-describe via Agent/skills schemas — don't list. Org preamble: known org codebase → prepend `~/.claude/org/<org>/preamble.md`.
 
 **Lane work → slash command, never manual.** Picking up a ticket/epic, shipping, addressing feedback = always the slash command (`/pickup`, `/epic`, `/scope`, `/ship`, `/address-feedback`). Never hand-roll the equivalent (manual `git worktree add` + branch, raw Agent spawn for the lane). The command owns worktree/branch/lane creation — a manual worktree collides with `wt`'s own and gets the lane killed. If unsure a command covers the task, invoke it and let it decide. (Read-only Explore/research agents are exempt — this is about lane lifecycle, not all agents.)
 
@@ -24,7 +24,7 @@ Self-describe via Agent/skills schemas — don't list. Run `/simplify` at chunk 
 
 **Slug rule.** No numbers in ticket/epic slugs. Use descriptors, not IDs. `pr3475-split` → `pr-token-pricing-split`. `issue-1284-fix` → `fix-auth-timeout`. Reason: IDs rot (PR# changes pre-merge, issue# meaningless out of tracker), descriptors carry meaning when grepping `tickets/`. Exception: epic-child file ordering prefix (`NN-<child>.md`) — structural, not part of slug.
 
-- **Single**: `/scope` → brief `<area>/<slug>.md`. `wt <slug>` (or `/pickup <slug> <BASE> [ctx]`) → autonomous lane: reads brief, plans slices, uses `grill-with-docs`/`tdd`/`handoff`, commits per layer, `/ship`.
+- **Single**: `/scope` → brief `<area>/<slug>.md` (grill-with-docs runs inside /scope, lanes do not re-grill). `wt <slug>` (or `/pickup <slug> <BASE> [ctx]`) → autonomous lane: reads brief, plans slices, opens `/tdd` for behavior-changing slices, commits per layer, auto-handoff at 120K ctx, `/ship`.
 - **Epic**: `/scope` → `<area>/<epic-slug>/_epic.md` + `NN-<child>.md`. `/epic <slug> <BASE> [ctx]` confirms order + spawns `wt --ralph`. Ralph: one story/iteration, fresh context, memory via git + `progress.txt` + `prd.json`. `epic-parse.sh` projects `_epic.md` → `prd.json`. Executes confirmed list, never decomposes.
 
 **Autonomous semantics.** `wt` = fire-and-forget. Stops only on: (1) PR opened + review triggered, (2) blocker (ambiguity not in brief, repeated test fail same cause, missing cred). Slice protocol + parallel gotchas: `~/.dotfiles/CLAUDE.md`.
@@ -48,6 +48,10 @@ Self-describe via Agent/skills schemas — don't list. Run `/simplify` at chunk 
 - Composition > inheritance. Narrow interfaces.
 
 Detail: OV `resources/agents/code-structure-reference`.
+
+## Design Principles
+
+Reference: `~/.claude/docs/design-principles.md`. Cite by tag (`POSD §X` / `PP §Y`) when justifying a change. Pull the doc when arguing scope, code-review pushback, or structural choices. Reducing complexity beats any single rule.
 
 ## Cost Discipline
 
