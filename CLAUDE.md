@@ -19,6 +19,7 @@ This file is the project memory layer for Claude — it captures the gotchas and
 `install.sh` / `install-mac.sh` use `ln -sf`. Editing files in this repo updates the live config — no rebuild step. Touch points:
 
 - `~/.zshrc`, `~/.zshenv` → `zsh/.zshrc`, `zsh/.zshenv`
+- `~/.config/ghostty/config` → `ghostty/config` (primary terminal — replaced Alacritty 2026-05-27 over recurring memory-leak crashes; see alacritty/alacritty#8727)
 - `~/.tmux.conf`, `~/.tmux/tmux-status.sh` → `tmux/` (lane-orchestration `~/.tmux/agent-board.sh` now owned by [wt-lanes](https://github.com/gitpancake/wt-lanes))
 - `~/.claude/CLAUDE.md`, `settings.json`, `agents/`, `commands/`, `hooks/`, `scripts/`, `skills/`, `bin/` → `claude/` (some `hooks/`, `scripts/`, `bin/` entries now come from wt-lanes — both repos write into the same target dirs)
 - `~/.dotfiles/scripts/*` is on PATH via `.zshenv` so `slack-watch`, `slack-tldr` etc. resolve from any cwd

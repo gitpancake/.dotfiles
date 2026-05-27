@@ -45,17 +45,14 @@ fi
 source "$DOTFILES_DIR/_link-dotfiles.sh"
 echo "  Linked dotfiles"
 
-# Alacritty (macOS only)
-if ! brew list --cask alacritty &>/dev/null && [ ! -d /Applications/Alacritty.app ]; then
-  echo "  Installing Alacritty..."
-  brew install --cask alacritty
+# Ghostty (macOS only) — primary terminal
+if ! brew list --cask ghostty &>/dev/null && [ ! -d /Applications/Ghostty.app ]; then
+  echo "  Installing Ghostty..."
+  brew install --cask ghostty
 else
-  echo "  Alacritty: already installed"
+  echo "  Ghostty: already installed"
 fi
-mkdir -p ~/.config/alacritty
-ln -sf "$DOTFILES_DIR/alacritty/alacritty.toml" ~/.config/alacritty/alacritty.toml
-ln -sfn "$DOTFILES_DIR/alacritty/themes" ~/.config/alacritty/themes
-echo "  Linked Alacritty config"
+echo "  Linked Ghostty config (via _link-dotfiles.sh)"
 
 # Claude auto-prune launchd jobs
 mkdir -p ~/Library/LaunchAgents ~/.claude/logs

@@ -42,7 +42,7 @@ Each top-level folder has its own README with the deep dive — this tree is jus
 │                            #   reactive art, redactor     → scripts/README.md
 ├── focus-guard/             # macOS time-aware site blocker
 │                            #   (opt-in install)           → focus-guard/README.md
-├── alacritty/               # Alacritty config + Gruvbox   → alacritty/README.md
+├── ghostty/                 # Ghostty config (Gruvbox Material Medium Dark)
 ├── iterm/                   # iTerm2 Gruvbox presets       → iterm/README.md
 ├── vim/                     # minimal .vimrc (gruvbox)     →  (file is the doc)
 ├── install-mac.sh           # macOS installer

@@ -61,3 +61,7 @@ ln -sf "$DOTFILES_DIR/tmux/tmux-status.sh" ~/.tmux/tmux-status.sh
 
 # vim
 ln -sf "$DOTFILES_DIR/vim/.vimrc" ~/.vimrc
+
+# Ghostty (config dir created if missing — macOS cask install lives in install-mac.sh)
+mkdir -p ~/.config/ghostty
+ln -sf "$DOTFILES_DIR/ghostty/config" ~/.config/ghostty/config
