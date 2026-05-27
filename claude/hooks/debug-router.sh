@@ -19,11 +19,21 @@ set -u
 input=$(cat)
 sessionId=$(jq -r '.session_id // "unknown"' <<<"$input")
 prompt=$(jq -r '.prompt // empty' <<<"$input")
+cwd=$(jq -r '.cwd // empty' <<<"$input")
 [[ "$sessionId" == "unknown" ]] && exit 0
 [[ -z "$prompt" ]] && exit 0
 
 # Already a slash command → intent routed, stay quiet.
 [[ "$prompt" =~ ^[[:space:]]*/ ]] && exit 0
+
+# Skip autonomous wt lanes: their first prompt is the brief, and briefs
+# routinely contain debug vocabulary ("failing test", "won't compile") as
+# acceptance criteria — not debug intent. 7d data: 203 lane false fires vs
+# 29 cockpit fires, desensitizing the model. Lanes already drive themselves
+# off the brief; they don't need a debug nudge.
+if [[ -n "$cwd" && "$cwd" == */.claude/worktrees/* ]]; then
+  exit 0
+fi
 
 promptLower=$(printf '%s' "$prompt" | tr '[:upper:]' '[:lower:]')
 
@@ -44,7 +54,7 @@ source "$(dirname "$0")/_warn-helpers.sh"
 shouldFireOnce "debug-router" "$warnedFile" || exit 0
 
 visible=$'🔎 Debug intent detected. Purpose-built tools:\n  /why-failing  — failing PR/CI: fetch checks → repro → root-cause\n  diagnose skill — local repro → minimise → fix → regression-test'
-directive="The user's prompt reads like a debugging request. Prefer the purpose-built paths over ad-hoc debugging: if it concerns a failing PR or CI run, use the /why-failing command; for a local reproduce→minimise→fix→regression-test loop, use the diagnose skill. Only fall back to manual debugging if neither fits."
+directive="The user's prompt reads like a debugging request. **Your next tool call MUST be the Skill tool** invoking either \`why-failing\` (failing PR / CI / remote check — fetches the run, reproduces, root-causes) or \`diagnose\` (local repro → minimise → hypothesise → fix → regression-test). Do NOT grep, Read, or Bash your way into this manually first — the skills already encode the loop and protect against coincidence-debugging (PP §44) and the missing sibling-grep at the end (PP §66). Only skip both if the request is clearly not a debugging task on closer read."
 
 jq -nc --arg m "$visible" --arg c "$directive" '{
   systemMessage: $m,
