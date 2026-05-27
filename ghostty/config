@@ -22,6 +22,9 @@ scrollback-limit = 10000000
 mouse-hide-while-typing = true
 copy-on-select = clipboard
 
+# Numpad Enter → backslash+CR (Claude Code newline)
+keybind = physical:kp_enter=text:\\\r
+
 # Colors — Gruvbox Material Medium Dark (matches alacritty theme)
 background = 282828
 foreground = d4be98
