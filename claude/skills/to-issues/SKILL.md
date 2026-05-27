@@ -73,7 +73,9 @@ from `_TEMPLATE.md` and the body template below. Write in dependency order (bloc
 so the "Blocked by" field can reference real sibling slugs.
 
 Frontmatter: `status: draft`, `area:` set, `epic:` empty (these are flat siblings, not an
-epic folder), `linear:` empty, `created:` today's date.
+epic folder), `linear:` empty, `created:` current UTC instant as full ISO-8601 with `Z`
+suffix (e.g. `2026-05-27T18:13:00Z` — never a bare date; tix needs an instant). Use
+`date -u +%Y-%m-%dT%H:%M:%SZ` to get it.
 
 <ticket-body-template>
 

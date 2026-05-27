@@ -123,9 +123,11 @@ Copy the templates. Do not freehand the frontmatter.
 - Epic root → `$TICKETS_DIR/_EPIC-TEMPLATE.md`
 - Epic child → `$TICKETS_DIR/_CHILD-TEMPLATE.md`
 
-Every ticket uses the same shape, so lanes read it identically. Set `created` to now,
-`status: draft`. Leave `linear:` empty — it's only a breadcrumb on tickets that predate the
-local-only move.
+Every ticket uses the same shape, so lanes read it identically. Set `created` to the current
+UTC instant as full ISO-8601 with a `Z` suffix (e.g. `2026-05-27T18:13:00Z`) — never a bare
+date, which tix can't anchor to an instant and which forces a fallback to file birthtime.
+Get the value from `date -u +%Y-%m-%dT%H:%M:%SZ` if unsure. Set `status: draft`. Leave
+`linear:` empty — it's only a breadcrumb on tickets that predate the local-only move.
 
 **For an epic:** `_epic.md` carries the `<!-- epic-stories:start -->` block — the
 authoritative ordered story list plus dependency DAG. Each story's `context:` points at its
