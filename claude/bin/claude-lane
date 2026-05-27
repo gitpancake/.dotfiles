@@ -20,9 +20,12 @@ ulimit -t 1800 2>/dev/null || true
 
 export PATH="$HOME/.claude/lane-bin:$PATH"
 
+# NOTE: --mcp-config is variadic (`<configs...>`) — any positional that follows
+# gets eaten as another MCP config path. Keep it BEFORE a non-variadic flag
+# (--model) so commander stops the variadic before "$@".
 exec claude \
   --dangerously-skip-permissions \
-  --model "${WT_MODEL:-sonnet}" \
   --strict-mcp-config \
   --mcp-config "$HOME/.claude/mcp.lane.json" \
+  --model "${WT_MODEL:-sonnet}" \
   "$@"
