@@ -7,6 +7,12 @@ argument-hint: <PR number or URL — omit to use the current branch's PR>
 
 Turn "why is CI red on #N" into a root cause. Fetch the failing checks, pull their logs, reproduce the failure **locally** (the diagnose loop's Phase 1 — a red CI run you can't reproduce is a guess), name the cause, then either report or spawn an autonomous fix lane on the PR branch. Diagnosis first; never push a speculative fix.
 
+**Doctrine** (Pragmatic Programmer ch 3, 5, 8):
+- **Don't panic** (PP §25). Deadline pressure produces speculative fixes. Slow down.
+- **"select" isn't broken** (PP §26). Runner / framework / std lib is almost never the bug. Suspect the PR diff first.
+- **Don't assume — prove it** (PP §27). Every hypothesis ships with the probe that would falsify it.
+- **Find bugs once** (PP §66). The fix includes a regression test AND a grep for sibling occurrences — bug-classes survive because nobody looked for peers.
+
 ## 0. Resolve target
 
 `$ARGUMENTS` = PR number or URL. Empty → resolve the current branch's PR: `gh pr view --json number,headRefName,state` (no arg = current branch). No PR for the branch → ask for a PR number and stop. Extract `PR_NUM`.
@@ -47,6 +53,8 @@ Hand off to the **`diagnose` skill** — the failing CI check is the symptom; bu
 ## 5. Root-cause
 
 State the cause in one line + the `file:line` that owns it. If a recent commit on the branch introduced it, name the commit. Distinguish **"this PR broke it"** from **"main is already red"** — check whether the same check fails on `baseRefName` (`gh pr checks` on a recent base PR, or `git log origin/<base>`); a pre-existing main failure is not this PR's bug.
+
+**Sibling search (find bugs once — PP §66).** Once the cause is named, grep for the same pattern elsewhere in the repo before declaring root-cause complete. A `forEach(async …)` race, a missed `T00:00:00Z` boundary, a stray `as any` on external JSON — these rarely live alone. List sibling sites in the report so the fix slice can either include them or explicitly defer with a ticket. Skipping this is how the same class re-fails CI a week later.
 
 ## 6. Report + decide fix
 

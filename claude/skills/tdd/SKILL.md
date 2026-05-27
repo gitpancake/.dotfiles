@@ -7,7 +7,11 @@ description: Red-green-refactor TDD loop. Trigger: TDD/"red-green-refactor"/"tes
 
 ## Philosophy
 
-**Core principle**: Tests should verify behavior through public interfaces, not implementation details. Code can change entirely; tests shouldn't.
+**Core principle**: Tests should verify behavior through public interfaces, not implementation details. Code can change entirely; tests shouldn't. This is *Design to Test* (PP §48) — if a unit is hard to test through its public surface, the unit (not the test) is wrong.
+
+Tracer bullets (PP §15) drive the loop: one thin end-to-end slice (red→green→refactor) before the next. Never horizontal — never "write all tests, then all impl." Each cycle's test responds to what the previous cycle taught you.
+
+Tests are state coverage (PP §65), not code coverage. 100% lines hit means nothing if you only ran one path through them. Drive on what the system *does*, branch by branch.
 
 **Good tests** are integration-style: they exercise real code paths through public APIs. They describe _what_ the system does, not _how_ it does it. A good test reads like a specification - "user can checkout with valid cart" tells you exactly what capability exists. These tests survive refactors because they don't care about internal structure.
 

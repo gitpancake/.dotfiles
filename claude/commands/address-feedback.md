@@ -47,6 +47,10 @@ Resolved/outdated threads default to **skip** unless the body still names an una
 
 For each **actionable** item, grep the named `file:line`. List the top files to read first, one-line reason each. Note cross-file blast radius.
 
+**Find bugs once (PP §66).** For each actionable item that names a *bug class* (null deref, missing guard, async race, stray `as any`, hardcoded constant), grep the rest of the repo for siblings of the same pattern. List peer hits under the surface area, even if the reviewer didn't flag them — fixing one and leaving five is how the class survives. The lane's slice for that comment then either includes the peers or explicitly defers with a `find-bugs-once: <pattern>` note + a follow-up ticket.
+
+**Don't program by coincidence (PP §44).** When a reviewer says "this is wrong" without saying *why*, the plan must name the contract that was violated, not just paraphrase the comment. If you cannot state the *why*, ask in the open-questions section rather than guessing — the lane will guess too if you don't.
+
 ## 5. Write plan — `~/.claude/plans/PR-<PR_NUM>-feedback.md`
 
 ≤200 lines. Heading: `# PR-<PR_NUM>-feedback — <pr title>`. Sections:

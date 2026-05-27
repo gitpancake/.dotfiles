@@ -106,7 +106,7 @@ cat > "${TMPDIR:-/tmp}/bugfinder-body.md" <<'BODY'
 ## Confidence
 Confirmed | Likely
 BODY
-~/.dotfiles/scripts/linear-ticket.py create \
+LINEAR_TICKET_CREATE_OK=1 ~/.dotfiles/scripts/linear-ticket.py create \
   --team "Autonomy Eng" \
   --title "[BugFinder] <concise description>" \
   --labels "Bug" \
@@ -143,6 +143,20 @@ If zero confirmed bugs found, say so clearly. Do not invent low-confidence findi
 - **Control coupling**: boolean parameter that changes function behavior (`process(data, true)`) — signals two functions are needed.
 - **Multi-task functions**: one function that parses AND computes AND formats — correctness is harder to verify, changes have wider blast radius.
 - **LSP violations**: subclass method that would surprise a caller of the base class (throws where base doesn't, ignores a param the base uses).
+
+## Design smells from POSD + Pragmatic Programmer (P4 unless they hide a real bug)
+
+- **Pass-through methods (POSD §7)**: `foo(x)` whose body is just `return this.bar.foo(x)`. Adds interface surface, hides nothing, couples caller to internal shape.
+- **Pass-through variables (POSD §7)**: an arg threaded through 3+ layers untouched. Every intermediate layer has to know it exists — pure coupling.
+- **Shallow modules (POSD §4)**: class/file whose public API is as wide as its body. The interface costs as much as the implementation buys. Smaller class isn't always simpler.
+- **Information leakage (POSD §5)**: same parse rule / format / routing key encoded literally in 2+ files. A change has to land in N places — guaranteed drift.
+- **Temporal decomposition (POSD §5)**: classes named for *when* they run (`StartupTask`, `PostShipmentHook`) rather than *what* they own. Couples module boundaries to execution order.
+- **Programming by coincidence (PP §44)**: code with magic numbers, ordering assumptions, or "I don't know why this works" comments that exploit incidental behavior. When (not if) the dependency shifts, this breaks silently.
+- **Demeter chains (PP §36)**: `a.b.c.d` walks 3+ deep into an object graph. Refactoring `b` or `c` cascades unpredictably.
+- **Speculative configurability (POSD §8)**: knobs / flags / strategies with one caller and no second use case — pulled up "for flexibility". Pull complexity *down*, not up.
+- **Broken windows (PP §4)**: stray `as any`, `// FIXME`, dead branch, `eslint-disable` w/ no reason. Surface every one within scope — they normalize and breed.
+
+When you find a real bug, also grep for **siblings of the same pattern** (PP §66, find bugs once). File one ticket per occurrence or one umbrella ticket listing all sites — the bug class survives if peers go unchecked.
 
 ## Anti-patterns
 

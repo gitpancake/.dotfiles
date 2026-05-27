@@ -41,9 +41,12 @@ When stuck or uncertain:
 - **Colocate state** with the component that uses it. Lift only when a sibling needs it.
 - **URL state** for anything that should survive refresh.
 - **No `useEffect` for derived state** — compute during render.
-- **Hooks as facades**: complex logic behind simple interface.
+- **Hooks as facades** (POSD §4 deep modules): complex logic behind simple interface.
 - **Mobile-first.** Test at mobile breakpoints, not just desktop.
 - **Respect the composition layers**: primitives → composites → domain. Check existing primitives before creating new ones.
+- **Separate views from models** (PP §42). The view renders what it's given; data shaping, derived state, business rules live one layer in (hook / loader / server). View is the *thinnest* deep module — render is pure.
+- **Don't leak server shape into components** (POSD §5). If the GraphQL/REST response has 30 fields and the component needs 3, the hook should expose 3 — not pass the raw response through.
+- **Pass-through props are a smell** (POSD §7). A prop forwarded through 3 components untouched signals the wrong owner. Lift state, or use context.
 
 ## Component structure habits
 

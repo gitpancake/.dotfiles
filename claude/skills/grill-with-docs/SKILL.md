@@ -11,6 +11,12 @@ Ask the questions one at a time, waiting for feedback on each question before co
 
 If a question can be answered by exploring the codebase, explore the codebase instead.
 
+For any structural decision (data model, layer boundary, vendor adapter, error-propagation strategy), apply **Design it twice** (POSD §11): sketch ≥2 alternatives before agreeing on one. Even when the answer feels obvious, force a second sketch — first instinct is rarely best for hard problems.
+
+Abstractions outlast details (PP §53). When pinning a term, capture the *concept* in the glossary, not its current implementation. The implementation will move; the concept (Order, Customer, Shipment) is the durable surface.
+
+Project glossary (PP §54) is the durable artifact of this interview — `CONTEXT.md` is the doc, this skill is the editor. Conflicting term → resolve now, write back inline.
+
 </what-to-do>
 
 <supporting-info>

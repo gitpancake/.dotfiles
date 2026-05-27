@@ -9,6 +9,16 @@ A discipline for hard bugs. Skip phases only when explicitly justified.
 
 When exploring the codebase, use the project's domain glossary to get a clear mental model of the relevant modules, and check ADRs in the area you're touching.
 
+## Doctrine (Pragmatic Programmer ch 3)
+
+Re-read every time the loop tempts you to shortcut:
+
+- **Don't panic** (PP §25). Deadline pressure produces speculative fixes. A 30-min loop saves 4 hours of guessing.
+- **"select" isn't broken** (PP §26). The OS, framework, std lib, browser, DB is almost never the bug. Suspect your code first. Hoofprints → horses, not zebras.
+- **Don't assume — prove it** (PP §27). Every hypothesis ships with the probe that would falsify it. "Should work" is not a debugging step.
+- **Fix the problem, not the blame** (PP §24). Whose code broke it is irrelevant to fixing it.
+- **Find bugs once** (PP §66). Every fix lands with a regression test AND a grep for siblings. Bug-classes survive because nobody looked for peers.
+
 ## Phase 1 — Build a feedback loop
 
 **This is the skill.** Everything else is mechanical. If you have a fast, deterministic, agent-runnable pass/fail signal for the bug, you will find the cause — bisection, hypothesis-testing, and instrumentation all just consume that signal. If you don't have one, no amount of staring at code will save you.

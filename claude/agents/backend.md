@@ -34,6 +34,11 @@ When stuck or uncertain:
 - **Trust internal code.** Only validate at system boundaries (user input, external APIs).
 - **No speculative abstractions.** Three similar lines is better than a premature helper.
 - **End-to-end type safety** — share types across layers where possible.
+- **Design by contract** (PP §31). Every exposed handler/service has a named precondition + postcondition — state in the type signature where possible, one-line comment otherwise. Caller supplies invariants; callee guarantees outputs.
+- **Crash early; assert impossible** (PP §32–33). The instant an invariant breaks, throw — don't propagate corrupt state and let it surface three layers later. `if (!shipment.id) throw new Error('shipment.id required')` beats `?.` chained downstream.
+- **Demeter** (PP §36). A handler talks to: its params, things it constructed, direct collaborators. `req.org.account.billing.plan.tier` = a refactor signal — either ask for `plan.tier` directly, or surface the predicate on the closer object.
+- **Pull complexity downward** (POSD §8). The service eats the hard problem; the route handler stays a 5-line orchestrator. Don't punt formatting/parsing/sequencing into the handler "for flexibility".
+- **Define errors out of existence** (POSD §10). Prefer "this method cannot fail in that way" over "every caller catches it". Mask exceptions at the lowest layer that can; reduce the count of *places* that handle errors, not the count of handlers.
 
 ## Code structure
 
