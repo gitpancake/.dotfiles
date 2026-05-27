@@ -148,32 +148,46 @@ def _ci_status(checks):
     return "pass"
 
 
-def _collect_repo(repo, cutoff):
-    rows = []
+_PR_FIELDS = "number,title,state,isDraft,updatedAt,headRefName,url,statusCheckRollup"
+
+
+def _gh_pr_list(repo, state, limit):
     text = run([
         "gh", "pr", "list",
         "--author", AUTHOR,
-        "--state", "all",
-        "--limit", "20",
-        "--json", "number,title,state,isDraft,updatedAt,headRefName,url,statusCheckRollup",
+        "--state", state,
+        "--limit", str(limit),
+        "--json", _PR_FIELDS,
     ], cwd=str(repo), timeout=15)
     if not text:
-        return rows
+        return []
     try:
-        prs = json.loads(text)
+        return json.loads(text)
     except json.JSONDecodeError:
-        return rows
+        return []
+
+
+def _collect_repo(repo, cutoff):
+    rows = []
+    # Open query has no date/limit crowding so ANY open PR surfaces, however
+    # old. Recent merged/closed come from a separate "all" sweep (cutoff-gated).
+    seen = set()
+    prs = _gh_pr_list(repo, "open", 100) + _gh_pr_list(repo, "all", 30)
     for pr in prs:
+        number = pr["number"]
+        if number in seen:
+            continue
         state = pr["state"]
         if pr.get("isDraft") and state == "OPEN":
             state = "DRAFT"
         updated = parse_iso(pr.get("updatedAt", ""))
         if state in ("MERGED", "CLOSED") and updated < cutoff:
             continue
+        seen.add(number)
         rows.append({
             "ts": updated,
             "repo": repo.name,
-            "number": pr["number"],
+            "number": number,
             "state": state,
             "ci": _ci_status(pr.get("statusCheckRollup", [])),
             "title": pr["title"],
