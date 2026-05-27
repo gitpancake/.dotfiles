@@ -16,6 +16,11 @@ ln -sf "$DOTFILES_DIR/claude/transcript-costs.sh" ~/.claude/transcript-costs.sh
 ln -sf "$DOTFILES_DIR/claude/settings.json" ~/.claude/settings.json
 ln -sf "$DOTFILES_DIR/claude/CLAUDE.md" ~/.claude/CLAUDE.md
 ln -sf "$DOTFILES_DIR/claude/worktree-protocol.md" ~/.claude/worktree-protocol.md
+ln -sf "$DOTFILES_DIR/claude/mcp.lane.json" ~/.claude/mcp.lane.json
+# lane-bin: PATH-shim dir for slow build tools (bun → timeout-wrapped).
+# Prepended to PATH inside claude-lane only — doesn't affect normal shells.
+chmod +x "$DOTFILES_DIR/claude/lane-bin/"* 2>/dev/null || true
+ln -sfn "$DOTFILES_DIR/claude/lane-bin" ~/.claude/lane-bin
 for f in "$DOTFILES_DIR/claude/hooks/"*.sh; do
   chmod +x "$f"
   ln -sf "$f" ~/.claude/hooks/"$(basename "$f")"

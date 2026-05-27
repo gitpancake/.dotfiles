@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# claude-lane — wt-lane Claude launcher.
+#
+# Diff vs raw `claude`:
+#   1. ulimit -t 1800 — RLIMIT_CPU = 30min per descendant. Kills runaway
+#      `tsc --noEmit` / vitest / jest that survived a Claude session crash.
+#      Inherited across fork+exec, counted per-process.
+#   2. PATH prepend ~/.claude/lane-bin — shims wall-clock timeouts around
+#      slow build tools (currently `bun`).
+#   3. --strict-mcp-config + --mcp-config ~/.claude/mcp.lane.json — drops
+#      the heavy stdio MCP servers (playwright, slack, gcloud, posthog,
+#      figma, trigger, axiom) for lane work. Cuts ~5 node procs * 50–100MB
+#      per lane. Keeps HTTP MCPs (linear, sentry) because they're free.
+#
+# Set as $WT_CLAUDE in zshenv so `wt` picks it up.
+
+set -u
+
+ulimit -t 1800 2>/dev/null || true
+
+export PATH="$HOME/.claude/lane-bin:$PATH"
+
+exec claude \
+  --dangerously-skip-permissions \
+  --model "${WT_MODEL:-sonnet}" \
+  --strict-mcp-config \
+  --mcp-config "$HOME/.claude/mcp.lane.json" \
+  "$@"

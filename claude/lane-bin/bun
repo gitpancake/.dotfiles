@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# bun shim — wraps real bun with a 5-minute wall-clock timeout so a hung
+# `bun type-check` (tsc --noEmit, 4GB+ RSS) can't outlive its lane Claude.
+# Active only inside lanes because ~/.claude/lane-bin is prepended to PATH
+# by claude-lane.
+#
+# Strategy: walk PATH ourselves, skipping anything under our own dir, so we
+# resolve the real bun without recursing into this shim.
+
+set -u
+
+shim_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+real_bun=""
+IFS=':' read -r -a path_entries <<< "$PATH"
+for entry in "${path_entries[@]}"; do
+  [[ -z "$entry" ]] && continue
+  resolved="$(cd "$entry" 2>/dev/null && pwd -P)" || continue
+  [[ "$resolved" == "$shim_dir" ]] && continue
+  if [[ -x "$entry/bun" ]]; then
+    real_bun="$entry/bun"
+    break
+  fi
+done
+
+if [[ -z "$real_bun" ]]; then
+  echo "lane-bin/bun: real bun not found on PATH" >&2
+  exit 127
+fi
+
+# `timeout` GNU vs macOS: prefer gtimeout (coreutils) when available,
+# fall back to /usr/bin/timeout (Sequoia ships it), then to bare exec.
+if command -v gtimeout >/dev/null 2>&1; then
+  exec gtimeout --kill-after=10 300 "$real_bun" "$@"
+elif command -v timeout >/dev/null 2>&1; then
+  exec timeout --kill-after=10 300 "$real_bun" "$@"
+else
+  exec "$real_bun" "$@"
+fi

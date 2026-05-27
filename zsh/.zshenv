@@ -29,6 +29,13 @@ export WT_NO_WATCH=1
 # `WT_MODEL=opus wt ...` when a lane genuinely needs Opus-grade reasoning.
 export WT_MODEL=sonnet
 
+# Lane Claude launcher: slim MCP set (HTTP-only), ulimit -t 1800 on the
+# process tree, and PATH-shimmed bun w/ a 5min wall-clock timeout. Caps the
+# memory leak from orphan `tsc --noEmit` (4GB+) when a lane Claude dies
+# mid-typecheck. See claude/bin/claude-lane + claude/lane-bin/bun +
+# claude/hooks/lane-reaper.sh.
+export WT_CLAUDE="$HOME/.local/bin/claude-lane"
+
 # Machine-local secrets and env overrides. Lives outside the dotfiles repo so it's
 # never tracked. Optional — absent on fresh machines until you populate it.
 [[ -f "$HOME/.zshenv.local" ]] && source "$HOME/.zshenv.local"

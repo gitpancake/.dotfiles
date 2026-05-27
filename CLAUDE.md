@@ -61,6 +61,18 @@ All pure shell — no LLM call, no compliance dependency. The doc exists *before
 
 `claude/hooks/debug-router.sh` (UserPromptSubmit) — when a prompt reads like a free-form debugging request ("why is PR #X failing", "tests failing", "broken"), emits a `systemMessage` + `additionalContext` routing to `/why-failing` (failing PR/CI) or the `diagnose` skill (local repro→fix loop). Once per session; skips prompts that already start with a slash command. Closes the adoption gap the self-audit found — 18 debug openers in 7d, `/why-failing` invoked zero times.
 
+## Lane memory caps
+
+Lane Claudes spawned via `wt` route through `claude/bin/claude-lane` (via `$WT_CLAUDE` in zshenv). The launcher does three things vs raw `claude`:
+
+1. **`ulimit -t 1800`** — per-process CPU cap (30min). Inherited by all descendants (RLIMIT_CPU preserved across fork+exec). Counted per-process, so each `tsc --noEmit` gets its own clock — won't kill a healthy long-running session, will reap a runaway typecheck.
+2. **`PATH=~/.claude/lane-bin:$PATH`** — slots a `bun` shim ahead of the real one that wraps invocations in `timeout 300`. Cartage's `bun type-check` (= `tsc --noEmit`) peaks at ~4.4 GB RSS; the shim ensures it can't outlive its lane Claude. The shim resolves the real `bun` by walking PATH and skipping its own dir, so it doesn't recurse.
+3. **`--strict-mcp-config --mcp-config ~/.claude/mcp.lane.json`** — drops every stdio MCP server (slack, playwright, gcloud, posthog, figma, trigger, axiom) for lane work. Keeps only HTTP MCPs (linear-server, sentry) which are free local-process-wise. Saves ~5 node procs × 50–100 MB per lane.
+
+Plus `hooks/lane-reaper.sh` runs at SessionEnd: if cwd is inside `.claude/worktrees/`, it SIGTERMs any `tsc/vitest/jest/playwright` proc whose own cwd lives under the lane (3s grace, then SIGKILL). Covers the orphan-after-crash case the ulimit can't catch — e.g. Claude SIGKILL'd while child build was mid-flight and reparented to launchd. macOS bash 3.2 compatible (no `mapfile`). Logs to `~/.claude/logs/lane-reaper.log`.
+
+Cap is per-lane; concurrent lane count is intentionally uncapped.
+
 ## Worktree write guard
 
 `claude/hooks/worktree-write-guard.sh` (PreToolUse, before `handoff-gate.sh`) — kills the recurring wt-lane **cwd→main leak**: a lane runs with cwd in its worktree but an Edit/Write fires with an absolute path rooted at the main checkout (or a sibling lane), so the edit lands outside the lane while the branch looks clean. Engages only for write tools (Edit/Write/NotebookEdit/MultiEdit) **and** only when cwd is a linked worktree (`git-dir != git-common-dir`). Blocks (exit 2) when the canonical target is under the main checkout but not under the current worktree — sibling worktrees caught for free. Passes relative paths, in-lane abs paths, `~/.claude/tickets` briefs, `/tmp`, and any normal main-repo session. Pure shell + one `python3 realpath` (resolves non-existent Write targets).

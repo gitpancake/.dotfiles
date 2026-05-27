@@ -69,6 +69,10 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/clear-handoff.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/lane-reaper.sh"
           }
         ]
       }
