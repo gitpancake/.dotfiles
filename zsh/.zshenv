@@ -23,6 +23,12 @@ export WT_TICKET_SYNC="$HOME/.claude/scripts/ticket-status-sync.py"
 # single pane per lane, no split. Re-enable per-spawn by unsetting or =0.
 export WT_NO_WATCH=1
 
+# Default lane model: sonnet. Cockpit/planning stay opus via global settings.json.
+# Cache_read on lanes (long heads-down coding, 200-500 turns) dominates cost;
+# sonnet cache_read is 5x cheaper ($0.30/M vs $1.50/M). Override per-lane with
+# `WT_MODEL=opus wt ...` when a lane genuinely needs Opus-grade reasoning.
+export WT_MODEL=sonnet
+
 # Machine-local secrets and env overrides. Lives outside the dotfiles repo so it's
 # never tracked. Optional — absent on fresh machines until you populate it.
 [[ -f "$HOME/.zshenv.local" ]] && source "$HOME/.zshenv.local"
