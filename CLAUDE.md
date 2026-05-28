@@ -81,6 +81,16 @@ Cap is per-lane; concurrent lane count is intentionally uncapped.
 
 `claude/hooks/linear-ticket-guard.sh` (PreToolUse) — closes the **scope→Linear leak**: free-form work calling `~/.dotfiles/scripts/linear-ticket.py create` directly, producing orphan Linear issues with no PR, no `$TICKETS_DIR` brief, no local home. Doctrine: Linear is a write-only sink touched only by `/ship` (PR's reference ticket) and the `bugfinder` agent (one ticket per confirmed bug). Authorization is by inline env — the authorized call sites prefix the command with `LINEAR_TICKET_CREATE_OK=1` and pass through; any other invocation is blocked (exit 2) with a corrective message pointing back at `$TICKETS_DIR` + `/ship`. Subcommands other than `create` (e.g. `comment`, `update`) pass — that's the agent-comment path. Engages only for Bash tool calls.
 
+## Cost-economy hooks (preventive)
+
+Three hooks that pre-empt the reactive `tool-loop-warn` / `subagent-nudge` warnings — catch the cost-blow-up shape *before* the parent transcript fills with Read/Bash/Grep results:
+
+- `claude/hooks/search-intent-router.sh` (UserPromptSubmit) — mirrors `debug-router.sh`. Matches broad-lookup vocab ("where is X defined", "find all usages", "which file", "audit all", "grep the codebase") and injects a directive to dispatch an `Explore` or `general-purpose` subagent on the first turn instead of grepping/reading directly. Once per session. Skips slash-command prompts and wt-lane cwds (briefs contain search vocab as acceptance criteria — same false-fire shape `debug-router` learned).
+- `claude/hooks/big-file-read-advisor.sh` (PreToolUse, Read tool) — when a Read targets a >500-line file with no `offset`/`limit`, emits the CLAUDE.md §Cost Discipline rule as `systemMessage` + `additionalContext`. Skips bounded reads, images/PDFs/notebooks, non-existent paths. Once per (session, file). Doesn't block — Read proceeds — but the next call usually doesn't repeat the pattern.
+- `claude/hooks/subagent-nudge.sh` — threshold lowered from 30 IO calls to 15. By 30 the linear cache_read curve is already steep; 15 is past the noise floor of normal orientation reads but early enough to salvage the rest of the session.
+
+Order matters: router fires at prompt-submit (turn 0), advisor fires per-Read, nudge fires once after 15 unbatched IO calls. Together they cover prompt → tool selection → accumulated drift.
+
 ## Editing rules
 
 - `zsh/*.zsh*`: `zsh -n <file>` to syntax-check after editing.

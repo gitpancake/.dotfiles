@@ -7,7 +7,7 @@ let g:gruvbox_material_foreground = 'material'
 let g:gruvbox_material_better_performance = 1
 silent! colorscheme gruvbox-material
 
-" Fix syntax highlighting loss on scroll in tmux/alacritty
+" Fix syntax highlighting loss on scroll in tmux/ghostty
 syntax sync minlines=256
 set redrawtime=10000
 set re=0

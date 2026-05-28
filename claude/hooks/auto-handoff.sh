@@ -1,8 +1,15 @@
 #!/usr/bin/env bash
-# UserPromptSubmit hook: when turn count >= 20 OR context tokens cross the
-# session's threshold (300k normal, 120k inside an autonomous wt lane),
-# mechanically generate a handoff doc from the transcript + git state without
-# involving Claude.
+# UserPromptSubmit + PostToolUse hook: when turn count >= 20 OR context tokens
+# cross the session's threshold (300k normal, 120k inside an autonomous wt
+# lane), mechanically generate a handoff doc from the transcript + git state
+# without involving Claude.
+#
+# Dual-event binding rationale: autonomous lanes receive exactly ONE
+# UserPromptSubmit (the kickoff) and then run as a long tool loop. The turn
+# counter never advances past 1 and UserPromptSubmit never re-fires, so a
+# UserPromptSubmit-only hook can't catch ctx blow-ups mid-loop. PostToolUse
+# fires after every tool call, giving us a reliable ctx checkpoint inside
+# autonomous runs. The sentinel makes it fire-once regardless of event.
 #
 # Lane-aware threshold: lanes degrade earlier than cockpit sessions — Ralph
 # loop iterations + per-slice tool churn ramp context fast, and Claude
@@ -16,15 +23,9 @@
 # clear-handoff.sh (SessionEnd reason=clear) is the companion that catches
 # sessions that /clear *below* the turn cap.
 #
-# Context threshold catches sessions that balloon token-wise without many
-# turns (large file reads, big tool outputs) — same cache_read cost problem,
-# different shape than turn-count-driven blow-ups.
-#
 # Output: ~/.claude/handoffs/<UTC>-auto-<branch>.md, picked up by /resume.
-# systemMessage announces the path so the user knows /clear is safe.
-#
-# Runs AFTER turn-cap-warn.sh so the counter is current. Fires once per
-# session (sentinel in the same warned-file used by turn-cap-warn).
+# systemMessage announces the path so the user knows /clear is safe. Once the
+# doc exists, handoff-gate.sh blocks further tool use so the lane recycles.
 
 set -u
 
@@ -32,6 +33,7 @@ input=$(cat)
 sessionId=$(jq -r '.session_id // "unknown"' <<<"$input")
 transcriptPath=$(jq -r '.transcript_path // empty' <<<"$input")
 cwd=$(jq -r '.cwd // empty' <<<"$input")
+eventName=$(jq -r '.hook_event_name // empty' <<<"$input")
 [[ "$sessionId" == "unknown" ]] && exit 0
 [[ -z "$transcriptPath" || ! -f "$transcriptPath" ]] && exit 0
 
@@ -42,9 +44,13 @@ counterFile="${logDir}/session-${sessionId}.count"
 warnedFile="${logDir}/session-${sessionId}.warned"
 
 current=$(cat "$counterFile" 2>/dev/null || echo 0)
-# turn-cap-warn.sh runs after us and will increment the counter. Match its
-# +1 semantic so we agree on the turn number being recorded this prompt.
-current=$((current + 1))
+# On UserPromptSubmit, turn-cap-warn.sh runs after us and will increment the
+# counter. Match its +1 semantic so we agree on the turn number being recorded
+# this prompt. On PostToolUse the counter is already correct for the current
+# turn — no increment.
+if [[ "$eventName" != "PostToolUse" ]]; then
+  current=$((current + 1))
+fi
 
 ctxTokens=$(effective_ctx_tokens "$transcriptPath")
 

@@ -37,10 +37,15 @@ handoffMarker="${logDir}/session-${sessionId}.handoff"
 saveSentinel="${logDir}/session-${sessionId}.savedone"
 
 current=$(cat "$counterFile" 2>/dev/null || echo 0)
-(( current < 20 )) && exit 0
 
 handoffPath=""
 [[ -f "$handoffMarker" ]] && handoffPath=$(cat "$handoffMarker" 2>/dev/null)
+
+# Two paths to halt: turn-cap (>=20) OR a handoff doc already exists. The
+# latter catches ctx-triggered handoffs in autonomous lanes where the turn
+# counter never advances past 1 (one kickoff prompt, long tool loop). Once
+# the doc exists it's the green light to recycle, not a licence to keep going.
+(( current < 20 )) && [[ -z "$handoffPath" ]] && exit 0
 
 # One-shot work-saving window: a single git status/add/commit is allowed so the
 # halt never costs uncommitted work. Anything that publishes (push/gh) or keeps
@@ -62,10 +67,12 @@ if [[ "$toolName" == "Bash" ]] && is_save_cmd "$toolCmd"; then
 fi
 
 ref="${handoffPath:-~/.claude/handoffs/ (latest)}"
+reason="turn-20 cap"
+(( current < 20 )) && reason="ctx threshold (handoff doc already exists)"
 cat >&2 <<EOF
 🛑 HANDOFF GATE — turn ${current}. Hard halt in effect; tools are blocked.
 
-This session has passed the turn-20 cap. Continuing is quadratic cache_read
+This session has tripped the ${reason}. Continuing is quadratic cache_read
 cost. State is already captured:
   handoff: ${ref}
 
