@@ -49,10 +49,6 @@
           },
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/auto-handoff.sh"
-          },
-          {
-            "type": "command",
             "command": "bash ~/.claude/hooks/turn-cap-warn.sh"
           },
           {
@@ -95,10 +91,6 @@
           },
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/handoff-gate.sh"
-          },
-          {
-            "type": "command",
             "command": "bash ~/.claude/hooks/linear-ticket-guard.sh"
           },
           {
@@ -111,20 +103,7 @@
     "PostToolUse": [
       {
         "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/auto-handoff.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/tool-loop-warn.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/subagent-nudge.sh"
-          }
-        ]
+        "hooks": []
       }
     ]
   },

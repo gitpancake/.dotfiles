@@ -19,8 +19,13 @@ set -u
 input=$(cat)
 sessionId=$(jq -r '.session_id // "unknown"' <<<"$input")
 toolName=$(jq -r '.tool_name // "unknown"' <<<"$input")
+cwd=$(jq -r '.cwd // empty' <<<"$input")
 
 [[ "$sessionId" == "unknown" || "$toolName" == "unknown" ]] && exit 0
+
+# Lane policy: no nag-only hooks in autonomous lanes — lane Claude reads the
+# warning, has no recourse, and burns context churning. Cockpit only.
+[[ -n "$cwd" && "$cwd" == */.claude/worktrees/* ]] && exit 0
 
 # Group subagents under their parent session when Claude sets the env var (B).
 # Fall back (C): walk up the process tree to find the claude process PID.

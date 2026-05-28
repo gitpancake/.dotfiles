@@ -74,7 +74,33 @@ echo "auto-handoff" >> "$warnedFile"
 outFile=$(write_handoff_doc "$sessionId" "$transcriptPath" "$cwd" "$current" "$ctxTokens" "$trigger")
 echo "$outFile" > "${logDir}/session-${sessionId}.handoff"
 
-msg=$'📝 Auto-handoff saved → '"${outFile}"$'\n\n/clear is now safe — fresh session run /resume to pick up.'
+# Lane auto-recycle: if cwd is a lane, fire tmux keys to /clear + /resume the
+# lane pane after the gate has had time to block and settle. Lookup by
+# pane_current_path (most reliable — tmux tracks per-pane cwd, while window/
+# pane titles get clobbered by Claude's task-description updates).
+laneRecycled=0
+if [[ -n "$cwd" && "$cwd" == */.claude/worktrees/* ]] && command -v tmux >/dev/null 2>&1; then
+  tmuxTarget=$(tmux list-panes -a -F '#{pane_id} #{pane_current_path}' 2>/dev/null \
+    | awk -v C="$cwd" '$2==C {print $1; exit}')
+  if [[ -n "$tmuxTarget" ]]; then
+    # Fork detached so the hook completes without waiting. Sleep gives the
+    # gate time to block + claude to print its halt message before keys land.
+    nohup bash -c "
+      sleep 12
+      tmux send-keys -t '$tmuxTarget' '/clear' Enter
+      sleep 2
+      tmux send-keys -t '$tmuxTarget' '/resume $outFile' Enter
+    " >/dev/null 2>&1 </dev/null &
+    disown 2>/dev/null || true
+    laneRecycled=1
+  fi
+fi
+
+if (( laneRecycled )); then
+  msg=$'📝 Auto-handoff saved → '"${outFile}"$'\n\nLane auto-recycle queued: /clear + /resume will fire in ~12s on tmux target '"${tmuxTarget}"'.'
+else
+  msg=$'📝 Auto-handoff saved → '"${outFile}"$'\n\n/clear is now safe — fresh session run /resume to pick up.'
+fi
 jq -nc --arg m "$msg" '{systemMessage: $m}'
 
 exit 0
