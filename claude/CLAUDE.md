@@ -27,7 +27,7 @@ Self-describe via Agent/skills schemas — don't list. Org preamble: known org c
 - **Single**: `/scope` → brief `<area>/<slug>.md` (grill-with-docs runs inside /scope, lanes do not re-grill). `wt <slug>` (or `/pickup <slug> <BASE> [ctx]`) → autonomous lane: reads brief, plans slices, opens `/tdd` for behavior-changing slices, commits per layer, auto-handoff at 120K ctx, `/ship`.
 - **Epic**: `/scope` → `<area>/<epic-slug>/_epic.md` + `NN-<child>.md`. `/epic <slug> <BASE> [ctx]` confirms order + spawns `wt --ralph`. Ralph: one story/iteration, fresh context, memory via git + `progress.txt` + `prd.json`. `epic-parse.sh` projects `_epic.md` → `prd.json`. Executes confirmed list, never decomposes.
 
-**Autonomous semantics.** `wt` = fire-and-forget. Stops only on: (1) PR opened + review triggered, (2) blocker (ambiguity not in brief, repeated test fail same cause, missing cred). Slice protocol + parallel gotchas: `~/.dotfiles/CLAUDE.md`.
+**Autonomous semantics.** `wt` = fire-and-forget. Stops only on: (1) PR opened + required repo review triggered or explicitly skipped, (2) blocker (ambiguity not in brief, repeated test fail same cause, missing cred). Tix repo review policy: only `cartage-agent` gets `@claude review`; other tix repos skip Claude review. Slice protocol + parallel gotchas: `~/.dotfiles/CLAUDE.md`.
 
 ## Session Start
 

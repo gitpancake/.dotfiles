@@ -83,13 +83,18 @@ Create PR with `gh pr create`. Title <=70 chars; prefix `[AE-NNNN]` only when kn
 
 ## 5. Review
 
-If the repo still expects Claude review, trigger it with:
+Tix project rule: only `cartage-agent` has Claude reviews. For tix tasks in any other repo, do not trigger `@claude review`; skip review and say the repo has no Claude review convention.
 
-```bash
-gh pr comment <PR> --body "@claude review"
-```
+For non-tix repos, trigger only the repo's current review convention. Inspect recent PR comments or repo docs before assuming a bot name.
 
-Do not wait for results. If the team has moved to a different review bot, use the repo convention instead.
+Common choices:
+
+- No bot: skip review trigger and say so.
+- `cartage-agent`: `gh pr comment <PR> --body "@claude review"`.
+- Repo-specific non-Claude bot: use the exact repo convention.
+- Human review: leave the PR ready and report the URL.
+
+Do not wait for asynchronous review results unless the user asks.
 
 ## 6. Report and stop
 

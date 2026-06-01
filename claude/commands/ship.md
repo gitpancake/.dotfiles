@@ -1,12 +1,12 @@
 ---
-description: Commit + push + open PR + trigger @claude review. Pass PR# to re-trigger only.
+description: Commit + push + open PR + trigger repo-appropriate review. Pass PR# for review-only.
 argument-hint: [optional: PR number or URL to skip create and review-only]
 model: sonnet
 ---
 
 # /ship $ARGUMENTS
 
-Commit → push → PR → trigger review. PR body = **two bullet lists** (Changed / Preserved)
+Commit → push → PR → trigger repo-appropriate review. PR body = **two bullet lists** (Changed / Preserved)
 + test plan. No editorializing. Work lives in repo + local ticket tree.
 
 ## 0. Pre-flight (parallel)
@@ -103,6 +103,10 @@ Capture URL.
 
 ## 4. Trigger review
 
+Tix project rule: only `cartage-agent` has Claude reviews. For tix tasks in any other repo, do not trigger `@claude review`; skip review and report that the repo has no Claude review convention.
+
+For `cartage-agent` only:
+
 ```
 gh pr comment "$PR_NUM" --body "@claude review"
 ```
@@ -113,7 +117,7 @@ External review — results land in PR comments in ~2–5 min. Don't wait.
 
 ```
 PR: <url>
-Review: triggered via @claude review (results in PR comments, ~2-5min)
+Review: <triggered via @claude review for cartage-agent | skipped: no Claude review convention for this repo>
 ```
 
 Clean nothing-to-do → say so in one line.

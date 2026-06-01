@@ -78,7 +78,7 @@ tix                          → terminal ticket explorer (github.com/gitpancake
 wt <slug>                    → autonomous lane (see "Parallel worktree lanes")
 /pickup <slug> <BASE> [ctx]  → wt wrapper: sync to a base branch + fold in extra context
 /epic <epic-slug> <BASE>     → confirm an epic's ordered story list, then spawn a Ralph lane
-/ship                        → commit + push + PR + @claude review
+/ship                        → commit + push + PR + repo-appropriate review (Claude only for cartage-agent tix tasks)
 /address-feedback <PR#>      → triage PR comments, spawn a lane on the PR's branch
 /resume [desc]               → resume from the most recent handoff doc
 /rebase                      → rebase onto base, auto-resolve trivial conflicts
@@ -89,7 +89,7 @@ wt <slug>                    → autonomous lane (see "Parallel worktree lanes")
 /rescope                     → refine an existing brief with new notes
 ```
 
-Lane stops only on (1) PR + review triggered, or (2) genuine blocker. Watch the agent board — red row → look. Otherwise leave it alone. At the context threshold, `/handoff` to a fresh session instead of compacting.
+Lane stops only on (1) PR + required repo review triggered or explicitly skipped, or (2) genuine blocker. Tix repo review policy: only `cartage-agent` gets `@claude review`; other tix repos skip Claude review. Watch the agent board — red row → look. Otherwise leave it alone. At the context threshold, `/handoff` to a fresh session instead of compacting.
 
 ## Cost awareness
 
