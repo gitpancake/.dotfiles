@@ -10,6 +10,9 @@
 ## Pi workflow
 
 - Use Pi's native strengths: context files, skills, prompt templates, sessions/tree/fork, and extensions.
+- Pi user config is source-controlled in `~/.dotfiles/pi/` and symlinked into `~/.pi/agent/`. When creating or editing Pi tooling, write the canonical file under `~/.dotfiles/pi/` first, then run `~/.dotfiles/rewire-symlinks.sh` if a new symlink target is needed.
+- Put new Pi extensions in `~/.dotfiles/pi/extensions/`, prompt templates in `~/.dotfiles/pi/prompts/`, skills in `~/.dotfiles/pi/skills/`, themes in `~/.dotfiles/pi/themes/`, helper executables in `~/.dotfiles/pi/bin/`, and global instructions/settings/keybindings in `~/.dotfiles/pi/{AGENTS.md,settings.json,keybindings.json}`.
+- Do not create durable custom Pi tooling directly under `~/.pi/agent/`; that tree is the runtime/symlink target. Exceptions are secrets, auth, sessions, npm/git package caches, and other machine-local state, which must stay out of git.
 - Project instructions live in `AGENTS.md` or `CLAUDE.md`; read the relevant one before substantive work.
 - Use `read` for file contents, `bash` for search/list/test commands, `edit` for precise changes, and `write` for new files or full rewrites.
 - For large files, search first and read with `offset`/`limit`; do not full-read big files just to find one symbol.
