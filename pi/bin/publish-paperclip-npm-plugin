@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE' >&2
+Usage: publish-paperclip-npm-plugin <plugin-dir> [version] [--no-verify]
+
+Publishes a Paperclip plugin without committing publish-only dependency rewrites.
+- Runs plugin tests/build by default.
+- Copies package files to a temp dir.
+- Rewrites workspace: dependencies in the temp package.json to published npm versions.
+- Uses NPM_TOKEN from env, ~/.pi/agent/.env.local, repo .env.local, or repo .env.
+
+Examples:
+  publish-paperclip-npm-plugin packages/plugins/plugin-slack-agent 0.1.14
+  PAPERCLIP_PLUGIN_SDK_VERSION=2026.525.0 publish-paperclip-npm-plugin packages/plugins/plugin-slack-agent
+USAGE
+}
+
+plugin_dir="${1:-}"
+if [[ -z "$plugin_dir" || "$plugin_dir" == "-h" || "$plugin_dir" == "--help" ]]; then
+  usage
+  exit 0
+fi
+shift || true
+
+expected_version=""
+verify=1
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --no-verify) verify=0 ;;
+    -h|--help) usage; exit 0 ;;
+    *)
+      if [[ -z "$expected_version" ]]; then expected_version="$1"; else echo "Unexpected arg: $1" >&2; usage; exit 2; fi
+      ;;
+  esac
+  shift
+done
+
+if [[ ! -f "$plugin_dir/package.json" ]]; then
+  echo "No package.json found in $plugin_dir" >&2
+  exit 2
+fi
+
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+plugin_abs="$(cd "$plugin_dir" && pwd)"
+
+read_pkg_field() {
+  node -e "const p=require(process.argv[1]); console.log(p[process.argv[2]] || '')" "$plugin_abs/package.json" "$1"
+}
+
+package_name="$(read_pkg_field name)"
+package_version="$(read_pkg_field version)"
+if [[ -n "$expected_version" && "$package_version" != "$expected_version" ]]; then
+  echo "package.json version is $package_version, expected $expected_version" >&2
+  exit 2
+fi
+
+if [[ "$verify" -eq 1 ]]; then
+  (cd "$repo_root" && pnpm --filter "$package_name" test && pnpm --filter "$package_name" build)
+fi
+
+npm_token=""
+npm_token_source=""
+for env_file in "$HOME/.pi/agent/.env.local" "$repo_root/.env.local" "$repo_root/.env"; do
+  if [[ -f "$env_file" ]]; then
+    npm_token="$(python3 - "$env_file" <<'PY'
+import sys
+from pathlib import Path
+for line in Path(sys.argv[1]).read_text().splitlines():
+    if line.startswith('NPM_TOKEN='):
+        print(line.split('=', 1)[1].strip().strip('"').strip("'"))
+        raise SystemExit(0)
+PY
+)"
+    if [[ -n "$npm_token" ]]; then
+      npm_token_source="$env_file"
+      break
+    fi
+  fi
+done
+if [[ -z "$npm_token" && -n "${NPM_TOKEN:-}" ]]; then
+  npm_token="$NPM_TOKEN"
+  npm_token_source="environment"
+fi
+if [[ -z "$npm_token" ]]; then
+  echo "No NPM_TOKEN found in ~/.pi/agent/.env.local, repo .env.local, repo .env, or env" >&2
+  exit 2
+fi
+
+publish_dir="$(mktemp -d /tmp/paperclip-plugin-publish-XXXXXX)"
+npmrc="$(mktemp /tmp/paperclip-npmrc-XXXXXX)"
+cleanup() { rm -rf "$publish_dir" "$npmrc"; }
+trap cleanup EXIT
+
+cp "$plugin_abs/package.json" "$publish_dir/package.json"
+[[ -f "$plugin_abs/README.md" ]] && cp "$plugin_abs/README.md" "$publish_dir/README.md"
+cp -R "$plugin_abs/dist" "$publish_dir/dist"
+
+python3 - "$publish_dir/package.json" <<'PY'
+import json, os, subprocess, sys
+from pathlib import Path
+path = Path(sys.argv[1])
+data = json.loads(path.read_text())
+
+def published_version(pkg: str) -> str:
+    if pkg == '@paperclipai/plugin-sdk' and os.environ.get('PAPERCLIP_PLUGIN_SDK_VERSION'):
+        return os.environ['PAPERCLIP_PLUGIN_SDK_VERSION']
+    return subprocess.check_output(['npm', 'view', pkg, 'version', '--json'], text=True).strip().strip('"')
+
+for section in ('dependencies', 'peerDependencies', 'optionalDependencies'):
+    deps = data.get(section)
+    if not isinstance(deps, dict):
+        continue
+    for name, spec in list(deps.items()):
+        if isinstance(spec, str) and spec.startswith('workspace:'):
+            deps[name] = published_version(name)
+
+path.write_text(json.dumps(data, indent=2) + '\n')
+PY
+
+printf 'registry=https://registry.npmjs.org/\n//registry.npmjs.org/:_authToken=%s\n' "$npm_token" > "$npmrc"
+if ! npm_user="$(cd "$publish_dir" && npm whoami --userconfig "$npmrc" 2>/dev/null)"; then
+  echo "NPM_TOKEN from $npm_token_source failed npm whoami" >&2
+  exit 2
+fi
+echo "Publishing $package_name@$package_version as npm user $npm_user"
+(cd "$publish_dir" && npm publish --access public --userconfig "$npmrc")

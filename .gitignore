@@ -2,11 +2,24 @@
 # Not the same as claude/ (no dot) which is intentionally tracked config.
 .claude/
 
-# Defense-in-depth: never track Claude Code transcripts or session data.
-# Live transcripts live in ~/.claude/projects/ outside this repo, but in
-# case anyone ever symlinks or copies one in, these patterns block commits.
+# Pi runtime state — auth, sessions, package caches, Paperclip company state.
+# Not the same as pi/ (no dot) which is intentionally tracked config.
+.pi/
+pi/.env*
+pi/auth.json
+pi/sessions/
+pi/npm/
+pi/git/
+pi/paperclips/
+pi/bin/fd
+
+# Defense-in-depth: never track agent transcripts or session data.
+# Live transcripts live in ~/.claude/projects/ and ~/.pi/agent/sessions/
+# outside this repo, but in case anyone ever symlinks or copies one in,
+# these patterns block commits.
 *.jsonl
 projects/
+sessions/
 tool-results/
 # Org context — private per-org engineering standards, never committed.
 org/

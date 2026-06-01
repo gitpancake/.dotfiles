@@ -55,6 +55,36 @@ for f in "$DOTFILES_DIR/claude/scripts/"*; do
   ln -sf "$f" ~/.claude/scripts/"$(basename "$f")"
 done
 
+# Pi
+mkdir -p ~/.pi/agent ~/.pi/agent/bin ~/.pi/agent/extensions ~/.pi/agent/prompts ~/.pi/agent/skills ~/.pi/agent/themes
+ln -sf "$DOTFILES_DIR/pi/AGENTS.md" ~/.pi/agent/AGENTS.md
+ln -sf "$DOTFILES_DIR/pi/settings.json" ~/.pi/agent/settings.json
+ln -sf "$DOTFILES_DIR/pi/keybindings.json" ~/.pi/agent/keybindings.json
+for f in "$DOTFILES_DIR/pi/extensions/"*.ts "$DOTFILES_DIR/pi/extensions/"*.js; do
+  [ -e "$f" ] || continue
+  ln -sf "$f" ~/.pi/agent/extensions/"$(basename "$f")"
+done
+for f in "$DOTFILES_DIR/pi/prompts/"*.md; do
+  [ -e "$f" ] || continue
+  ln -sf "$f" ~/.pi/agent/prompts/"$(basename "$f")"
+done
+for d in "$DOTFILES_DIR/pi/skills/"*/; do
+  [ -d "$d" ] || continue
+  [ ! -L "${d%/}" ] || continue
+  dest=~/.pi/agent/skills/"$(basename "$d")"
+  rm -rf "$dest"
+  ln -s "${d%/}" "$dest"
+done
+for f in "$DOTFILES_DIR/pi/themes/"*.json; do
+  [ -e "$f" ] || continue
+  ln -sf "$f" ~/.pi/agent/themes/"$(basename "$f")"
+done
+for f in "$DOTFILES_DIR/pi/bin/"*; do
+  [ -e "$f" ] || continue
+  chmod +x "$f"
+  ln -sf "$f" ~/.pi/agent/bin/"$(basename "$f")"
+done
+
 # tmux
 mkdir -p ~/.tmux
 ln -sf "$DOTFILES_DIR/tmux/.tmux.conf" ~/.tmux.conf

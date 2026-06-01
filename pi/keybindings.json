@@ -1,0 +1,9 @@
+{
+  "app.session.tree": ["ctrl+shift+t"],
+  "app.session.fork": ["ctrl+shift+f"],
+  "app.session.new": ["ctrl+shift+n"],
+  "app.session.resume": ["ctrl+shift+r"],
+  "app.tools.expand": ["ctrl+o"],
+  "app.model.select": ["ctrl+l"],
+  "app.thinking.cycle": ["shift+tab"]
+}

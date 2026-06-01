@@ -1,0 +1,40 @@
+{
+  "lastChangelogVersion": "0.78.0",
+  "theme": "gruvbox",
+  "defaultProvider": "openai-codex",
+  "defaultModel": "gpt-5.5",
+  "defaultThinkingLevel": "medium",
+  "extensions": [
+    "~/.pi/agent/extensions"
+  ],
+  "skills": [
+    "~/.claude/skills",
+    "~/.pi/agent/skills"
+  ],
+  "prompts": [
+    "~/.pi/agent/prompts"
+  ],
+  "themes": [
+    "~/.pi/agent/themes"
+  ],
+  "packages": [
+    "npm:pi-web-access",
+    "npm:@juicesharp/rpiv-ask-user-question"
+  ],
+  "compaction": {
+    "enabled": true,
+    "reserveTokens": 20000,
+    "keepRecentTokens": 30000
+  },
+  "branchSummary": {
+    "reserveTokens": 20000
+  },
+  "enabledModels": [
+    "openai-codex/gpt-5.5",
+    "gpt-5.5",
+    "claude-*",
+    "gemini-2*"
+  ],
+  "enableSkillCommands": true,
+  "doubleEscapeAction": "tree"
+}
