@@ -36,6 +36,15 @@ export WT_MODEL=sonnet
 # claude/hooks/lane-reaper.sh.
 export WT_CLAUDE="$HOME/.local/bin/claude-lane"
 
+# tix pickup routing (github.com/gitpancake/tix ≥0.3.9). The `p` key spawns a
+# lane via `wt`; tix sets WT_AGENT_CMD per the ticket's owning root from this
+# <root>=<cmd> map. Pi-home tickets (~/.pi/agent/tickets) have no entry → wt's
+# default (one-shot pi). Claude-home tickets (~/.claude/tickets) route to the
+# lane Claude launcher pinned to Opus — the old cdsp-autonomous pickup, back
+# but dir-scoped. WT_MODEL=opus is inlined so it survives into the tmux window
+# (tmux new-window doesn't inherit the spawning shell's env).
+export TIX_PICKUP_AGENTS="$HOME/.claude/tickets=WT_MODEL=opus ${WT_CLAUDE}"
+
 # Machine-local secrets and env overrides. Lives outside the dotfiles repo so it's
 # never tracked. Optional — absent on fresh machines until you populate it.
 [[ -f "$HOME/.zshenv.local" ]] && source "$HOME/.zshenv.local"
