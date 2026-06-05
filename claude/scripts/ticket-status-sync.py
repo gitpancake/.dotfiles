@@ -8,16 +8,16 @@ frontmatter line. Hand edits are clobbered on the next run, by design.
 
 States (contract: ~/.claude/tickets/README.md):
   done       — a PR was merged OR user pinned it from tix (`d`); sticky
-  active     — a live worktree or branch exists for the slug
-  open       — refined, ready, no active lane
-  draft      — freshly /scope'd, not yet refined or picked up
+  review     — an open, unmerged PR exists for the slug's branch
+  active     — a live worktree or branch exists for the slug (no PR yet)
+  open       — refined, ready, no active lane (the birth state)
   cancelled  — user dropped the ticket; terminal, trumps every derived signal
 
-`draft` is a sticky seed: pre-migration it was the `_drafts/` folder, but that
-folder is dead — draft is a status, not a location. Nothing on the filesystem
-distinguishes a draft from an open ticket, so this script never *produces*
-draft; it only *preserves* it when no live signal exists. `/scope` plants
-`draft`; the first worktree flips it to `active`; from then on it is derived.
+`draft` is **retired**: `/scope` now plants `open` directly (its output is
+already refined). This script never *produces* `draft` and never did — it only
+*preserves* a legacy `draft:` line if one still exists on disk. New tickets
+are born `open`; the first worktree flips them to `active`, an open PR to
+`review`, a merge to `done`.
 
 `cancelled` is the second sticky carve-out, but with stronger semantics: it
 trumps every derived signal. The reconciler never produces `cancelled` either;
@@ -270,49 +270,60 @@ def write_lanes(lanes):
         pass
 
 
-def merged_slugs(repo_slugs):
-    """slugs whose PR was merged, via `gh`. `gh` is the authority on `done` —
-    a deleted branch is not proof of a merge. Only repos that have a lane
-    branch are queried, so the network cost scales with in-flight work, not
-    repo count. Returns None if `gh` is unavailable — `done` is then simply
-    not derived this run (the next run with `gh` present will catch up)."""
+def pr_signals(repo_slugs):
+    """(merged, review) slug sets, via `gh`. `gh` is the authority on `done`
+    (a deleted branch is not proof of a merge) and on `review` (an open,
+    unmerged PR). One `gh pr list --state all` call per lane-bearing repo
+    partitions both in a single network round-trip, so cost scales with
+    in-flight work, not repo count. Returns (None, None) if `gh` is unavailable
+    — neither state is derived this run (the next run with `gh` catches up)."""
     if not run(["gh", "--version"]):
-        return None
-    merged = set()
+        return None, None
+    merged, review = set(), set()
     for repo in repo_slugs:
         # cwd=repo lets `gh` auto-detect the repo — no --repo needed.
         raw = run([
-            "gh", "pr", "list", "--state", "merged",
-            "--limit", "100", "--json", "headRefName",
-            "--jq", ".[].headRefName",
+            "gh", "pr", "list", "--state", "all",
+            "--limit", "100", "--json", "headRefName,state",
+            "--jq", ".[] | .headRefName + \"\\t\" + .state",
         ], cwd=repo)
-        for branch in raw.splitlines():
+        for line in raw.splitlines():
+            branch, _, state = line.partition("\t")
             slug = branch_to_slug(branch.strip())
-            if slug:
+            if not slug:
+                continue
+            if state == "MERGED":
                 merged.add(slug)
-    return merged
+            elif state == "OPEN":
+                review.add(slug)
+    return merged, review
 
 
 # ---- reconcile -------------------------------------------------------------
 
-def compute_status(slug, current, active, merged):
-    """The derivation. Precedence: cancelled > done (sticky-or-derived) > active
-    > sticky draft > open. Both `cancelled` and `done` are sticky terminal
-    states the user can pin from tix (`x`/`d`); they trump every live signal so
-    a closed-out ticket whose branch still exists stays closed until reopened."""
+def compute_status(slug, current, active, merged, review):
+    """The derivation. Precedence: cancelled > done (sticky-or-derived) >
+    review (open PR) > active > sticky draft > open. `cancelled` and `done` are
+    sticky terminal states the user can pin from tix (`x`/`d`); they trump every
+    live signal so a closed-out ticket whose branch still exists stays closed
+    until reopened. `review` outranks `active`: an open PR means the work has
+    moved past in-progress, even though its worktree/branch is usually still
+    live. `review` is purely derived — there is no sticky review."""
     if current.lower() in ("cancelled", "canceled"):
         return "cancelled"  # normalises legacy `Cancelled`/`Canceled` too
     if current.lower() == "done":
         return "done"       # sticky — user marked it (no PR required)
     if merged is not None and slug in merged:
         return "done"
+    if review is not None and slug in review:
+        return "review"
     if slug in active:
         return "active"
     if current.lower() == "active":
         return "active"  # sticky — user pinned it from tix (`i`), no lane required
     if current.lower() == "draft":
-        return "draft"  # sticky seed — see module docstring (also normalises
-        # a legacy capitalised `Draft` to the lowercase vocab)
+        return "draft"  # legacy preserve only — see module docstring; `/scope`
+        # no longer plants draft (also normalises a capitalised `Draft`)
     return "open"
 
 
@@ -328,8 +339,11 @@ def reconcile(only_slug=None):
     repos = discover_repos()
     active, repo_slugs = active_signals(repos)
     # Fast path (`wt` spawn): skip the `gh` network pass — a freshly spawned
-    # lane is becoming `active`, never `done`.
-    merged = None if only_slug is not None else merged_slugs(repo_slugs)
+    # lane is becoming `active`, never `review`/`done`.
+    if only_slug is not None:
+        merged, review = None, None
+    else:
+        merged, review = pr_signals(repo_slugs)
     # Full sweep also refreshes the lane sidecar tix consumes for in-progress
     # state. Fast path skips it to avoid stale entries (one slug touched, others
     # would diverge).
@@ -344,7 +358,7 @@ def reconcile(only_slug=None):
         if parsed is None:
             continue
         current = parsed[0]
-        new = compute_status(slug, current, active, merged)
+        new = compute_status(slug, current, active, merged, review)
         if new != current:
             write_status(path, new)
             changed.append((new, current or "(none)", path))

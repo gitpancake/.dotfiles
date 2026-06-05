@@ -105,8 +105,8 @@ No counter, no `DRAFT-N`. **The filename is the handle.**
   `tooling`, `spikes`). Pick the closest; ask only if genuinely ambiguous.
 - **Shape** — single ticket or epic (from §1).
 
-Target path — a ticket lives in its area from creation; `status: draft` marks it unrefined
-(there is no `_drafts/` staging folder — "draft" is a state, not a location):
+Target path — a ticket lives in its area from creation. `/scope` output is already refined
+(grill-with-docs ran), so it is born `status: open`, not draft — draft is retired:
 
 - **Single ticket** → `$TICKETS_DIR/<area>/<slug>.md`
 - **Epic** → `$TICKETS_DIR/<area>/<epic-slug>/_epic.md` (the PRD) plus
@@ -126,7 +126,9 @@ Copy the templates. Do not freehand the frontmatter.
 Every ticket uses the same shape, so lanes read it identically. Set `created` to the current
 UTC instant as full ISO-8601 with a `Z` suffix (e.g. `2026-05-27T18:13:00Z`) — never a bare
 date, which tix can't anchor to an instant and which forces a fallback to file birthtime.
-Get the value from `date -u +%Y-%m-%dT%H:%M:%SZ` if unsure. Set `status: draft`. Leave
+Get the value from `date -u +%Y-%m-%dT%H:%M:%SZ` if unsure. Set `status: open` on every
+ticket AND every epic child (the reconciler does not run on `tix` launch, so a missing
+`status:` shows as a muted non-ticket until the next `wt`/manual sweep). Leave
 `linear:` empty — it's only a breadcrumb on tickets that predate the local-only move.
 
 **For an epic:** `_epic.md` carries the `<!-- epic-stories:start -->` block — the
