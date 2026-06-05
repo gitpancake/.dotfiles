@@ -1,0 +1,28 @@
+{
+  "providers": {
+    "trainloop": {
+      "baseUrl": "$TRAINLOOP_BASE_URL",
+      "api": "openai-completions",
+      "apiKey": "$TRAINLOOP_API_KEY",
+      "models": [
+        {
+          "id": "cartage/wilson-v1",
+          "name": "Wilson v1 (Trainloop)",
+          "reasoning": false,
+          "input": ["text"],
+          "contextWindow": 128000,
+          "maxTokens": 16384,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "compat": {
+            "supportsReasoningEffort": false
+          }
+        }
+      ]
+    }
+  }
+}

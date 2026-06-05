@@ -55,13 +55,12 @@ add-zsh-hook precmd _update_tmux_pane_title
 
 _tix_tickets_dir() {
   local root base
-  root=$(git rev-parse --show-toplevel 2>/dev/null) || { unset TICKETS_DIR; return; }
+  root=$(git rev-parse --show-toplevel 2>/dev/null) \
+    || { unset TICKETS_DIR PI_TICKETS_DIR TIX_EXTRA_TICKETS_DIRS; return; }
   base=${root:t}
-  if [[ -d "$HOME/.claude/tickets/$base" ]]; then
-    export TICKETS_DIR="$HOME/.claude/tickets/$base"
-  else
-    unset TICKETS_DIR
-  fi
+  export TICKETS_DIR="$HOME/.claude/tickets/$base"        # claude (cdsp) /scope home
+  export PI_TICKETS_DIR="$HOME/.pi/tickets/$base"          # pi /scope home
+  export TIX_EXTRA_TICKETS_DIRS="$HOME/.pi/tickets/$base"  # tix reads both homes
 }
 add-zsh-hook chpwd _tix_tickets_dir
 _tix_tickets_dir
@@ -277,3 +276,10 @@ env-edit() {
 # gcloud
 [[ -f "/opt/homebrew/share/google-cloud-sdk/path.zsh.inc" ]] && source "/opt/homebrew/share/google-cloud-sdk/path.zsh.inc"
 [[ -f "/opt/homebrew/share/google-cloud-sdk/completion.zsh.inc" ]] && source "/opt/homebrew/share/google-cloud-sdk/completion.zsh.inc"
+
+# Pi
+export PATH="/Users/henrypye/.nvm/versions/node/v24.15.0/bin:$PATH"
+alias pc="pi -c"
+alias pr="pi -r"
+alias pn="pi --no-session"
+alias pica="cd ~/Documents/code/cartage-agent && pi -c"

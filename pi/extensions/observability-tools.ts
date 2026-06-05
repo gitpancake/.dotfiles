@@ -65,8 +65,6 @@ function parseEnvValue(value: string): string {
 
 function applyEnvAliases() {
   process.env.AXIOM_API_TOKEN ??= process.env.AXIOM_TOKEN;
-  process.env.LANGSMITH_API_KEY ??= process.env.LANGCHAIN_API_KEY;
-  process.env.LANGSMITH_PROJECT ??= process.env.LANGCHAIN_PROJECT;
   process.env.SENTRY_AUTH_TOKEN ??=
     process.env.SENTRY_API_TOKEN ?? process.env.SENTRY_TOKEN;
 }
@@ -132,10 +130,13 @@ function axiomHeaders(): HeadersInit {
 }
 
 function langsmithHeaders(): HeadersInit {
-  return {
+  const headers: Record<string, string> = {
     "x-api-key": requiredEnv("LANGSMITH_API_KEY"),
     "content-type": "application/json",
   };
+  const workspaceId = optionalString(process.env.LANGSMITH_WORKSPACE_ID);
+  if (workspaceId) headers["x-tenant-id"] = workspaceId;
+  return headers;
 }
 
 function sentryHeaders(): HeadersInit {
@@ -158,13 +159,115 @@ function truncateText(value: unknown, maxChars: number): string | undefined {
     : value;
 }
 
+const NOISY_OBSERVABILITY_KEYS = new Set([
+  "executionSummary",
+  "thread_history",
+  "threadHistory",
+  "channel_history",
+  "channelHistory",
+  "toolCalls",
+  "accessToken",
+]);
+
+const SUMMARIZED_TEXT_KEYS = new Set([
+  "markdownContent",
+  "currentData",
+  "previousData",
+  "userRequest",
+  "request",
+]);
+
+function redactSecretText(value: string): string {
+  return value
+    .replace(/xox[baprs]-[A-Za-z0-9-]+/g, "[redacted-slack-token]")
+    .replace(/Bearer\s+[A-Za-z0-9._~+/-]+/gi, "Bearer [redacted]")
+    .replace(/([A-Z0-9._%+-]+)@([A-Z0-9.-]+\.[A-Z]{2,})/gi, "$1@email.com");
+}
+
+function summarizeLargeText(value: string, maxChars: number): JsonValue {
+  const redacted = redactSecretText(value);
+  if (redacted.length <= maxChars) return redacted;
+  return {
+    preview: redacted.slice(0, Math.max(80, maxChars)),
+    omittedChars: redacted.length - Math.max(80, maxChars),
+  };
+}
+
+function sanitizeObservabilityValue(
+  value: unknown,
+  maxChars: number,
+  key?: string,
+  depth = 0,
+): JsonValue {
+  if (key && NOISY_OBSERVABILITY_KEYS.has(key)) {
+    const text = typeof value === "string" ? value : JSON.stringify(value);
+    return {
+      omitted: true,
+      reason: `noisy field ${key}`,
+      chars: text?.length ?? null,
+    };
+  }
+
+  if (typeof value === "string") {
+    if (key && SUMMARIZED_TEXT_KEYS.has(key))
+      return summarizeLargeText(value, maxChars);
+    return (
+      truncateText(redactSecretText(value), maxChars) ?? redactSecretText(value)
+    );
+  }
+  if (
+    value === null ||
+    typeof value === "boolean" ||
+    typeof value === "number"
+  ) {
+    return value as JsonValue;
+  }
+  if (value === undefined) return null;
+  if (depth >= 5) return summarizeLargeText(JSON.stringify(value), maxChars);
+
+  if (Array.isArray(value)) {
+    const limit = Math.min(value.length, 12);
+    const items = value
+      .slice(0, limit)
+      .map((item) =>
+        sanitizeObservabilityValue(item, maxChars, undefined, depth + 1),
+      );
+    if (value.length > limit) {
+      items.push({ omittedItems: value.length - limit });
+    }
+    return items;
+  }
+
+  if (typeof value === "object") {
+    const result: JsonObject = {};
+    for (const [nestedKey, nestedValue] of Object.entries(value)) {
+      const lowerKey = nestedKey.toLowerCase();
+      if (
+        lowerKey.includes("authorization") ||
+        lowerKey.includes("cookie") ||
+        lowerKey.includes("token") ||
+        lowerKey.includes("secret") ||
+        lowerKey.includes("apikey") ||
+        lowerKey.includes("api_key")
+      ) {
+        result[nestedKey] = "[redacted]";
+        continue;
+      }
+      result[nestedKey] = sanitizeObservabilityValue(
+        nestedValue,
+        maxChars,
+        nestedKey,
+        depth + 1,
+      );
+    }
+    return result;
+  }
+
+  return summarizeLargeText(String(value), maxChars);
+}
+
 function previewValue(value: unknown, maxChars: number): JsonValue {
-  if (typeof value === "string") return truncateText(value, maxChars) ?? value;
-  const json = JSON.stringify(value);
-  if (!json) return null;
-  return json.length > maxChars
-    ? `${json.slice(0, maxChars)}… [truncated ${json.length - maxChars} chars]`
-    : JSON.parse(json);
+  return sanitizeObservabilityValue(value, maxChars);
 }
 
 function compactLangsmithRun(
@@ -196,6 +299,7 @@ function compactLangsmithRun(
     endTime: obj.end_time ?? null,
     totalTokens: obj.total_tokens ?? null,
     totalCost: obj.total_cost ?? null,
+    projectId: obj.session_id ?? obj.project_id ?? null,
     metadata: asObject(obj.extra).metadata ?? null,
     appPath: obj.app_path ?? null,
     childRunCount: Array.isArray(obj.child_run_ids)
@@ -492,6 +596,243 @@ async function fetchLangsmithRun(
   });
 }
 
+const DEFAULT_LANGSMITH_PROJECT_NAMES = [
+  "agent-production",
+  "agents-production",
+  "employees-production",
+];
+
+const DEFAULT_LANGSMITH_PROJECT_BY_CODING_PROJECT: Record<string, string[]> = {
+  "cartage-agent": ["agent-production", "agents-production"],
+  agents: ["employees-production"],
+  "ai-employees": ["employees-production"],
+  "cartage-ai-employees": ["employees-production"],
+};
+
+const DEFAULT_AXIOM_DATASET_BY_CODING_PROJECT: Record<string, string> = {
+  "cartage-agent": "REDACTED-DATASET-NAME",
+  agents: "cartage-ai-employees",
+  "ai-employees": "cartage-ai-employees",
+  "cartage-ai-employees": "cartage-ai-employees",
+};
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
+
+function splitProjectNames(value: string | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function parseLangsmithProjectMap(
+  value: string | undefined,
+): Record<string, string[]> {
+  if (!value) return {};
+  const entries: Record<string, string[]> = {};
+  for (const entry of value.split(/[,;\n]/)) {
+    const [rawCodingProject, rawProjects] = entry.split("=");
+    const codingProject = rawCodingProject?.trim().toLowerCase();
+    if (!codingProject || !rawProjects) continue;
+    const projects = rawProjects
+      .split(/[|+]/)
+      .map((project) => project.trim())
+      .filter(Boolean);
+    if (projects.length > 0) entries[codingProject] = projects;
+  }
+  return entries;
+}
+
+function langsmithProjectMap(): Record<string, string[]> {
+  return {
+    ...DEFAULT_LANGSMITH_PROJECT_BY_CODING_PROJECT,
+    ...parseLangsmithProjectMap(process.env.LANGSMITH_PROJECT_MAP),
+  };
+}
+
+function parseAxiomDatasetMap(
+  value: string | undefined,
+): Record<string, string> {
+  if (!value) return {};
+  const entries: Record<string, string> = {};
+  for (const entry of value.split(/[,;\n]/)) {
+    const [rawCodingProject, rawDataset] = entry.split("=");
+    const codingProject = rawCodingProject?.trim().toLowerCase();
+    const dataset = rawDataset?.trim();
+    if (codingProject && dataset) entries[codingProject] = dataset;
+  }
+  return entries;
+}
+
+function axiomDatasetMap(): Record<string, string> {
+  return {
+    ...DEFAULT_AXIOM_DATASET_BY_CODING_PROJECT,
+    ...parseAxiomDatasetMap(process.env.AXIOM_DATASET_MAP),
+  };
+}
+
+function knownCodingProjects(): Set<string> {
+  return new Set([
+    ...Object.keys(langsmithProjectMap()),
+    ...Object.keys(axiomDatasetMap()),
+  ]);
+}
+
+function detectCodingProject(cwd = process.cwd()): string | undefined {
+  const projectNames = knownCodingProjects();
+  const envProject = optionalString(
+    process.env.PI_CODING_PROJECT,
+  )?.toLowerCase();
+  if (envProject && projectNames.has(envProject)) return envProject;
+
+  let current = path.resolve(cwd);
+  const home = path.resolve(os.homedir());
+  while (true) {
+    const name = path.basename(current).toLowerCase();
+    if (projectNames.has(name)) return name;
+    const parent = path.dirname(current);
+    if (parent === current || current === home) return undefined;
+    current = parent;
+  }
+}
+
+function axiomDatasetName(explicitDataset: string | undefined): string {
+  const explicit = optionalString(explicitDataset);
+  if (explicit) return explicit;
+
+  const codingProject = detectCodingProject();
+  if (codingProject) {
+    const dataset = axiomDatasetMap()[codingProject];
+    if (dataset) return dataset;
+  }
+
+  return requiredEnv("AXIOM_DATASET");
+}
+
+function axiomDatasetDisplay(): string {
+  try {
+    return axiomDatasetName(undefined);
+  } catch {
+    return "missing AXIOM_DATASET";
+  }
+}
+
+function langsmithProjectsForCodingProject(codingProject: string | undefined): {
+  codingProject?: string;
+  projectNames: string[];
+} {
+  const projectMap = langsmithProjectMap();
+  const normalizedCodingProject = optionalString(codingProject)?.toLowerCase();
+  if (normalizedCodingProject) {
+    return {
+      codingProject: normalizedCodingProject,
+      projectNames:
+        projectMap[normalizedCodingProject] ?? splitProjectNames(codingProject),
+    };
+  }
+
+  const detectedCodingProject = detectCodingProject();
+  return {
+    codingProject: detectedCodingProject,
+    projectNames: detectedCodingProject
+      ? (projectMap[detectedCodingProject] ?? [])
+      : [],
+  };
+}
+
+function langsmithProjectCandidates(params: {
+  projectName?: string;
+  projectNames?: string[];
+  codingProject?: string;
+}): { names: string[]; isExplicit: boolean; codingProject?: string } {
+  const explicitNames = uniqueStrings([
+    ...splitProjectNames(params.projectName),
+    ...(params.projectNames ?? []).flatMap((name) => splitProjectNames(name)),
+  ]);
+  if (explicitNames.length > 0)
+    return { names: explicitNames, isExplicit: true };
+
+  const mapped = langsmithProjectsForCodingProject(params.codingProject);
+  if (mapped.projectNames.length > 0) {
+    return {
+      names: uniqueStrings(mapped.projectNames),
+      isExplicit: Boolean(params.codingProject),
+      codingProject: mapped.codingProject,
+    };
+  }
+
+  return {
+    names: uniqueStrings([
+      ...splitProjectNames(process.env.LANGSMITH_PROJECTS),
+      ...splitProjectNames(process.env.LANGSMITH_READ_PROJECT),
+      ...splitProjectNames(process.env.LANGSMITH_PROJECT),
+      ...DEFAULT_LANGSMITH_PROJECT_NAMES,
+    ]),
+    isExplicit: false,
+    codingProject: mapped.codingProject,
+  };
+}
+
+async function resolveLangsmithProjectId(
+  projectNameOrId: string,
+  signal?: AbortSignal,
+): Promise<string | null> {
+  if (isUuid(projectNameOrId)) return projectNameOrId;
+  const url = new URL("/sessions", LANGSMITH_API_BASE);
+  url.searchParams.set("name", projectNameOrId);
+  const response = await requestJson(url, {
+    method: "GET",
+    headers: langsmithHeaders(),
+    signal,
+  });
+  const sessions = Array.isArray(response) ? response : [response];
+  const project = sessions.map(asObject).find((item) => item.id);
+  return typeof project?.id === "string" ? project.id : null;
+}
+
+async function resolveLangsmithProjectIds(
+  params: {
+    projectName?: string;
+    projectNames?: string[];
+    codingProject?: string;
+  },
+  signal?: AbortSignal,
+): Promise<{
+  projectIds: string[];
+  searchedProjects: string[];
+  skippedProjects: string[];
+  codingProject?: string;
+}> {
+  const candidates = langsmithProjectCandidates(params);
+  const projectIds: string[] = [];
+  const searchedProjects: string[] = [];
+  const skippedProjects: string[] = [];
+
+  for (const name of candidates.names) {
+    const projectId = await resolveLangsmithProjectId(name, signal);
+    if (projectId) {
+      projectIds.push(projectId);
+      searchedProjects.push(name);
+      continue;
+    }
+    if (candidates.isExplicit)
+      throw new Error(`LangSmith project not found: ${name}`);
+    skippedProjects.push(name);
+  }
+
+  return {
+    projectIds: uniqueStrings(projectIds),
+    searchedProjects,
+    skippedProjects,
+    codingProject: candidates.codingProject,
+  };
+}
+
 async function runAxiomApl(
   apl: string,
   options: { startTime?: string; endTime?: string; includeCursor?: boolean },
@@ -518,6 +859,50 @@ function containsDataClause(values: string[]): string {
     .filter((value) => value.trim().length > 0)
     .map((value) => `tostring(['data']) contains ${aplString(value)}`)
     .join(" or ");
+}
+
+function splitJsonPath(pathValue: string): string[] {
+  return pathValue
+    .replaceAll(/\[(?:'|")?([^'"\]]+)(?:'|")?\]/g, ".$1")
+    .split(".")
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function getPathValue(value: unknown, pathValue: string): unknown {
+  let current: unknown = value;
+  for (const part of splitJsonPath(pathValue)) {
+    if (current == null) return undefined;
+    if (Array.isArray(current)) {
+      const index = Number(part);
+      current = Number.isInteger(index) ? current[index] : undefined;
+      continue;
+    }
+    if (typeof current !== "object") return undefined;
+    current = (current as Record<string, unknown>)[part];
+  }
+  return current;
+}
+
+function projectAxiomRows(
+  result: JsonValue,
+  fields: string[],
+  opts: { maxRows: number; maxChars: number },
+): JsonValue {
+  const rows = extractAxiomRows(result);
+  const projected = rows.slice(0, opts.maxRows).map((row) => {
+    const out: JsonObject = {};
+    for (const field of fields) {
+      out[field] = previewValue(getPathValue(row, field), opts.maxChars);
+    }
+    return out;
+  });
+  return {
+    status: summarizeAxiomStatus(asObject(result).status),
+    rowsReturned: rows.length,
+    rows: projected,
+    omittedRows: Math.max(0, rows.length - projected.length),
+  };
 }
 
 type OutputMode = "compact" | "verbose";
@@ -583,6 +968,7 @@ async function executeAxiom(
     output?: OutputMode;
     maxRows?: number;
     maxChars?: number;
+    selectFields?: string[];
   },
   signal?: AbortSignal,
 ): Promise<JsonValue> {
@@ -602,6 +988,12 @@ async function executeAxiom(
       },
       signal,
     );
+    if (params.selectFields?.length) {
+      return projectAxiomRows(result, params.selectFields, {
+        maxRows,
+        maxChars,
+      });
+    }
     return compactAxiomResult(result, { view, maxRows, maxChars });
   }
 
@@ -615,7 +1007,7 @@ async function executeAxiom(
   if (params.endTime) body.endTime = params.endTime;
   if (params.limit !== undefined) body.limit = params.limit;
 
-  const datasetName = params.dataset ?? requiredEnv("AXIOM_DATASET");
+  const datasetName = axiomDatasetName(params.dataset);
   const dataset = encodeURIComponent(datasetName);
   const result = await requestJson(
     new URL(`/v1/datasets/${dataset}/query`, AXIOM_API_BASE),
@@ -626,19 +1018,32 @@ async function executeAxiom(
       signal,
     },
   );
+  if (params.selectFields?.length) {
+    return projectAxiomRows(result, params.selectFields, { maxRows, maxChars });
+  }
   return compactAxiomResult(result, { view, maxRows, maxChars });
 }
 
-function langsmithQueryBody(params: {
-  projectName?: string;
-  traceId?: string;
-  runId?: string;
-  runType?: string;
-  startTime?: string;
-  endTime?: string;
-  error?: boolean;
-  limit?: number;
-}): Record<string, unknown> {
+async function langsmithQueryBody(
+  params: {
+    projectName?: string;
+    projectNames?: string[];
+    codingProject?: string;
+    traceId?: string;
+    runId?: string;
+    runType?: string;
+    startTime?: string;
+    endTime?: string;
+    error?: boolean;
+    limit?: number;
+  },
+  signal?: AbortSignal,
+): Promise<{
+  body: Record<string, unknown>;
+  searchedProjects: string[];
+  skippedProjects: string[];
+  codingProject?: string;
+}> {
   const body: Record<string, unknown> = {
     limit: Math.min(Math.max(params.limit ?? 20, 1), 100),
     select: [
@@ -654,10 +1059,12 @@ function langsmithQueryBody(params: {
       "total_tokens",
       "total_cost",
       "app_path",
+      "session_id",
     ],
   };
-  if (params.projectName ?? process.env.LANGSMITH_PROJECT)
-    body.session = [params.projectName ?? process.env.LANGSMITH_PROJECT];
+  const { projectIds, searchedProjects, skippedProjects, codingProject } =
+    await resolveLangsmithProjectIds(params, signal);
+  if (projectIds.length > 0) body.session = projectIds;
   if (params.traceId) body.trace = params.traceId;
   if (params.runId) body.id = [params.runId];
   if (params.runType) body.run_type = params.runType;
@@ -665,7 +1072,7 @@ function langsmithQueryBody(params: {
   if (params.endTime) body.end_time = params.endTime;
   if (params.error === true) body.filter = 'eq(status, "error")';
   if (params.error === false) body.filter = 'neq(status, "error")';
-  return body;
+  return { body, searchedProjects, skippedProjects, codingProject };
 }
 
 async function executeLangsmith(
@@ -674,6 +1081,8 @@ async function executeLangsmith(
     runId?: string;
     traceId?: string;
     projectName?: string;
+    projectNames?: string[];
+    codingProject?: string;
     runType?: string;
     startTime?: string;
     endTime?: string;
@@ -697,13 +1106,19 @@ async function executeLangsmith(
     });
   }
 
+  const query = await langsmithQueryBody(params, signal);
   const result = await requestJson(new URL("/runs/query", LANGSMITH_API_BASE), {
     method: "POST",
     headers: langsmithHeaders(),
-    body: JSON.stringify(langsmithQueryBody(params)),
+    body: JSON.stringify(query.body),
     signal,
   });
-  return compactLangsmithRuns(result, maxChars);
+  return {
+    codingProject: query.codingProject ?? null,
+    searchedProjects: query.searchedProjects,
+    skippedProjects: query.skippedProjects,
+    runs: compactLangsmithRuns(result, maxChars),
+  };
 }
 
 function parseSentryIssueReference(
@@ -1111,7 +1526,7 @@ async function debugLangsmithAxiom(
   const runObj = asObject(runSummary);
   const metadata = asObject(runObj.metadata as JsonValue);
   const orgId = optionalString(metadata.orgId);
-  const datasetName = params.dataset ?? requiredEnv("AXIOM_DATASET");
+  const datasetName = axiomDatasetName(params.dataset);
   const padMinutes = params.padMinutes ?? 5;
   const padMs = Math.max(padMinutes, 0) * 60_000;
   const startTime = padIsoTime(runObj.startTime, -padMs);
@@ -1231,7 +1646,7 @@ async function debugSentryAxiomLangsmith(
       }))
     : null;
 
-  const datasetName = params.dataset ?? requiredEnv("AXIOM_DATASET");
+  const datasetName = axiomDatasetName(params.dataset);
   const padMinutes = params.padMinutes ?? 10;
   const padMs = Math.max(padMinutes, 0) * 60_000;
   const startTime = padIsoTime(event && asObject(event).dateCreated, -padMs);
@@ -1307,6 +1722,269 @@ async function executeDebugObservability(
   throw new Error(`Unsupported debug_observability action: ${params.action}`);
 }
 
+type FreightDebugAction =
+  | "findShipmentRun"
+  | "langsmithFromAxiomRunId"
+  | "explainBookingEvidence";
+
+type FreightDebugParams = DebugOptions & {
+  action?: FreightDebugAction;
+  shipmentRef?: string;
+  salesOrder?: string;
+  vendor?: string;
+  runId?: string;
+  requestId?: string;
+  startTime?: string;
+  endTime?: string;
+};
+
+function rowLog(row: JsonObject): JsonObject {
+  const data = asObject(row.data);
+  if (data.message || data.runId || data.requestId || data.orgId) return data;
+  return row;
+}
+
+function rowPayload(row: JsonObject): JsonObject {
+  return asObject(rowLog(row).data);
+}
+
+function compactLineItems(payload: JsonObject): JsonValue {
+  const requestBody = asObject(payload.requestBody);
+  const lineItems = Array.isArray(requestBody.lineItems)
+    ? requestBody.lineItems
+    : Array.isArray(payload.lineItems)
+      ? payload.lineItems
+      : [];
+  return lineItems.map((item, index) => {
+    const obj = asObject(item as JsonValue);
+    return {
+      index,
+      description: obj.description ?? null,
+      freightClass: obj.freightClass ?? null,
+      nmfcItemCode: obj.nmfcItemCode ?? null,
+      nmfcSubCode: obj.nmfcSubCode ?? null,
+      totalWeight: obj.totalWeight ?? null,
+      dimensions: {
+        length: obj.length ?? null,
+        width: obj.width ?? null,
+        height: obj.height ?? null,
+      },
+      pieces: obj.pieces ?? null,
+      units: obj.units ?? null,
+    };
+  }) as JsonValue;
+}
+
+function compactFreightRow(row: JsonObject, maxChars: number): JsonObject {
+  const log = rowLog(row);
+  const payload = rowPayload(row);
+  const requestBody = asObject(payload.requestBody);
+  const responseBody = asObject(payload.responseBody);
+  return {
+    time: getFirst(row._time, log._time),
+    message: getFirst(log.message, payload.code),
+    requestId: log.requestId ?? null,
+    runId: log.runId ?? null,
+    orgId: log.orgId ?? null,
+    code: payload.code ?? null,
+    shipmentRef: getFirst(
+      payload.shipmentRefNumber,
+      payload.shipperReferenceNumber,
+      requestBody.shipmentIdentifiers,
+      responseBody.shipmentIdentifiers,
+    ),
+    vendor: getFirst(payload.vendor, payload.platform),
+    carrier: getFirst(payload.carrierName, payload.carrierScac),
+    price: payload.price ?? asObject(payload.responseBody).totalCost ?? null,
+    quoteIndex: payload.quoteIndex ?? null,
+    quoteId: getFirst(payload.quoteId, requestBody.quoteId),
+    requestLineItems:
+      Object.keys(requestBody).length > 0
+        ? compactLineItems(payload)
+        : undefined,
+    identifiers: previewValue(
+      getFirst(
+        requestBody.shipmentIdentifiers,
+        responseBody.shipmentIdentifiers,
+      ),
+      maxChars,
+    ),
+    payloadPreview: previewValue(payload, maxChars),
+  };
+}
+
+function selectedFreightRows(rows: JsonObject[]): JsonObject[] {
+  const interesting = rows.filter((row) => {
+    const text = JSON.stringify(row);
+    return /rate_booked|P1_DISPATCH|dispatchShipment|bookShipment|Starting runWilsonV3|Starting getRatesWorkflow|rate_quoted/i.test(
+      text,
+    );
+  });
+  return interesting.length > 0 ? interesting : rows;
+}
+
+async function fetchShipmentRows(
+  params: FreightDebugParams,
+  signal?: AbortSignal,
+): Promise<{ dataset: string; apl: string; rows: JsonObject[] }> {
+  const datasetName = axiomDatasetName(params.dataset);
+  const primaryValues = uniqueStrings([
+    params.shipmentRef,
+    params.salesOrder,
+    params.runId,
+    params.requestId,
+  ]);
+  const searchValues =
+    primaryValues.length > 0 ? primaryValues : uniqueStrings([params.vendor]);
+  if (searchValues.length === 0) {
+    throw new Error(
+      "freight_debug requires at least one of shipmentRef, salesOrder, vendor, runId, or requestId.",
+    );
+  }
+  const limit = Math.min(Math.max(params.limit ?? 200, 1), 500);
+  const baseWhere = containsDataClause(searchValues);
+  const vendorWhere = params.vendor
+    ? ` and tostring(['data']) contains ${aplString(params.vendor)}`
+    : "";
+  const apl = `${datasetApl(datasetName)} | where ${baseWhere}${vendorWhere} | order by _time asc | limit ${limit}`;
+  const result = await runAxiomApl(
+    apl,
+    { startTime: params.startTime, endTime: params.endTime },
+    signal,
+  );
+  return { dataset: datasetName, apl, rows: extractAxiomRows(result) };
+}
+
+function chooseBookingRunId(rows: JsonObject[]): string | undefined {
+  const booked = rows.find((row) =>
+    JSON.stringify(row).includes("rate_booked"),
+  );
+  const p1 = rows.find((row) =>
+    JSON.stringify(row).includes("P1_DISPATCH_RESPONSE"),
+  );
+  return optionalString(rowLog(booked ?? p1 ?? rows[0] ?? {}).runId);
+}
+
+async function executeFreightDebug(
+  params: FreightDebugParams,
+  signal?: AbortSignal,
+): Promise<JsonValue> {
+  const action = params.action ?? "findShipmentRun";
+  const output = outputMode(params.output);
+  const maxChars = defaultMaxChars(output, params.maxChars, 800, 1_500);
+  const maxRows = defaultMaxRows(output, params.maxRows, 20, 40);
+
+  if (action === "langsmithFromAxiomRunId") {
+    if (!params.runId) throw new Error("Pass runId to fetch LangSmith.");
+    return debugLangsmithAxiom(
+      {
+        ...params,
+        runId: params.runId,
+        output,
+        maxRows,
+        maxChars,
+      },
+      signal,
+    );
+  }
+
+  const { dataset, apl, rows } = await fetchShipmentRows(params, signal);
+  const selectedRows = selectedFreightRows(rows);
+  const runId = chooseBookingRunId(selectedRows);
+  const requestIds = uniqueStrings(
+    selectedRows.map((row) => rowLog(row).requestId),
+  );
+  const runIds = uniqueStrings(selectedRows.map((row) => rowLog(row).runId));
+  const compactRows = selectedRows
+    .slice(0, maxRows)
+    .map((row) => compactFreightRow(row, maxChars));
+
+  const langsmith = runId
+    ? await fetchLangsmithRun(runId, signal)
+        .then((run) =>
+          compactLangsmithRun(run, {
+            view: output === "verbose" ? "messages" : "summary",
+            maxChars,
+          }),
+        )
+        .catch((err) => ({
+          error: err instanceof Error ? err.message : String(err),
+        }))
+    : null;
+
+  const dispatchRequestRows = selectedRows.filter((row) =>
+    JSON.stringify(row).includes("P1_DISPATCH_REQUEST"),
+  );
+  const dispatchResponseRows = selectedRows.filter((row) =>
+    JSON.stringify(row).includes("P1_DISPATCH_RESPONSE"),
+  );
+  const requestItems = dispatchRequestRows.flatMap((row) => {
+    const items = compactLineItems(rowPayload(row));
+    return Array.isArray(items) ? items : [];
+  });
+  const nullNmfcItems = requestItems.filter(
+    (item) => isJsonObject(item) && item.nmfcItemCode == null,
+  );
+  const hasNmfcInContext = rows.some((row) =>
+    /NMFC|nmfcItemCode|nmfcNumber/i.test(JSON.stringify(row)),
+  );
+
+  const evidence: JsonObject = {
+    dataset,
+    search: {
+      shipmentRef: params.shipmentRef ?? null,
+      salesOrder: params.salesOrder ?? null,
+      vendor: params.vendor ?? null,
+      startTime: params.startTime ?? null,
+      endTime: params.endTime ?? null,
+    },
+    bestRunId: runId ?? null,
+    runIds,
+    requestIds,
+    rowsMatched: rows.length,
+    selectedRows: compactRows,
+    omittedSelectedRows: Math.max(0, selectedRows.length - compactRows.length),
+    langsmith,
+    apl,
+  };
+
+  if (action === "explainBookingEvidence") {
+    evidence.explanation = {
+      finding:
+        nullNmfcItems.length > 0
+          ? "Provider dispatch line items had null nmfcItemCode."
+          : "No null nmfcItemCode found in selected provider dispatch rows.",
+      likelyCause:
+        nullNmfcItems.length > 0 && hasNmfcInContext
+          ? "The shipment context had NMFC evidence, but the provider booking request replayed quote-token line items that lacked the base NMFC item code. Compare selected quote-token/request rows against shipment commodity rows before editing code."
+          : null,
+      requestLineItems: requestItems,
+      nullNmfcItemCount: nullNmfcItems.length,
+      dispatchRequestCount: dispatchRequestRows.length,
+      dispatchResponseCount: dispatchResponseRows.length,
+    };
+  }
+
+  return evidence;
+}
+
+function recipeText(name: string, datasetName: string): string {
+  const ds = datasetApl(datasetName);
+  const recipes: Record<string, string> = {
+    shipmentLifecycle: `${ds} | where tostring(['data']) contains '<SHP-REF>' or tostring(['data']) contains '<SO-NUMBER>' | project _time, data | order by _time asc | limit 100`,
+    bookingEvent: `${ds} | where tostring(['data']) contains '<SHP-REF>' | where tostring(['data']) contains 'rate_booked' or tostring(['data']) contains 'DISPATCH' or tostring(['data']) contains 'bookShipment' | project _time, data | order by _time asc | limit 100`,
+    providerRequestResponse: `${ds} | where tostring(['data']) contains '<REQUEST-ID>' | where tostring(['data']) contains 'REQUEST' or tostring(['data']) contains 'RESPONSE' | project _time, data | order by _time asc | limit 50`,
+    correlateRun: `${ds} | where tostring(['data']) contains '<RUN-ID>' or tostring(['data']) contains '<REQUEST-ID>' | project _time, data | order by _time asc | limit 100`,
+    nmfcBooking: `${ds} | where tostring(['data']) contains '<SHP-REF>' | where tostring(['data']) contains 'nmfc' or tostring(['data']) contains 'lineItems' or tostring(['data']) contains 'DISPATCH_REQUEST' | project _time, data | order by _time asc | limit 100`,
+  };
+  return (
+    recipes[name] ??
+    Object.entries(recipes)
+      .map(([key, value]) => `${key}:\n${value}`)
+      .join("\n\n")
+  );
+}
+
 export default function observabilityTools(pi: ExtensionAPI) {
   pi.registerTool({
     name: "axiom",
@@ -1326,13 +2004,13 @@ export default function observabilityTools(pi: ExtensionAPI) {
       apl: Type.Optional(
         Type.String({
           description:
-            "APL query. Required for action='apl'. Example: ['paperclip'] | where ['level'] == 'error' | limit 20",
+            "APL query. Required for action='apl'. Example: ['app'] | where ['level'] == 'error' | limit 20",
         }),
       ),
       dataset: Type.Optional(
         Type.String({
           description:
-            "Dataset name. Defaults to AXIOM_DATASET. Used by action='datasetQuery' or inside your APL if supplied manually.",
+            "Dataset name. Defaults by detected coding project (cartage-agent→REDACTED-DATASET-NAME, ai-employees/agents→cartage-ai-employees), then AXIOM_DATASET. Used by action='datasetQuery' or inside your APL if supplied manually.",
         }),
       ),
       query: Type.Optional(
@@ -1379,6 +2057,12 @@ export default function observabilityTools(pi: ExtensionAPI) {
       maxChars: Type.Optional(
         Type.Number({ description: "Maximum characters per large field." }),
       ),
+      selectFields: Type.Optional(
+        Type.Array(Type.String(), {
+          description:
+            "Optional JSON/dot paths to return from each matched row instead of a summary, e.g. ['_time','data.message','data.runId','data.data.requestBody.lineItems'].",
+        }),
+      ),
     }),
     async execute(_toolCallId, params, signal) {
       const result = await executeAxiom(params, signal);
@@ -1397,7 +2081,7 @@ export default function observabilityTools(pi: ExtensionAPI) {
     promptSnippet: "Fetch/list LangSmith runs",
     promptGuidelines: [
       "Use langsmith for LangSmith runs/traces. Prefer output='compact' unless the user explicitly asks for verbose/raw details.",
-      "Use action='getRun' for a known run id and action='listRuns' for trace/project/time filters.",
+      "Use action='getRun' for a known run id and action='listRuns' for trace/project/time filters. By default listRuns maps the current coding project to LangSmith (cartage-agent→agent-production, ai-employees→employees-production), then falls back to known production projects. Use projectName/projectNames to override or codingProject to choose a mapped codebase explicitly.",
       "Do not call langsmith after debug_observability unless the user asks for deeper trace inspection.",
       "Never print LangSmith API keys; this tool reads LANGSMITH_API_KEY from the environment.",
     ],
@@ -1417,7 +2101,22 @@ export default function observabilityTools(pi: ExtensionAPI) {
         }),
       ),
       projectName: Type.Optional(
-        Type.String({ description: "LangSmith project/session name or id." }),
+        Type.String({
+          description:
+            "LangSmith project/session name or id. Comma-separated names are accepted.",
+        }),
+      ),
+      projectNames: Type.Optional(
+        Type.Array(Type.String(), {
+          description:
+            "LangSmith project/session names or ids to search together. Overrides coding-project mapping. Defaults map cwd when recognized, otherwise include agent-production and employees-production when available.",
+        }),
+      ),
+      codingProject: Type.Optional(
+        Type.String({
+          description:
+            "Coding project key to map to LangSmith projects, e.g. cartage-agent -> agent-production, ai-employees -> employees-production. Defaults to current cwd detection.",
+        }),
       ),
       runType: Type.Optional(
         Type.String({
@@ -1613,7 +2312,8 @@ export default function observabilityTools(pi: ExtensionAPI) {
       ),
       dataset: Type.Optional(
         Type.String({
-          description: "Axiom dataset name. Defaults to AXIOM_DATASET.",
+          description:
+            "Axiom dataset name. Defaults by detected coding project, then AXIOM_DATASET.",
         }),
       ),
       padMinutes: Type.Optional(
@@ -1659,12 +2359,129 @@ export default function observabilityTools(pi: ExtensionAPI) {
     },
   });
 
+  pi.registerTool({
+    name: "freight_debug",
+    label: "Freight Debug",
+    description:
+      "Parent workflow for freight/shipment observability. Finds booking/rate runs, fetches correlated LangSmith, and summarizes provider request evidence without giant raw logs.",
+    promptSnippet: "Find freight shipment booking/rate run and evidence",
+    promptGuidelines: [
+      "Use freight_debug before raw Axiom/LangSmith when the user asks to find a run for a shipment, sales order, carrier booking, or freight provider issue.",
+      "Use action='findShipmentRun' for run discovery, action='explainBookingEvidence' for field mismatch questions like missing NMFC, and action='langsmithFromAxiomRunId' when you already have an Axiom/LangSmith run id.",
+      "The tool strips noisy execution summaries and redacts tokens; use raw axiom only for deeper inspection after this summary.",
+    ],
+    parameters: Type.Object({
+      action: Type.Optional(
+        Type.Union(
+          [
+            Type.Literal("findShipmentRun"),
+            Type.Literal("langsmithFromAxiomRunId"),
+            Type.Literal("explainBookingEvidence"),
+          ],
+          {
+            description: "Freight debug workflow. Defaults to findShipmentRun.",
+          },
+        ),
+      ),
+      shipmentRef: Type.Optional(
+        Type.String({ description: "Shipment reference, e.g. SHP-094." }),
+      ),
+      salesOrder: Type.Optional(
+        Type.String({ description: "Sales order / PO, e.g. SO13093." }),
+      ),
+      vendor: Type.Optional(
+        Type.String({
+          description: "Provider/vendor hint, e.g. priority1 or P1.",
+        }),
+      ),
+      runId: Type.Optional(
+        Type.String({ description: "Axiom/LangSmith run id to correlate." }),
+      ),
+      requestId: Type.Optional(
+        Type.String({ description: "Request id to correlate." }),
+      ),
+      startTime: Type.Optional(
+        Type.String({ description: "Optional Axiom startTime." }),
+      ),
+      endTime: Type.Optional(
+        Type.String({ description: "Optional Axiom endTime." }),
+      ),
+      dataset: Type.Optional(
+        Type.String({
+          description:
+            "Axiom dataset. Defaults by detected coding project, then AXIOM_DATASET.",
+        }),
+      ),
+      limit: Type.Optional(
+        Type.Number({ description: "Max Axiom rows to request." }),
+      ),
+      output: Type.Optional(
+        Type.Union([Type.Literal("compact"), Type.Literal("verbose")], {
+          description: "Output shape. Defaults to compact.",
+        }),
+      ),
+      maxRows: Type.Optional(
+        Type.Number({ description: "Max selected rows returned." }),
+      ),
+      maxChars: Type.Optional(
+        Type.Number({ description: "Max chars per preview field." }),
+      ),
+    }),
+    async execute(_toolCallId, params, signal) {
+      const result = await executeFreightDebug(params, signal);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        details: { result },
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "observability_recipe",
+    label: "Observability Recipe",
+    description:
+      "Return saved Axiom query recipes for common production-debug workflows without spending context on failed query attempts.",
+    promptSnippet: "Get saved Axiom query recipes",
+    promptGuidelines: [
+      "Use observability_recipe when you need a common Axiom query shape: shipment lifecycle, booking event, provider request/response, run correlation, or NMFC booking evidence.",
+      "Prefer freight_debug for executed freight investigations; recipes are for custom follow-up queries.",
+    ],
+    parameters: Type.Object({
+      name: Type.Optional(
+        Type.Union(
+          [
+            Type.Literal("shipmentLifecycle"),
+            Type.Literal("bookingEvent"),
+            Type.Literal("providerRequestResponse"),
+            Type.Literal("correlateRun"),
+            Type.Literal("nmfcBooking"),
+          ],
+          { description: "Recipe name. Omit to list all recipes." },
+        ),
+      ),
+      dataset: Type.Optional(
+        Type.String({
+          description:
+            "Dataset name. Defaults by detected coding project, then AXIOM_DATASET.",
+        }),
+      ),
+    }),
+    async execute(_toolCallId, params) {
+      const datasetName = axiomDatasetName(params.dataset);
+      const result = recipeText(params.name ?? "all", datasetName);
+      return {
+        content: [{ type: "text", text: result }],
+        details: { result },
+      };
+    },
+  });
+
   pi.registerCommand("observability-status", {
     description:
       "Show whether Axiom and LangSmith environment variables are configured.",
     handler: async (_args, ctx) => {
       const lines = [
-        `Axiom: ${process.env.AXIOM_API_TOKEN ? "AXIOM_API_TOKEN set" : "missing AXIOM_API_TOKEN"}, dataset ${process.env.AXIOM_DATASET ?? "missing AXIOM_DATASET"}, org/project ${process.env.AXIOM_ORG_ID ?? process.env.AXIOM_PROJECT_ID ?? "cartage-q438"}`,
+        `Axiom: ${process.env.AXIOM_API_TOKEN ? "AXIOM_API_TOKEN set" : "missing AXIOM_API_TOKEN"}, dataset ${axiomDatasetDisplay()}, org/project ${process.env.AXIOM_ORG_ID ?? process.env.AXIOM_PROJECT_ID ?? "cartage-q438"}`,
         `LangSmith: ${process.env.LANGSMITH_API_KEY ? "LANGSMITH_API_KEY set" : "missing LANGSMITH_API_KEY"}`,
         `Sentry: ${process.env.SENTRY_AUTH_TOKEN ? "SENTRY_AUTH_TOKEN set" : "missing SENTRY_AUTH_TOKEN"}, org ${process.env.SENTRY_ORG_SLUG ?? process.env.SENTRY_ORGANIZATION_SLUG ?? "from issue URL"}`,
         `Bases: AXIOM_API_BASE=${AXIOM_API_BASE}, LANGSMITH_ENDPOINT=${LANGSMITH_API_BASE}, SENTRY_API_BASE=${SENTRY_API_BASE}`,

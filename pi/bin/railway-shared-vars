@@ -1,0 +1,248 @@
+#!/usr/bin/env python3
+"""Promote Railway variables to shared variables and point services at them.
+
+Examples:
+  railway-shared-vars \
+    --environment production \
+    --service stan --service kelly --service dashboard \
+    --copy stan:AXIOM_TOKEN \
+    --set AXIOM_DATASET=cartage-ai-employees \
+    --set AXIOM_ORG_ID=cartage-q438
+
+The script uses Railway's CLI for project/environment/service discovery and
+Railway GraphQL for shared-variable upserts, because the public CLI can set
+service variables but does not expose a direct shared-variable upsert command.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+from typing import Any
+
+GRAPHQL_URL = "https://backboard.railway.com/graphql/v2"
+MUTATION = """mutation VariableCollectionUpsert($input: VariableCollectionUpsertInput!) {
+  variableCollectionUpsert(input: $input)
+}"""
+
+
+def main() -> int:
+    args = parse_args()
+    project_id, environment_id = resolve_project_environment(args.environment)
+    services = resolve_services(args.services, args.environment)
+    access_token = railway_access_token()
+
+    shared_vars: dict[str, str] = {}
+    for assignment in args.sets:
+        key, value = parse_assignment(assignment)
+        shared_vars[key] = value
+
+    for copy_spec in args.copies:
+        service, key = parse_copy(copy_spec)
+        value = read_service_variable(service, key, args.environment)
+        if value is None:
+            die(f"{service} does not define {key}")
+        shared_vars[key] = value
+
+    if not shared_vars:
+        die("no variables supplied; use --set KEY=VALUE or --copy SERVICE:KEY")
+
+    graphql_upsert(
+        access_token,
+        {
+            "projectId": project_id,
+            "environmentId": environment_id,
+            "variables": shared_vars,
+            "skipDeploys": args.skip_deploys,
+        },
+    )
+    print(f"shared variables upserted: {format_keys(shared_vars)}")
+
+    refs = {key: f"${{{{shared.{key}}}}}" for key in shared_vars}
+    for service_name in args.services:
+        service_id = services.get(service_name)
+        if not service_id:
+            die(f"service {service_name!r} not found in Railway environment")
+        graphql_upsert(
+            access_token,
+            {
+                "projectId": project_id,
+                "environmentId": environment_id,
+                "serviceId": service_id,
+                "variables": refs,
+                "skipDeploys": args.skip_deploys,
+            },
+        )
+        print(f"{service_name} now references shared variables: {format_keys(refs)}")
+
+    return 0
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Promote Railway vars to shared vars and wire service references.")
+    parser.add_argument("--environment", "-e", default="production", help="Railway environment name or id")
+    parser.add_argument("--service", dest="services", action="append", required=True, help="Service to point at shared vars; repeatable")
+    parser.add_argument("--set", dest="sets", action="append", default=[], metavar="KEY=VALUE", help="Shared variable value to upsert; repeatable")
+    parser.add_argument("--copy", dest="copies", action="append", default=[], metavar="SERVICE:KEY", help="Copy a variable value from an existing service into shared vars; repeatable")
+    parser.add_argument("--deploy", dest="skip_deploys", action="store_false", help="Trigger Railway deploys after variable changes")
+    parser.set_defaults(skip_deploys=True)
+    return parser.parse_args()
+
+
+def resolve_project_environment(environment: str) -> tuple[str, str]:
+    status = run_json(["railway", "status", "--json"])
+    project_id = status.get("projectId") or status.get("project", {}).get("id")
+    environment_id = status.get("environmentId") or status.get("environment", {}).get("id")
+
+    if project_id and environment_id:
+        return str(project_id), str(environment_id)
+
+    config = run_json(["railway", "environment", "config", "--environment", environment, "--json"])
+    project_id = config.get("projectId")
+    environment_id = config.get("environmentId")
+    if project_id and environment_id:
+        return str(project_id), str(environment_id)
+
+    # Linked-project config is stable across Railway CLI versions and fills gaps in `status --json`.
+    linked = linked_project_config(Path.cwd())
+    if linked:
+        return linked["project"], linked["environment"]
+
+    die("could not resolve Railway project/environment IDs")
+
+
+def resolve_services(service_names: list[str], environment: str) -> dict[str, str]:
+    services = run_json(["railway", "service", "list", "--environment", environment, "--json"])
+    by_name = {service["name"]: service["id"] for service in services if service.get("name") and service.get("id")}
+    missing = [name for name in service_names if name not in by_name]
+    if missing:
+        die(f"missing Railway services: {', '.join(missing)}")
+    return by_name
+
+
+def railway_access_token() -> str:
+    if token := os.environ.get("RAILWAY_API_TOKEN"):
+        return token
+
+    config_path = Path.home() / ".railway" / "config.json"
+    try:
+        config = json.loads(config_path.read_text())
+    except FileNotFoundError:
+        die("~/.railway/config.json not found; run `railway login` or set RAILWAY_API_TOKEN")
+    token = config.get("user", {}).get("accessToken")
+    if not token:
+        die("Railway access token not found; run `railway login` or set RAILWAY_API_TOKEN")
+    return token
+
+
+def read_service_variable(service: str, key: str, environment: str) -> str | None:
+    variables = run_json(["railway", "variable", "list", "--service", service, "--environment", environment, "--json"])
+    value = variables.get(key)
+    if value == f"${{{{shared.{key}}}}}":
+        shared = run_json(["railway", "environment", "config", "--environment", environment, "--json"]).get("sharedVariables", {})
+        raw = shared.get(key)
+        if isinstance(raw, dict):
+            value = raw.get("value")
+    return value if isinstance(value, str) and value else None
+
+
+def graphql_upsert(access_token: str, input_payload: dict[str, Any]) -> None:
+    body = json.dumps({"query": MUTATION, "variables": {"input": input_payload}})
+    with tempfile.NamedTemporaryFile("w", delete=False) as body_file:
+        body_file.write(body)
+        body_path = body_file.name
+
+    try:
+        output = subprocess.check_output(
+            [
+                "curl",
+                "-fsS",
+                GRAPHQL_URL,
+                "-H",
+                f"Authorization: Bearer {access_token}",
+                "-H",
+                "Content-Type: application/json",
+                "--data-binary",
+                f"@{body_path}",
+            ],
+            text=True,
+            stderr=subprocess.PIPE,
+        )
+    except subprocess.CalledProcessError as error:
+        die(f"Railway GraphQL request failed:\n{error.stderr.strip()}")
+    finally:
+        try:
+            Path(body_path).unlink()
+        except FileNotFoundError:
+            pass
+
+    payload = json.loads(output)
+    if payload.get("errors"):
+        die(f"Railway GraphQL errors: {payload['errors']}")
+
+
+def run_json(command: list[str]) -> Any:
+    try:
+        output = subprocess.check_output(command, text=True, stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as error:
+        die(f"command failed: {' '.join(command)}\n{error.stderr.strip()}")
+    try:
+        return json.loads(output)
+    except json.JSONDecodeError:
+        die(f"command did not return JSON: {' '.join(command)}")
+
+
+def linked_project_config(cwd: Path) -> dict[str, str] | None:
+    config_path = Path.home() / ".railway" / "config.json"
+    try:
+        projects = json.loads(config_path.read_text()).get("projects", {})
+    except FileNotFoundError:
+        return None
+
+    candidates = []
+    for value in projects.values():
+        project_path = value.get("projectPath")
+        if project_path and str(cwd).startswith(project_path):
+            candidates.append((len(project_path), value))
+    if not candidates:
+        return None
+    return max(candidates, key=lambda item: item[0])[1]
+
+
+def parse_assignment(value: str) -> tuple[str, str]:
+    if "=" not in value:
+        die(f"invalid --set value {value!r}; expected KEY=VALUE")
+    key, raw = value.split("=", 1)
+    if not key:
+        die(f"invalid --set value {value!r}; key is empty")
+    return key, raw
+
+
+def parse_copy(value: str) -> tuple[str, str]:
+    if ":" not in value:
+        die(f"invalid --copy value {value!r}; expected SERVICE:KEY")
+    service, key = value.split(":", 1)
+    if not service or not key:
+        die(f"invalid --copy value {value!r}; expected SERVICE:KEY")
+    return service, key
+
+
+def format_keys(values: dict[str, str]) -> str:
+    return ", ".join(f"{key}=<set>" if secretish(key) else f"{key}={value}" for key, value in sorted(values.items()))
+
+
+def secretish(key: str) -> bool:
+    return any(part in key.upper() for part in ["TOKEN", "KEY", "SECRET", "PASSWORD"])
+
+
+def die(message: str) -> None:
+    print(message, file=sys.stderr)
+    raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

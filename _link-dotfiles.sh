@@ -59,6 +59,7 @@ done
 mkdir -p ~/.pi/agent ~/.pi/agent/bin ~/.pi/agent/extensions ~/.pi/agent/prompts ~/.pi/agent/skills ~/.pi/agent/themes
 ln -sf "$DOTFILES_DIR/pi/AGENTS.md" ~/.pi/agent/AGENTS.md
 ln -sf "$DOTFILES_DIR/pi/settings.json" ~/.pi/agent/settings.json
+ln -sf "$DOTFILES_DIR/pi/models.json" ~/.pi/agent/models.json
 ln -sf "$DOTFILES_DIR/pi/keybindings.json" ~/.pi/agent/keybindings.json
 for f in "$DOTFILES_DIR/pi/extensions/"*.ts "$DOTFILES_DIR/pi/extensions/"*.js; do
   [ -e "$f" ] || continue

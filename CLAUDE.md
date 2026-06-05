@@ -23,7 +23,7 @@ This file is the project memory layer for Claude — it captures the gotchas and
 - `~/.config/ghostty/config` → `ghostty/config` (primary terminal — replaced Alacritty 2026-05-27 over recurring memory-leak crashes; see alacritty/alacritty#8727)
 - `~/.tmux.conf`, `~/.tmux/tmux-status.sh` → `tmux/` (lane-orchestration `~/.tmux/agent-board.sh` now owned by [wt-lanes](https://github.com/gitpancake/wt-lanes))
 - `~/.claude/CLAUDE.md`, `settings.json`, `agents/`, `commands/`, `hooks/`, `scripts/`, `skills/`, `bin/` → `claude/` (some `hooks/`, `scripts/`, `bin/` entries now come from wt-lanes — both repos write into the same target dirs)
-- `~/.pi/agent/AGENTS.md`, `settings.json`, `keybindings.json`, `extensions/`, `prompts/`, `skills/`, `themes/`, `bin/` → `pi/`; private Pi runtime state stays outside git (`auth.json`, `.env.local`, `sessions/`, `npm/`, `git/`, `~/.pi/paperclips/`)
+- `~/.pi/agent/AGENTS.md`, `settings.json`, `keybindings.json`, `extensions/`, `prompts/`, `skills/`, `themes/`, `bin/` → `pi/`; private Pi runtime state stays outside git (`auth.json`, `.env.local`, `sessions/`, `npm/`, `git/`)
 - `~/.dotfiles/scripts/*` is on PATH via `.zshenv` so `slack-watch`, `slack-tldr` etc. resolve from any cwd
 - `~/Library/LaunchAgents/local.*.plist` → `claude/local.*.plist` (user agents)
 - focus-guard plists are **LaunchDaemons** — `install-mac.sh`/`rewire-symlinks.sh` *copy* (not symlink) `focus-guard/local.focus-*.plist` → `/Library/LaunchDaemons/` (root) and `bootstrap` them; scripts copied to `/usr/local/bin`. Editing the repo files does **not** hot-update — re-run install or `sudo rewire-symlinks.sh`.

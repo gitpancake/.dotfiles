@@ -39,7 +39,7 @@ through ALL integration layers end-to-end, NOT a horizontal slice of one layer.
 Slices may be 'HITL' or 'AFK'. HITL slices require human interaction — an architectural
 decision, a design review. AFK slices can be implemented and merged without it. Prefer AFK
 over HITL where possible. HITL/AFK maps onto how the slice gets picked up: an AFK slice is a
-fire-and-forget `wt <slug>` lane; a HITL slice is worked interactively.
+clear `/pickup <slug> <base>` candidate; a HITL slice stays interactive in the current Pi session.
 
 <vertical-slice-rules>
 - Each slice delivers a narrow but COMPLETE path through every layer (schema, API, UI, tests)

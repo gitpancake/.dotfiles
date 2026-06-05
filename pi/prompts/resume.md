@@ -5,7 +5,7 @@ argument-hint: "[--slim|--full] [handoff description]"
 
 # /resume $ARGUMENTS
 
-Resume from `~/.claude/handoffs/` in this Pi session. Do not spawn a lane, worktree, or child agent. Continue inline.
+Resume from a handoff in this Pi session. Do not start external workers or child agents. Continue inline.
 
 ## Parse
 
@@ -16,7 +16,7 @@ Resume from `~/.claude/handoffs/` in this Pi session. Do not spawn a lane, workt
 
 ## Find handoff
 
-Use `ls -t ~/.claude/handoffs/*.md 2>/dev/null`.
+Use `ls -t ~/.pi/agent/handoffs/*.md 2>/dev/null`.
 
 - None: report no handoffs and stop.
 - No description: use latest.

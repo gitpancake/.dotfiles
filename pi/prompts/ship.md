@@ -40,9 +40,15 @@ Run `git push -u origin HEAD`.
 
 If rejected, use `git pull --rebase` only when the state is straightforward. Surface conflicts and stop rather than silently resolving.
 
-## 3. Optional local ticket / Linear link
+## 3. Required local ticket / Linear link
 
-If this repo uses `~/.dotfiles/scripts/linear-ticket.py` and a local brief is found for the branch, reuse its existing `linear:` frontmatter.
+Every shipped PR must have a real Linear issue and link. No placeholder IDs (`ENG-`, `AE-`, `XXXX`) and no `N/A` ticket sections.
+
+If this repo uses `~/.dotfiles/scripts/linear-ticket.py` and a local brief is found for the branch:
+
+- Reuse its existing `linear:` frontmatter only when it is a real identifier like `AE-2048`.
+- If the frontmatter is empty, YAML/object-shaped metadata, or otherwise not a real identifier, create a new ticket.
+- After creating a ticket, update the local brief frontmatter to `linear: AE-NNNN`.
 
 If no linked ticket exists, create one only through the authorized command:
 
@@ -55,31 +61,77 @@ LINEAR_TICKET_CREATE_OK=1 ~/.dotfiles/scripts/linear-ticket.py create \
   --auto-body origin/main
 ```
 
-If this fails, continue without a Linear prefix. Do not block shipping on tracker failure.
+If ticket creation fails, stop and report the failure. Do not create or update a PR without a real Linear link unless the user explicitly says to ship without Linear.
 
 ## 4. PR body
 
-Use existing `.github/PULL_REQUEST_TEMPLATE.md` if present. Otherwise:
+Use existing `.github/PULL_REQUEST_TEMPLATE.md` if present. Otherwise choose a body shape from the cached commit log and diff stat.
+
+Use the **small PR** shape only when the branch is narrowly scoped: a few files, no new integration/provider/workflow/schema surface, and no reviewer needs blast-radius reassurance.
 
 ```md
-## Changed
+Linear: <url>
+
+## Summary
+
+### Changed
 - <structural change>
 
-## Preserved
+### Preserved
 - <load-bearing behavior unchanged>
 
-## Test plan
-- [ ] <verification step>
+## Tests
+- <verification step and result>
+```
+
+Use the **large / platform / integration PR** shape when the diff adds or changes providers, external APIs, schemas, workflows, routing, auth, persistence, observability, generated tests, or crosses multiple subsystems.
+
+```md
+## Linear ticket
+
+[AE-NNNN](<url>)
+
+## Summary
+
+### Changed
+- <new capability or interface>
+- <wiring / schema / workflow change>
+- <operational behavior change>
+
+### Preserved
+- <existing behavior intentionally unchanged>
+- <compatibility / default / fallback behavior>
+- <blast-radius limit or no-new-dependency/index/migration note>
+
+## Automated tests added
+
+- `<test file>` — <behavior covered>.
+
+## Manual testing steps
+
+- `<command>` ✅
+- `<command>` ⚠️ <known existing failure or credential/staging blocker>
+- <post-credential or production smoke step, if applicable>
 ```
 
 Rules:
 
-- One-line bullets.
+- Prefer the large shape for anything reviewers may need to reason about; sparse PR bodies are only for obviously small changes.
+- Keep bullets one line where practical; allow short explanatory phrases for test coverage and manual blockers.
+- Always include `Changed` and `Preserved` for meaningful code changes.
+- List new/changed test files separately from commands when the diff is non-trivial.
 - No generated-by footer.
 - Derive from cached commit log and diff stat.
-- Include `Linear: <url>` only when an ID/url is known.
+- Include the Linear issue URL in the template's `## Linear ticket` section, or `Linear: <url>` when no template exists.
+- Never leave `[ENG-]`, `[AE-]`, `ENG-XXXX`, `AE-XXXX`, or `N/A` in the PR title/body.
 
-Create PR with `gh pr create`. Title <=70 chars; prefix `[AE-NNNN]` only when known.
+Create PR with `gh pr create`. Title <=70 chars; prefix `[AE-NNNN]` using the created/reused ticket ID.
+
+After PR creation, add the PR URL as a Linear comment using:
+
+```bash
+printf '%s\n' "PR: <pr-url>" | LINEAR_TICKET_CREATE_OK=1 ~/.dotfiles/scripts/linear-ticket.py comment --id AE-NNNN
+```
 
 ## 5. Review
 

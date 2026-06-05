@@ -59,7 +59,7 @@ Each top-level folder has its own README with the deep dive — this tree is jus
 
 **Symlinks, not copies.** Almost everything is `ln -sf`'d into `$HOME`. Edit the file in this repo, the change is live. Exception: focus-guard's `LaunchDaemon` plists are *copied* to `/Library/LaunchDaemons/` (root-owned), and the `claude/local.*.plist` files are *generated* into `~/Library/LaunchAgents/` with `DOTFILES_DIR_PLACEHOLDER` substituted — re-run `rewire-symlinks.sh` after editing those.
 
-**Private state lives outside the repo.** `~/.claude/org/<org>/`, `~/.pi/agent/auth.json`, `~/.pi/agent/.env.local`, `~/.pi/agent/sessions/`, `~/.pi/paperclips/`, `~/.zshenv.local`, `/etc/hosts.blocked`, `scripts/*.config.local` — all gitignored or system-side only. `.gitignore` is the source of truth for what stays out.
+**Private state lives outside the repo.** `~/.claude/org/<org>/`, `~/.pi/agent/auth.json`, `~/.pi/agent/.env.local`, `~/.pi/agent/sessions/`, `~/.zshenv.local`, `/etc/hosts.blocked`, `scripts/*.config.local` — all gitignored or system-side only. `.gitignore` is the source of truth for what stays out.
 
 **Lane workflow.** Parallel Claude lanes spawn via `wt <slug>` (claude/bin/wt). Each lane is fire-and-forget through to a PR. The `tmux/agent-board.sh` pane is the visible contract — one row per lane, color-coded by state. Full details in `claude/README.md`.
 

@@ -1,5 +1,5 @@
 {
-  "lastChangelogVersion": "0.78.0",
+  "lastChangelogVersion": "0.78.1",
   "theme": "gruvbox",
   "defaultProvider": "openai-codex",
   "defaultModel": "gpt-5.5",
@@ -8,7 +8,6 @@
     "~/.pi/agent/extensions"
   ],
   "skills": [
-    "~/.claude/skills",
     "~/.pi/agent/skills"
   ],
   "prompts": [
@@ -31,9 +30,8 @@
   },
   "enabledModels": [
     "openai-codex/gpt-5.5",
-    "gpt-5.5",
-    "claude-*",
-    "gemini-2*"
+    "trainloop/cartage/wilson-v1",
+    "gpt-5.5"
   ],
   "enableSkillCommands": true,
   "doubleEscapeAction": "tree"

@@ -6,8 +6,9 @@ model: sonnet
 
 # /ship $ARGUMENTS
 
-Commit → push → PR → trigger repo-appropriate review. PR body = **two bullet lists** (Changed / Preserved)
-+ test plan. No editorializing. Work lives in repo + local ticket tree.
+Commit → push → PR → trigger repo-appropriate review. PR body chooses **small** or **rich**
+shape from diff size/risk. Meaningful code PRs include Changed / Preserved + tests. Work lives
+in repo + local ticket tree.
 
 ## 0. Pre-flight (parallel)
 
@@ -69,27 +70,70 @@ implementation, assignee.
 5. **Script failure** (nonzero exit: no key, network, team not found) → reason on stderr.
    Log one line, set `AE_ID=""`, continue with no-prefix title. Don't block ship.
 
-## 3. PR body — tight bullet pattern
+## 3. PR body — choose sparse vs rich deliberately
 
-If `.github/PULL_REQUEST_TEMPLATE.md` exists, fill its sections with this bullet style.
-Default shape (prepend `Linear:` line only when `$AE_ID` non-empty):
+If `.github/PULL_REQUEST_TEMPLATE.md` exists, fill its sections with the shape below.
+Default to the rich shape when reviewers need context; sparse bodies are only for obviously
+small, single-purpose changes.
+
+### Small PR shape
+
+Use only when the branch touches a few files and does not add/change providers, external APIs,
+schemas, workflows, routing, auth, persistence, observability, or multi-subsystem behavior.
 
 ```
 Linear: https://linear.app/<workspace>/issue/AE-NNNN
 
-## Changed
+## Summary
+
+### Changed
 - <structural change>
 
-## Preserved
+### Preserved
 - <load-bearing behavior unchanged>
 
-## Test plan
-- [ ] <verification step>
+## Tests
+- <verification step and result>
 ```
 
-Rules: one-line bullets, no paragraphs. "Preserved" reassures reviewers blast radius is
-small. No emoji, no generated-with footer unless repo convention. Derive bullets from the
-**cached** `LOG_LINES` + `DIFF_STAT` from §0 — don't re-run git. Abstract, don't restate.
+### Large / platform / integration PR shape
+
+Use when the diff adds or changes integrations, providers, external APIs, schemas, workflows,
+routing, auth, persistence, observability, generated tests, or crosses multiple subsystems.
+
+```
+## Linear ticket
+
+[AE-NNNN](https://linear.app/<workspace>/issue/AE-NNNN)
+
+## Summary
+
+### Changed
+- <new capability or interface>
+- <wiring / schema / workflow change>
+- <operational behavior change>
+
+### Preserved
+- <existing behavior intentionally unchanged>
+- <compatibility / default / fallback behavior>
+- <blast-radius limit or no-new-dependency/index/migration note>
+
+## Automated tests added
+
+- `<test file>` — <behavior covered>.
+
+## Manual testing steps
+
+- `<command>` ✅
+- `<command>` ⚠️ <known existing failure or credential/staging blocker>
+- <post-credential or production smoke step, if applicable>
+```
+
+Rules: "Preserved" reassures reviewers blast radius is small. Keep bullets one line where
+practical; allow short phrases for test coverage and manual blockers. List new/changed test
+files separately from commands for non-trivial diffs. No emoji, no generated-with footer unless
+repo convention. Derive bullets from the **cached** `LOG_LINES` + `DIFF_STAT` from §0 — don't
+re-run git. Abstract, don't restate.
 
 Then `gh pr create`:
 - `--title`: `$AE_ID` non-empty → `[AE-NNNN] <desc>` (≤70 chars total).

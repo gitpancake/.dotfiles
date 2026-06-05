@@ -5,7 +5,7 @@ argument-hint: <free-text problem statement>
 
 # /scope $ARGUMENTS
 
-Create a pickable local brief under `$TICKETS_DIR` / `~/.claude/tickets`. Do not edit product code. The brief is the ticket.
+Create a pickable local brief under `${PI_TICKETS_DIR:-$HOME/.pi/tickets}`. Do not edit product code. The brief is the ticket.
 
 ## 1. Clarify
 
@@ -22,14 +22,16 @@ If the `grill-with-docs` skill is available and the problem is fuzzy or structur
 
 ## 2. Explore before drafting
 
-Read project `AGENTS.md` / `CLAUDE.md` first.
+Call `scope_ticket` with `action: "inspect"` first when available. It returns the local ticket root, areas, templates, and contract summary without spending context manually reading ticket README/template files. Fall back to reading `$TICKETS_DIR/README.md` and templates only if the tool is unavailable or errors.
+
+Read project `AGENTS.md` / `CLAUDE.md` first and translate any harness-specific instructions to Pi-native tools.
 
 Ground the brief with source inspection:
 
 - Find the closest existing mirror implementation before broad grep.
 - Name up to 8 starting files, each with a one-line reason.
 - Find callers/imports of affected symbols.
-- Quote applicable project gotchas from `CLAUDE.md` / `AGENTS.md`.
+- Quote applicable project gotchas from `AGENTS.md` / `CLAUDE.md`.
 - Check `CONTEXT.md` / glossary docs when domain terms are ambiguous.
 - List env vars, secrets, external setup, infra, and unknown prerequisites honestly. Never invent paths, symbols, env vars, or API names.
 
@@ -69,8 +71,8 @@ Render the full target path(s) and brief content. Stop. Wait for `go` or edits.
 
 ## 6. On `go`
 
-Create parent dirs and write the markdown file(s). Then report:
+Use `scope_ticket` with `action: "write"` when available to create the approved markdown brief; it validates the slug/area, creates parent dirs, and refuses overwrite. Fall back to `write` only if the tool is unavailable or errors. Then report:
 
-`Brief at <path>. Run wt <slug> or continue in Pi from the brief.`
+`Brief at <path>. Run /pickup <slug> . to continue in Pi.`
 
 Stop. Do not start implementation from `/scope` unless the user explicitly asks.
