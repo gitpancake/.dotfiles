@@ -27,7 +27,7 @@ Self-describe via Agent/skills schemas — don't list. Org preamble: known org c
 - **Single**: `/scope` → brief `<area>/<slug>.md` (grill-with-docs runs inside /scope, lanes do not re-grill). `wt <slug>` (or `/pickup <slug> <BASE> [ctx]`) → autonomous lane: reads brief, plans slices, opens `/tdd` for behavior-changing slices, commits per layer, auto-handoff at 120K ctx, `/ship`.
 - **Epic**: `/scope` → `<area>/<epic-slug>/_epic.md` + `NN-<child>.md`. `/epic <slug> <BASE> [ctx]` confirms order + spawns `wt --ralph`. Ralph: one story/iteration, fresh context, memory via git + `progress.txt` + `prd.json`. `epic-parse.sh` projects `_epic.md` → `prd.json`. Executes confirmed list, never decomposes.
 
-**Autonomous semantics.** `wt` = fire-and-forget. Stops only on: (1) PR opened + required repo review triggered or explicitly skipped, (2) blocker (ambiguity not in brief, repeated test fail same cause, missing cred). Tix repo review policy: only `cartage-agent` gets `@claude review`; other tix repos skip Claude review. Slice protocol + parallel gotchas: `~/.dotfiles/CLAUDE.md`.
+**Autonomous semantics.** `wt` = fire-and-forget. Stops only on: (1) PR opened + required repo review triggered or explicitly skipped, (2) blocker (ambiguity not in brief, repeated test fail same cause, missing cred). Tix repo review policy: Chuck reviews `cartage-agent` + `ai-employees` (tag `@chuck-noland-cartage review` on the PR); other repos skip review. Slice protocol + parallel gotchas: `~/.dotfiles/CLAUDE.md`.
 
 ## Session Start
 
@@ -89,7 +89,9 @@ Re-read every lane resume / loop iteration — compounds. Brief = context + acce
 
 ## Secrets / Env
 
-Need API key, token, or env var → check `.env.local` (project root) first, then `.env`. Don't ask the user for a value that's already there. Never hardcode secrets, never echo a full key to output/logs/commits — reference by name (`$OPENAI_API_KEY`), mask when shown. Missing from both → ask.
+Need API key, token, or env var → check `.env.local` (project root) first, then `.env`, then `~/.claude/.env` (cross-project shared keys — LangSmith, Axiom, etc; source with `set -a; . ~/.claude/.env; set +a`). Don't ask the user for a value that's already there. Never hardcode secrets, never echo a full key to output/logs/commits — reference by name (`$OPENAI_API_KEY`), mask when shown. Missing from all → ask.
+
+LangSmith REST: key is workspace-scoped — every request needs BOTH `-H "x-api-key: $LANGSMITH_API_KEY"` AND `-H "X-Tenant-Id: $LANGSMITH_WORKSPACE_ID"`, else `{"detail":"Forbidden"}`.
 
 ## Project CLAUDE.md
 

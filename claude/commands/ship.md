@@ -147,21 +147,22 @@ Capture URL.
 
 ## 4. Trigger review
 
-Tix project rule: only `cartage-agent` has Claude reviews. For tix tasks in any other repo, do not trigger `@claude review`; skip review and report that the repo has no Claude review convention.
-
-For `cartage-agent` only:
+Chuck (Railway PR reviewer) reviews PRs in the repos wired to his webhook + allowlist:
+`cartage-ai/cartage-agent` and `cartage-ai/ai-employees`. For a PR in either, tag Chuck:
 
 ```
-gh pr comment "$PR_NUM" --body "@claude review"
+gh pr comment "$PR_NUM" --body "@chuck-noland-cartage review"
 ```
 
-External review — results land in PR comments in ~2–5 min. Don't wait.
+Chuck reacts 👀 on the comment within ~1s, then posts a single COMMENT review (Opus) in
+~1–2 min, once per PR (loop-guarded). Don't wait. For repos outside that set, skip review
+and report no convention.
 
 ## 5. Report — terse
 
 ```
 PR: <url>
-Review: <triggered via @claude review for cartage-agent | skipped: no Claude review convention for this repo>
+Review: <triggered via @chuck-noland-cartage review for <repo> | skipped: Chuck does not review this repo>
 ```
 
 Clean nothing-to-do → say so in one line.

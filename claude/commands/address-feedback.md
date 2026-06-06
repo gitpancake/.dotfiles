@@ -26,10 +26,10 @@ Take an open PR, harvest every comment, triage into actionable feedback, write a
 
 Collect all comment surfaces, no pre-filter (`Comment scope: everything`):
 - **Issue comments** (`comments`) — general PR discussion.
-- **Review summaries** (`reviews[].body`) — includes the `@claude review` bot output.
-- **Inline review comments** — each with `file:line` + diff hunk.
+- **Review summaries** (`reviews[].body`) — the review wrapper text. Chuck (`@chuck-noland-cartage`) posts a single `COMMENT` review whose body is only a terse summary (e.g. "🔴 Type safety: … Details inline."); the actionable findings are **not** here — they are the inline comments below. Read the body for orientation, never as the full feedback.
+- **Inline review comments** (`pulls/<PR_NUM>/comments`) — each with `file:line` + diff hunk + a `pull_request_review_id` linking it to its review. This is where Chuck's findings live: one inline comment = one bullet. Harvest **every** one — do not stop at the review body or sample a subset.
 
-Tag each: author, source type, `resolved`/`outdated` state.
+Tag each: author, source type, the `pull_request_review_id` it belongs to, `resolved`/`outdated` state.
 
 ## 3. Triage
 

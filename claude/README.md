@@ -89,7 +89,7 @@ wt <slug>                    → autonomous lane (see "Parallel worktree lanes")
 /rescope                     → refine an existing brief with new notes
 ```
 
-Lane stops only on (1) PR + required repo review triggered or explicitly skipped, or (2) genuine blocker. Tix repo review policy: only `cartage-agent` gets `@claude review`; other tix repos skip Claude review. Watch the agent board — red row → look. Otherwise leave it alone. At the context threshold, `/handoff` to a fresh session instead of compacting.
+Lane stops only on (1) PR + required repo review triggered or explicitly skipped, or (2) genuine blocker. Tix repo review policy: Chuck reviews `cartage-agent` + `ai-employees` (tag `@chuck-noland-cartage review` on the PR); other repos skip review. Watch the agent board — red row → look. Otherwise leave it alone. At the context threshold, `/handoff` to a fresh session instead of compacting.
 
 ## Cost awareness
 
