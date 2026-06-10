@@ -12,7 +12,6 @@ User-facing helpers + terminal toys. Most are on `PATH` via `~/.dotfiles/scripts
 | `git-watch.py` | Lightweight git HEAD watcher. Writes commit feed state. Lighter cousin of `commit-watcher.py`. |
 | `commit-watcher.py` | Watches a git remote, computes palette/intensity from changed paths + LOC delta, writes shared state for reactive art renderers. |
 | `audio-watcher.py` | Audio-event watcher daemon. Configurable. |
-| `claude_oauth.py` | Claude Code OAuth → Anthropic API helper. Reads tokens from the macOS keychain. |
 | `redact_chatlogs.py` | Regex secret redactor for `~/.claude/projects/` transcripts. Run before sharing. |
 | `granola-tix-review.py` | Pull today's Granola transcripts → Opus reviews them against `~/.claude/tickets/` → interactive prompt to accept/skip new tickets, edits, redundancy calls. Learns from past decisions. |
 | `linear-ticket.py` | Linear GraphQL client — replaces the Linear MCP so lanes never load its tool schemas. `create` → make an issue, print `identifier<TAB>url` (used by `/ship` §2.5 + bugfinder). `comment --id AE-NNNN` → post a comment (agents). Key from `$LINEAR_API_KEY` or `scripts/linear-ticket.config.local` (gitignored). |

@@ -1,4 +1,4 @@
-# Ghostty config — mirrors ~/.dotfiles/alacritty/alacritty.toml.
+# Ghostty config.
 # Reloads on cmd+shift+, (or whenever this file changes).
 
 # Font

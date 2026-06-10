@@ -157,12 +157,6 @@ class CityRenderer:
         Each star smoothly oscillates between off (0) and bright (1) based on
         its own phase and speed, creating a serene, realistic twinkling effect.
         """
-        # TODO: implement twinkling — set star.brightness (0.0 to 1.0)
-        # Available state: self.t (elapsed time), star.phase, star.speed
-        # Approaches to consider:
-        #   - Pure sine wave: smooth, dreamy     → (sin(t * speed + phase) + 1) / 2
-        #   - Sine + random jitter: more organic → add small random perturbation
-        #   - Threshold sine: stars "pop" on/off → round the sine to 0 or 1
         star.brightness = (math.sin(self.t * star.speed + star.phase) + 1.0) / 2.0
 
     def _draw_stars(self):
