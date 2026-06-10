@@ -13,9 +13,13 @@
 #
 # Tiers (each fires at most once per session; only the highest applicable
 # tier is evaluated):
-#   130K — wrap in-flight slice/review pass, commit, /handoff, stop
+#   130K — review-only remainder: finish it; full slice left: handoff
 #   160K — handoff overdue
 #   190K — quality degrades, stop now
+#
+# Handoff = /handoff + lane-handoff.sh <doc> as the FINAL tool call: the
+# state write is what wt-lanes' lane-run.sh keys on to respawn a fresh
+# session that /resumes the doc. A /handoff without it strands the lane.
 
 set -u
 
@@ -48,16 +52,16 @@ ctx=$(tail -c 524288 "$transcriptPath" | sed '1d' \
 ctxK=$((ctx / 1000))
 if (( ctx >= 190000 )); then
   tier="tier190"
-  visible="🔴 LANE CTX ${ctxK}K — quality degrades past this point. Commit + /handoff + stop."
-  directive="Lane context is ${ctxK}K tokens — past 190K, output quality measurably degrades and every remaining message is bought at maximum cache-read cost. Commit whatever is safe RIGHT NOW (git add -A && git commit), run /handoff, then stop. The next lane session /resumes the handoff doc and continues the brief, including any pending review loop. Do not compact, do not start anything new."
+  visible="🔴 LANE CTX ${ctxK}K — quality degrades past this point. Commit + /handoff + lane-handoff.sh + stop."
+  directive="Lane context is ${ctxK}K tokens — past 190K, output quality measurably degrades and every remaining message is bought at maximum cache-read cost. Commit whatever is safe RIGHT NOW (git add -A && git commit), run /handoff, then run ~/.claude/scripts/lane-handoff.sh <handoff-doc-path> as your FINAL tool call and stop — the lane runner respawns a fresh session that /resumes the doc and continues the brief, including any pending review loop. Without the lane-handoff.sh call nothing respawns and the lane dies mid-brief. Do not compact, do not start anything new."
 elif (( ctx >= 160000 )); then
   tier="tier160"
-  visible="🟠 LANE CTX ${ctxK}K — handoff overdue. Commit + /handoff + stop."
-  directive="Lane context is ${ctxK}K tokens — the 120K handoff point is well past and cache reads now dominate cost. Finish only the single in-flight edit/test, commit, run /handoff, and stop. The next lane session /resumes the doc and continues the brief, including any pending review loop. Do not compact."
+  visible="🟠 LANE CTX ${ctxK}K — handoff overdue. Commit + /handoff + lane-handoff.sh + stop."
+  directive="Lane context is ${ctxK}K tokens — the 120K handoff point is well past and cache reads now dominate cost. Finish only the single in-flight edit/test, commit, run /handoff, then run ~/.claude/scripts/lane-handoff.sh <handoff-doc-path> as your FINAL tool call and stop — the lane runner respawns a fresh session that /resumes the doc and continues the brief, including any pending review loop. Without the lane-handoff.sh call nothing respawns and the lane dies mid-brief. Do not compact."
 else
   tier="tier130"
-  visible="🟡 LANE CTX ${ctxK}K — wrap the in-flight slice, then /handoff."
-  directive="Lane context is ${ctxK}K tokens — past the ~120K handoff point. Wrap the in-flight slice or review pass (commit it), then run /handoff and stop instead of starting the next one. The next lane session /resumes the handoff doc and continues the brief, including any pending review loop. Do not compact."
+  visible="🟡 LANE CTX ${ctxK}K — review-only left? finish it. Full slice left? /handoff + lane-handoff.sh."
+  directive="Lane context is ${ctxK}K tokens — past the ~120K handoff point. If implementation is shipped and only the review loop remains (poll for the bot comment, address findings, push), do NOT hand off — that is one poll loop plus one feedback pass; finish it and run lane-done.sh. Otherwise wrap the in-flight slice (commit it), run /handoff, then run ~/.claude/scripts/lane-handoff.sh <handoff-doc-path> as your FINAL tool call and stop — the lane runner respawns a fresh session that /resumes the doc and continues the brief, including any pending review loop. Do not compact."
 fi
 
 shouldFireOnce "$tier" "$warnedFile" || exit 0
