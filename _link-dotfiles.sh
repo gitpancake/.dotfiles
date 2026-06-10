@@ -93,7 +93,7 @@ ln -sf "$DOTFILES_DIR/tmux/tmux-status.sh" ~/.tmux/tmux-status.sh
 # agent-board.sh moved out — owned by wt-lanes (github.com/gitpancake/wt-lanes).
 # Install it via ~/Documents/code/wt-lanes/install.sh, which symlinks it into
 # ~/.tmux/agent-board.sh.
-[ -f "$DOTFILES_DIR/tmux/grid-4x2.sh" ] && ln -sf "$DOTFILES_DIR/tmux/grid-4x2.sh" ~/.tmux/grid-4x2.sh
+[ -f "$DOTFILES_DIR/tmux/grid-6.sh" ] && ln -sf "$DOTFILES_DIR/tmux/grid-6.sh" ~/.tmux/grid-6.sh
 
 # vim
 ln -sf "$DOTFILES_DIR/vim/.vimrc" ~/.vimrc

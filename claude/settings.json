@@ -8,7 +8,7 @@
   "permissions": {
     "defaultMode": "auto"
   },
-  "model": "opus",
+  "model": "fable",
   "hooks": {
     "Notification": [
       {
@@ -110,27 +110,13 @@
   },
   "enabledPlugins": {
     "context7@claude-plugins-official": true,
-    "typescript-lsp@claude-plugins-official": true,
-    "caveman@caveman": false,
-    "ralph-skills@ralph-marketplace": false
+    "typescript-lsp@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "notion-plugin-marketplace": {
       "source": {
         "source": "github",
         "repo": "makenotion/claude-code-notion-plugin"
-      }
-    },
-    "caveman": {
-      "source": {
-        "source": "github",
-        "repo": "JuliusBrussee/caveman"
-      }
-    },
-    "ralph-marketplace": {
-      "source": {
-        "source": "github",
-        "repo": "snarktank/ralph"
       }
     }
   },

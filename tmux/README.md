@@ -8,8 +8,7 @@ tmux configuration with intuitive keybindings, gruvbox dark theme, system-stats 
 | --- | --- |
 | `.tmux.conf` | Main config: pane splits (`\|` / `-`), pane navigation (Alt+Arrow), tab navigation (Ctrl+Left/Right), pane border titles showing git branch per pane, gruvbox color scheme. |
 | `tmux-status.sh` | Right-side status renderer. BAT / CPU / MEM / DSK with dynamic color thresholds. Runs every `status-interval` (5s). |
-| `agent-board.sh` | Single-pane status board for parallel worktree lanes (see below). |
-| `grid-4x2.sh` | Quick 4×2 tmux pane grid layout. Bound to `prefix + l`. Re-tiles after every split so the next `split-window` always targets a viable pane — a single end-of-loop tile fails when the starting layout has slivers. |
+| `grid-6.sh` | 5-pane grid layout (3 columns, double-wide middle spanning full height). Bound to `prefix + l`. Idempotent: idle shell panes auto-launch `slack-watch`, the agent board, and `git-watch`; running watchers are never clobbered. |
 
 ## Color thresholds
 
@@ -58,9 +57,10 @@ The installer symlinks:
 ```
 ~/.tmux.conf                → dotfiles/tmux/.tmux.conf
 ~/.tmux/tmux-status.sh      → dotfiles/tmux/tmux-status.sh
-~/.tmux/agent-board.sh      → dotfiles/tmux/agent-board.sh
-~/.tmux/grid-4x2.sh         → dotfiles/tmux/grid-4x2.sh
+~/.tmux/grid-6.sh           → dotfiles/tmux/grid-6.sh
 ```
+
+`~/.tmux/agent-board.sh` is owned by [wt-lanes](https://github.com/gitpancake/wt-lanes) — its installer symlinks it (see Agent board below).
 
 `.tmux.conf` invokes the status script from `~/.tmux/tmux-status.sh`.
 
