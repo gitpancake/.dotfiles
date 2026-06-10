@@ -9,6 +9,7 @@ never load the Linear tool schemas into context — the per-session tax that mad
 Subcommands:
   create   make an issue, print "<identifier>\\t<url>"  (used by /ship §2.5)
   comment  post a markdown comment on an existing issue by identifier
+  state    move an existing issue to a workflow state by name (e.g. Done)
 
 API key resolution (first hit wins):
   1. $LINEAR_API_KEY
@@ -68,6 +69,26 @@ mutation Comment($input: CommentCreateInput!) {
   commentCreate(input: $input) {
     success
     comment { id url }
+  }
+}
+"""
+
+ISSUE_WITH_STATES_QUERY = """
+query IssueStates($id: String!) {
+  issue(id: $id) {
+    id
+    identifier
+    state { id name type }
+    team { id states { nodes { id name type } } }
+  }
+}
+"""
+
+STATE_UPDATE_MUTATION = """
+mutation StateUpdate($id: String!, $stateId: String!) {
+  issueUpdate(id: $id, input: { stateId: $stateId }) {
+    success
+    issue { id identifier url state { name } }
   }
 }
 """
@@ -273,6 +294,33 @@ def cmd_comment(args: argparse.Namespace, api_key: str) -> None:
         print(payload["comment"]["url"])
 
 
+def cmd_state(args: argparse.Namespace, api_key: str) -> None:
+    found = graphql(api_key, ISSUE_WITH_STATES_QUERY, {"id": args.id})
+    issue = found.get("issue")
+    if not issue:
+        die(f'issue "{args.id}" not found')
+    states = issue["team"]["states"]["nodes"]
+    wanted_lc = args.state.lower()
+    state_id = next((s["id"] for s in states if s["name"].lower() == wanted_lc), None)
+    if not state_id:
+        available = ", ".join(s["name"] for s in states)
+        die(f'state "{args.state}" not found on this issue\'s team. Available: {available}')
+    if issue.get("state", {}).get("id") == state_id:
+        print(
+            f'linear-ticket: {issue["identifier"]} already in "{issue["state"]["name"]}"',
+            file=sys.stderr,
+        )
+    result = graphql(api_key, STATE_UPDATE_MUTATION, {"id": issue["id"], "stateId": state_id})
+    payload = result["issueUpdate"]
+    if not payload.get("success"):
+        die("issueUpdate returned success=false")
+    updated = payload["issue"]
+    if args.json:
+        print(json.dumps(updated))
+    else:
+        print(f'{updated["identifier"]}\t{updated["state"]["name"]}\t{updated["url"]}')
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Create Linear issues / post comments — no MCP.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -300,12 +348,19 @@ def main() -> None:
     comment.add_argument("--body-file")
     comment.add_argument("--json", action="store_true")
 
+    state = sub.add_parser("state", help="move an issue to a workflow state by name")
+    state.add_argument("--id", required=True, help="issue identifier, e.g. AE-1234")
+    state.add_argument("--state", required=True, help='target state name, e.g. "Done"')
+    state.add_argument("--json", action="store_true")
+
     args = parser.parse_args()
     api_key = resolve_api_key()
     if args.command == "create":
         cmd_create(args, api_key)
     elif args.command == "comment":
         cmd_comment(args, api_key)
+    elif args.command == "state":
+        cmd_state(args, api_key)
 
 
 if __name__ == "__main__":
