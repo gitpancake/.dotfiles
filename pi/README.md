@@ -36,3 +36,8 @@ Current local extensions:
 - `observability-tools.ts` — Axiom, LangSmith, Sentry, and combined debug tools. LangSmith `listRuns` maps recognized coding projects to LangSmith projects (`cartage-agent` → `agent-production`, `agents`/`ai-employees` → `employees-production`). Axiom dataset defaults map `cartage-agent` → `REDACTED-DATASET-NAME` and `agents`/`ai-employees` → `cartage-ai-employees`. Extend with `LANGSMITH_PROJECT_MAP` or `AXIOM_DATASET_MAP` entries like `new-app=new-langsmith-project` / `new-app=new-axiom-dataset`.
 - `safety-rails.ts` — large-read nudges, cross-worktree write guard, Linear create guard.
 - `session-discipline.ts` — Pi-native `/tree`/`/handoff`/error-streak nudges and `/pi-usage` counters.
+- `ticket-scope-tools.ts` — local-ticket (`$TICKETS_DIR`) write/inspect tools.
+- `ryder-orders.ts` — Ryder Last Mile (RLM) order-status lookup.
+- `attio-transcripts.ts` — Attio call-transcript fetch.
+
+`prompts/` are Pi-native ports of the Claude slash commands (`/pickup`, `/ship`, `/resume`, `/scope`, …) — adapted to Pi's `/tree`/`/fork` workflow, not byte-for-byte copies. When a Claude command's contract changes, port the change here too.

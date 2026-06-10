@@ -10,14 +10,14 @@ Configuration, hooks, agents, commands, skills, and lane primitives for [Claude 
 | `CLAUDE.md` | **Global instructions** loaded into every Claude session — workflow rules, code-quality, cost discipline, agent routing, context-cap protocol. |
 | `statusline-command.sh` | Renders Claude Code's bottom status bar: context-window bar + 5h/7d rate-limit alerts, color-coded by severity. |
 | `transcript-costs.sh` | Post-mortem tool: ranks recent sessions by cost so you can spot expensive transcripts. |
-| `agent-state-vocab.md` | Reason-code vocab for lane `WAITING:<code>` states. |
+| `agent-state-vocab.md` | Reason-code vocab for lane `WAITING:<code>` states. Owned by [wt-lanes](https://github.com/gitpancake/wt-lanes) — symlinked into `~/.claude/` from `~/.wt-lanes/share/`, not tracked here. |
 | `worktree-protocol.md` | Multi-agent worktree safety rules. |
 
 ## Subdirectories
 
 | Dir | What's in it |
 | --- | --- |
-| `agents/` | Specialist subagent profiles — `backend`, `frontend`, `database`, `fullstack`, `infra`, `bugfinder`, `plan-lint`, `verifier`. Dispatched via the `Agent` tool. |
+| `agents/` | Specialist subagent profiles — `backend`, `frontend`, `infra`, `bugfinder`. Dispatched via the `Agent` tool. (Dropped 2026-05-26: `database`, `fullstack`, `plan-lint`, `verifier`.) |
 | `commands/` | Slash commands available in every project (see catalog below). |
 | `skills/` | Skills — `grill-with-docs`, `to-issues`, `tdd`, `diagnose`, `handoff`. Each is a dir with `SKILL.md`. |
 | `hooks/` | Shell hooks invoked on session events (notification, tool use, stop, user-prompt-submit). |
@@ -80,10 +80,10 @@ wt <slug>                    → autonomous lane (see "Parallel worktree lanes")
 /address-feedback <PR#>      → triage PR comments, spawn a lane on the PR's branch
 /resume [desc]               → resume from the most recent handoff doc
 /rebase                      → rebase onto base, auto-resolve trivial conflicts
-/simplify                    → review recently changed code for reuse + quality
+/rebase-all                  → rebase every open PR onto its base
 /retrospective               → retro on completed work
 /self-audit                  → claude config + 7d session usage audit
-/explain-flow <Q>            → wraps Agent(Explore) with org preamble prepended
+/why-failing <PR#>           → diagnose failing CI on a PR
 /rescope                     → refine an existing brief with new notes
 ```
 
