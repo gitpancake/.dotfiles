@@ -37,7 +37,7 @@ LaunchAgent plists (installed into `~/Library/LaunchAgents/`):
 
 Lane orchestration (`wt`, `wt-gc`, `agent-board`, hooks) now lives in **[wt-lanes](https://github.com/gitpancake/wt-lanes)**. Install with `git clone https://github.com/gitpancake/wt-lanes ~/.wt-lanes && ~/.wt-lanes/install.sh`. The rest of this section describes how this dotfiles repo uses it.
 
-`wt <slug-or-epic>` spawns one parallel lane per ticket. Each lane is fire-and-forget: reads the local brief, works it through to a PR, then stops.
+`wt <slug-or-epic>` spawns one parallel lane per ticket. Each lane is fire-and-forget: reads the local brief, works it through to a PR, triggers + waits for the repo's review, addresses every finding (blockers → nits) on the PR branch, then runs `lane-done.sh` — its tmux window flashes and stays green to signal done.
 
 What `wt` produces:
 

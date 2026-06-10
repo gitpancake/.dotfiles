@@ -154,13 +154,16 @@ Chuck (Railway PR reviewer) reviews PRs in the repos wired to his webhook + allo
 gh pr comment "$PR_NUM" --body "@chuck-noland-cartage review"
 ```
 
-Chuck reacts 👀 on the comment within ~1s, then posts his review in ~1–2 min, once per PR
+Chuck reacts 👀 on the comment within ~1s, then posts his review in ~2–3 min, once per PR
 (loop-guarded). **Format: a single issue comment from `chuck-noland[bot]` on the PR
-conversation containing a "### Chuck PR Review" section** — he creates no GitHub Review
-object, no inline review comments, and never touches `reviewDecision`. Anything polling
-for his review must read `issues/<PR>/comments` (author `chuck-noland[bot]`), not
-`reviews`/`reviewDecision`/`pulls/<PR>/comments`. Don't wait. For repos outside that set,
-skip review and report no convention.
+conversation — body starts `**Chuck finished …**` followed by a `### Review — <title>`
+section; 🔴 findings are blockers, "Advisory (non-blocking)" items are nits** — he creates
+no GitHub Review object, no inline review comments, and never touches `reviewDecision`.
+Anything polling for his review must read `issues/<PR>/comments` (author
+`chuck-noland[bot]`), not `reviews`/`reviewDecision`/`pulls/<PR>/comments`. /ship itself
+does not wait — but in a `wt` lane the lane then owns the feedback loop (poll → address
+all findings blockers→nits → push → `lane-done.sh`) per its kickoff prompt. For repos
+outside that set, skip review and report no convention.
 
 ## 5. Report — terse
 
@@ -173,6 +176,10 @@ Clean nothing-to-do → say so in one line.
 
 ## 6. Stop
 
-Do not auto-fix. Do not amend the PR description. Do not request reviewers. User decides.
-Single-character blocker spotted (typo, obvious null guard) → call out exact fix, still
-wait for "go" before editing.
+Cockpit sessions only: do not auto-fix. Do not amend the PR description. Do not request
+reviewers. User decides. Single-character blocker spotted (typo, obvious null guard) →
+call out exact fix, still wait for "go" before editing.
+
+In a `wt` lane, /ship returning is NOT the end of the lane — the lane continues into the
+review-feedback loop (wait for the review, address every finding, push, `lane-done.sh`)
+per its kickoff prompt and global CLAUDE.md §Autonomous semantics.
