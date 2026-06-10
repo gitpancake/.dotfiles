@@ -73,9 +73,10 @@ from `_TEMPLATE.md` and the body template below. Write in dependency order (bloc
 so the "Blocked by" field can reference real sibling slugs.
 
 Frontmatter: `status: draft`, `area:` set, `epic:` empty (these are flat siblings, not an
-epic folder), `linear:` empty, `created:` current UTC instant as full ISO-8601 with `Z`
-suffix (e.g. `2026-05-27T18:13:00Z` — never a bare date; tix needs an instant). Use
-`date -u +%Y-%m-%dT%H:%M:%SZ` to get it.
+epic folder), `linear:` empty, `created:` the output of `date -u +%Y-%m-%dT%H:%M:%SZ` —
+run the command, ALWAYS; never compose the timestamp yourself (you have no clock —
+model-guessed instants have shipped up to an hour off). Never a bare date; tix needs an
+instant. One `date -u` call covers the whole batch — reuse it across every ticket.
 
 <ticket-body-template>
 
