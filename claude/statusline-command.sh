@@ -12,7 +12,7 @@ barWidth=20
 
 input=$(cat)
 
-read -r ctxPct ctxSize fiveHrPct fiveHrReset sevenDayPct sevenDayReset sevenDayPctRaw < <(
+read -r ctxPct ctxSize fiveHrPct fiveHrReset sevenDayPct sevenDayReset sevenDayPctRaw cwd < <(
   jq -r '
     [
       (.context_window.used_percentage         // 0 | floor),
@@ -21,7 +21,8 @@ read -r ctxPct ctxSize fiveHrPct fiveHrReset sevenDayPct sevenDayReset sevenDayP
       (.rate_limits.five_hour.resets_at        // 0),
       (.rate_limits.seven_day.used_percentage  // 0 | floor),
       (.rate_limits.seven_day.resets_at        // 0),
-      (.rate_limits.seven_day.used_percentage  // 0)
+      (.rate_limits.seven_day.used_percentage  // 0),
+      (.workspace.current_dir // .cwd // "")
     ] | @tsv
   ' <<<"$input"
 )
@@ -126,6 +127,24 @@ renderPaceBucket() {
   printf ' %s│%s %space %d%%%s' "$dim" "$reset" "$color" "$pct" "$reset"
 }
 
+# Worktree lanes (<repo>/.claude/worktrees/<lane>) collapse to repo⎇lane;
+# everything else just gets $HOME shortened to ~.
+renderPath() {
+  [[ -z "$cwd" ]] && return
+  local display=$cwd
+  if [[ "$cwd" == */.claude/worktrees/* ]]; then
+    local repoPath=${cwd%%/.claude/worktrees/*}
+    local lane=${cwd#*/.claude/worktrees/}
+    lane=${lane%%/*}
+    display="${repoPath##*/}⎇${lane}"
+  elif [[ "$cwd" == "$HOME" ]]; then
+    display='~'
+  elif [[ "$cwd" == "$HOME"/* ]]; then
+    display="~${cwd#"$HOME"}"
+  fi
+  printf ' %s│ %s%s' "$dim" "$display" "$reset"
+}
+
 # Guard: skip rendering if values look like uninitialized garbage (timestamps, tiny sizes)
 isValidPct() { [[ "$1" =~ ^[0-9]+$ ]] && (( $1 >= 0 && $1 <= 100 )); }
 isValidSize() { [[ "$1" =~ ^[0-9]+$ ]] && (( $1 > 1000 )); }
@@ -138,6 +157,7 @@ if isValidPct "$ctxPct" && isValidSize "$ctxSize"; then
   fi
   isValidPct "$fiveHrPct"   && renderUsageBucket "5h" "$fiveHrPct"   "$fiveHrReset"
   isValidPct "$sevenDayPct" && renderUsageBucket "7d" "$sevenDayPct" "$sevenDayReset"
+  renderPath
 else
   printf '…'
 fi
