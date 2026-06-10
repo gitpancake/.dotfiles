@@ -48,14 +48,14 @@ This repo still owns `claude/scripts/ticket-status-sync.py` (status derivation).
 
 For lane semantics (state machine vocab, monitor pane contract), read wt-lanes' own README + CLAUDE.md. (Ralph loop retired 2026-06-09 — epics now run as sequential single lanes via /epic.) Don't duplicate that doctrine here.
 
-## Turn-cap + handoff hooks
+## Context-cap + handoff hooks
 
-Turn cap is **20 across the board**. Soft nudge at 15. Registered hooks (see `claude/settings.json` — that list is the truth, this section just annotates it):
+Caps are context-based, not turn-based — `turn-cap-warn.sh` retired 2026-06-09 (fired once in 14d; lanes run 300+ assistant msgs per user turn, invisible to UserPromptSubmit). Registered hooks (see `claude/settings.json` — that list is the truth, this section just annotates it):
 
-- `turn-cap-warn.sh` (UserPromptSubmit) — soft reminder at 15; HARD HALT directive at 20, re-fires every turn past 20. cwd-aware (normal / wt lane).
-- `clear-handoff.sh` (SessionEnd, `session_end_reason=="clear"`) — captures state on **any** `/clear` when turns ≥5 **or** ctx ≥100k. Skips trivial sessions and no-ops if a handoff already exists (marker `session-<id>.handoff`). Sources `claude/hooks/_handoff-doc.sh` (`write_handoff_doc` + `effective_ctx_tokens`) for the doc format.
+- `lane-ctx-nudge.sh` (PostToolUse) — lane-only, non-blocking. Reads the last billed ctx from the transcript *tail* (never full-file jq); injects a /handoff reminder once per tier at 130K/160K/190K. Cockpit sessions untouched. Motivated by the 14d audit: 107 sessions peaked >150K ctx, <50% handed off, ~39% of cache-read spend bought past 150K.
+- `clear-handoff.sh` (SessionEnd, `session_end_reason=="clear"`) — captures state on **any** `/clear` when turns ≥5 **or** ctx ≥100k. Turn count is derived from the transcript (the retired turn-cap hook was the old counter writer). Skips trivial sessions and no-ops if a handoff already exists (marker `session-<id>.handoff`). Sources `claude/hooks/_handoff-doc.sh` (`write_handoff_doc` + `effective_ctx_tokens`) for the doc format.
 
-The old auto-recycle stack (`auto-handoff.sh`, `handoff-gate.sh`, `tool-loop-warn.sh`) was unregistered 2026-05-27 and deleted 2026-06-09 — nothing auto-writes a handoff at the cap and nothing blocks tools past 20. The halt directive is compliance-based; `clear-handoff` is the capture net; state worth carrying → `/handoff` before the halt.
+Nothing blocks tools and nothing auto-writes a doc mid-session — nudges are ambient, `/handoff` stays deliberate, `clear-handoff` is the capture net. The old auto-recycle stack (`auto-handoff.sh`, `handoff-gate.sh`, `tool-loop-warn.sh`) stays dead.
 
 ## Debug-intent router
 
@@ -80,10 +80,6 @@ Cap is per-lane; concurrent lane count is intentionally uncapped.
 ## Linear ticket guard
 
 `claude/hooks/linear-ticket-guard.sh` (PreToolUse) — closes the **scope→Linear leak**: free-form work calling `~/.dotfiles/scripts/linear-ticket.py create` directly, producing orphan Linear issues with no PR, no `$TICKETS_DIR` brief, no local home. Doctrine: Linear is a write-only sink touched only by `/ship` (PR's reference ticket) and the `bugfinder` agent (one ticket per confirmed bug). Authorization is by inline env — the authorized call sites prefix the command with `LINEAR_TICKET_CREATE_OK=1` and pass through; any other invocation is blocked (exit 2) with a corrective message pointing back at `$TICKETS_DIR` + `/ship`. Subcommands other than `create` (e.g. `comment`, `update`) pass — that's the agent-comment path. Engages only for Bash tool calls.
-
-## Cost economy
-
-Hook-based nudges (search-intent-router, big-file-read-advisor, subagent-nudge, tool-loop-warn) were measured over 7d (2026-06-09) at <0.03% of token throughput with ~0–25% behavioral conversion, and deleted. Cost discipline lives in the global CLAUDE.md §Cost Discipline rules + `debug-router.sh` (the one router that converted). Throughput is dominated by long-session cache reads — recycle sessions, don't add hooks.
 
 ## Editing rules
 

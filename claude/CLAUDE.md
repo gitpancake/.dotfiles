@@ -64,18 +64,18 @@ Reference: `~/.claude/docs/design-principles.md`. Cite by tag (`POSD §X` / `PP 
 Tool calls re-read full context. Loops compound.
 
 - Batch: one LLM call → plan, script applies. Never same tool 20+ times.
-- Opus default. Haiku only bulk mechanical (20+ identical edits).
+- Opus cockpit default. Lanes run Sonnet (`WT_MODEL=sonnet`, set by wt-lanes; `WT_MODEL=opus wt …` per lane when reasoning-heavy). Haiku only bulk mechanical (20+ identical edits).
 - >70% context or >50 tool calls → `/handoff` + `/clear`.
 - `Read` files >500 lines: use `offset`/`limit`. Never full-read a big file to find one symbol — grep first, then targeted read. Same for log dumps, JSON fixtures, transcripts.
+- After an `Edit`, never full-re-read the file — the edit result is already in context. Verify via the edited range only (`offset`/`limit`). Applies hardest to TDD loops: test file does NOT need a fresh Read per red-green cycle.
+- Subagent dispatch: compute shared setup once (tokens, env, IDs) and inline the *values* into the prompt — sibling agents must never re-derive. Anything poll-shaped = ONE `until`/`timeout` Bash loop (or Monitor), never N repeated calls.
 
-## Turn-Cap Protocol
+## Context Cap
 
-`turn-cap-warn.sh` soft-warns turn 15, hard-halts turn 20 (directive re-fires every prompt past 20 — cost is quadratic, no push-through). `clear-handoff.sh` (SessionEnd reason=clear) captures state on any `/clear` ≥5 turns / ≥100k ctx. Nothing auto-writes a doc at the cap and nothing blocks tools — state worth carrying → run `/handoff` *before* the halt.
+Cost driver = context size × agentic-loop length, NOT user turns (turn cap retired 2026-06-09 — fired once in 14d while lanes ran 300+ assistant msgs per turn, invisible to it).
 
-- **15 soft**: wrap in-flight. No new scope. `/handoff` now if the session must continue elsewhere.
-- **20 HARD HALT** by cwd:
-  - Normal: tell user `/clear` (clear-handoff captures state on the way out). No tools.
-  - `wt` lane (`<repo>/.claude/worktrees/`): one `git add -A && git commit` max, stop. Git + brief `## Local notes` carry context; user runs `/resume` in fresh lane.
+- **Cockpit**: watch the statusline ctx bar. >70% → `/handoff` + `/clear` at the next task boundary. `clear-handoff.sh` (SessionEnd reason=clear) captures state on any `/clear` ≥5 turns / ≥100k ctx — mechanical net; a deliberate `/handoff` beats it.
+- **Lane** (`<repo>/.claude/worktrees/`): `lane-ctx-nudge.sh` (PostToolUse, non-blocking) injects a reminder at 130K/160K/190K ctx. On nudge: wrap the in-flight slice or review pass, commit, `/handoff`, stop — next lane session `/resume`s the doc and continues the brief, incl. any pending review loop. Never compact in a lane.
 
 ## Briefs & PRDs
 

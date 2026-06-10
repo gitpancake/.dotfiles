@@ -29,7 +29,6 @@ cwd=$(jq -r '.cwd // empty' <<<"$input")
 source "$(dirname "$0")/_handoff-doc.sh"
 
 logDir="${HOME}/.claude/state/turn-counters"
-counterFile="${logDir}/session-${sessionId}.count"
 handoffMarker="${logDir}/session-${sessionId}.handoff"
 
 # Already captured this session (a prior /clear attempt or /handoff) → done.
@@ -38,7 +37,11 @@ if [[ -f "$handoffMarker" ]]; then
   [[ -n "$existing" && -f "$existing" ]] && exit 0
 fi
 
-current=$(cat "$counterFile" 2>/dev/null || echo 0)
+# Turn count = real user prompts (string content) in the transcript. Derived
+# here since turn-cap-warn.sh (the old counter writer) was retired 2026-06-09.
+current=$(jq -rc 'select(.type=="user") | .message.content | if type=="string" then "u" else empty end' \
+  "$transcriptPath" 2>/dev/null | wc -l | tr -d ' ')
+current=${current:-0}
 ctxTokens=$(effective_ctx_tokens "$transcriptPath")
 
 # Trivial-session floor: nothing worth a doc.

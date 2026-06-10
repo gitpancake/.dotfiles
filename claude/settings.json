@@ -50,10 +50,6 @@
           },
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/turn-cap-warn.sh"
-          },
-          {
-            "type": "command",
             "command": "bash ~/.claude/hooks/debug-router.sh"
           }
         ]
@@ -93,7 +89,17 @@
         ]
       }
     ],
-    "PostToolUse": []
+    "PostToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/lane-ctx-nudge.sh"
+          }
+        ]
+      }
+    ]
   },
   "worktree": {
     "baseRef": "head"

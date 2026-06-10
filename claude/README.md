@@ -105,19 +105,17 @@ Three layers of friction keep heavy Opus usage from silently draining Max-plan b
 **Preventive — CLAUDE.md.** `CLAUDE.md` instructs Claude to propose the **batch pattern** (one LLM call → plan, script applies) before any N-item operation, grep-before-read on big files, and subagent dispatch for broad lookups.
 
 Model selection:
-- **Opus** — everything. Workflow (local briefs, fresh-context lanes, `/handoff`) is context-efficient enough.
+- **Opus** — cockpit default. Workflow (local briefs, fresh-context lanes, `/handoff`) is context-efficient enough.
+- **Sonnet** — autonomous wt lanes (`WT_MODEL=sonnet` via wt-lanes; `WT_MODEL=opus wt …` per lane when reasoning-heavy). Lanes are 75% of cache-read spend — biggest model lever.
 - **Haiku** — bulk mechanical edits only (20+ identical changes).
 
-## Turn-cap protocol
+## Context-cap protocol
 
-`hooks/turn-cap-warn.sh` hard-halts at turn 20 (directive re-fires every turn past it). Soft warn at turn 15. `hooks/clear-handoff.sh` (SessionEnd, `reason=clear`) captures state on any `/clear` ≥5 turns / ≥100k ctx. Doc format lives in `hooks/_handoff-doc.sh`. State worth carrying → run `/handoff` before the halt; git + brief Local notes are the lane carryover.
+Context-based, not turn-based — `turn-cap-warn.sh` retired 2026-06-09 (fired once in 14d; lane cost scales with assistant-loop length, invisible to per-prompt turn counting).
 
-Behavior by cwd at turn 20:
+`hooks/lane-ctx-nudge.sh` (PostToolUse) — lane-only, non-blocking. Reads the lane's billed context from the transcript tail; once per tier at **130K / 160K / 190K** it injects a reminder to wrap the in-flight slice, commit, `/handoff`, and stop — the next lane session `/resume`s the doc. Cockpit sessions untouched: watch the statusline ctx bar, `/handoff` + `/clear` at boundaries.
 
-| Where | Action |
-| --- | --- |
-| Normal session | Tell user `/clear`. No tools. |
-| `wt` lane (`<repo>/.claude/worktrees/`) | One `git add -A && git commit` max, then stop. User runs `/resume` in fresh lane. |
+`hooks/clear-handoff.sh` (SessionEnd, `reason=clear`) captures state on any `/clear` ≥5 turns / ≥100k ctx (turn count derived from the transcript). Doc format lives in `hooks/_handoff-doc.sh`. Git + brief Local notes are the lane carryover.
 
 `hooks/debug-router.sh` (UserPromptSubmit) — routes free-form debug prompts ("why is PR #X failing", "tests failing") to `/why-failing` or the `diagnose` skill, once per session.
 

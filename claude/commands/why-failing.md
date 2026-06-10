@@ -56,8 +56,6 @@ State the cause in one line + the `file:line` that owns it. If a recent commit o
 
 **Sibling search (find bugs once — PP §66).** Once the cause is named, grep for the same pattern elsewhere in the repo before declaring root-cause complete. A `forEach(async …)` race, a missed `T00:00:00Z` boundary, a stray `as any` on external JSON — these rarely live alone. List sibling sites in the report so the fix slice can either include them or explicitly defer with a ticket. Skipping this is how the same class re-fails CI a week later.
 
-**Scale the scan via bugfinder.** If the root cause is a *bug class* with non-trivial blast radius (>5 grep hits, cross-package, or a category bugfinder catalogs — null deref, missing await, race, type-narrowing escape, swallowed error), dispatch the agent in parallel with the local grep: `Agent(subagent_type: "bugfinder", prompt: "Scan repo for siblings of: <pattern>. Don't file Linear tickets — return findings inline so they can ride into the fix slice.")`. /why-failing stays focused on the failing check; bugfinder owns the breadth scan. Trivial single-site bugs (typo, lint, one-off guard) — skip dispatch, the inline grep is enough.
-
 ## 6. Report + decide fix
 
 Report: failing checks → classified cause → `file:line` → proposed fix (concrete diff sketch). Then:

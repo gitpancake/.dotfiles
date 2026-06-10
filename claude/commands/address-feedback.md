@@ -25,7 +25,7 @@ Take an open PR, harvest every comment, triage into actionable feedback, write a
 ## 2. Harvest — everything
 
 Collect all comment surfaces, no pre-filter (`Comment scope: everything`):
-- **Issue comments** (`comments` / `gh api repos/{owner}/{repo}/issues/<PR_NUM>/comments`) — general PR discussion **and Chuck's entire review**. Chuck (author login `chuck-noland[bot]`, triggered via `@chuck-noland-cartage review`) posts **no GitHub Review object and no inline review comments** — his full review is a single issue comment on the PR conversation: a "**### Chuck PR Review**" section with findings inline in the body (severity-tagged, `file:line` references in prose). Parse that body — one finding = one triage row. `reviews: []` + 0 inline comments does **not** mean "no feedback" when a `chuck-noland[bot]` comment exists.
+- **Issue comments** (`comments` / `gh api repos/{owner}/{repo}/issues/<PR_NUM>/comments`) — general PR discussion **and Chuck's entire review**. Chuck (author login `chuck-noland[bot]`, triggered via `@chuck-noland-cartage review`) posts **no GitHub Review object and no inline review comments** — his full review is a single issue comment on the PR conversation. Detect it by **author `chuck-noland[bot]` + body opener `**Chuck finished`** — never by section header, which varies (`### Review — <title>` / `### Chuck review`). Findings are inline in the body (🔴 = blocker, "Advisory" = nits, `file:line` references in prose). Parse that body — one finding = one triage row. `reviews: []` + 0 inline comments does **not** mean "no feedback" when a `chuck-noland[bot]` comment exists.
 - **Review summaries** (`reviews[].body`) — review wrapper text from human reviewers or other bots.
 - **Inline review comments** (`pulls/<PR_NUM>/comments`) — each with `file:line` + diff hunk + a `pull_request_review_id` linking it to its review. Harvest **every** one — do not sample a subset. (Human reviewers' findings live here; Chuck's do not.)
 
@@ -48,8 +48,6 @@ Resolved/outdated threads default to **skip** unless the body still names an una
 For each **actionable** item, grep the named `file:line`. List the top files to read first, one-line reason each. Note cross-file blast radius.
 
 **Find bugs once (PP §66).** For each actionable item that names a *bug class* (null deref, missing guard, async race, stray `as any`, hardcoded constant), grep the rest of the repo for siblings of the same pattern. List peer hits under the surface area, even if the reviewer didn't flag them — fixing one and leaving five is how the class survives. The lane's slice for that comment then either includes the peers or explicitly defers with a `find-bugs-once: <pattern>` note + a follow-up ticket.
-
-**Bug-class scan via bugfinder.** When 2+ actionable items name distinct bug classes — OR a single class spans a wide blast radius (>5 files grepped, cross-package, hot path) — dispatch the `bugfinder` subagent in parallel: `Agent(subagent_type: "bugfinder", prompt: "Scan <scope> for siblings of: <pattern-1>, <pattern-2>. Don't file Linear tickets — return findings inline for plan §5.")`. The lane is fix-focused; bugfinder is scan-focused — two contexts, two budgets. Skip dispatch for single-line nits or stylistic feedback.
 
 **Don't program by coincidence (PP §44).** When a reviewer says "this is wrong" without saying *why*, the plan must name the contract that was violated, not just paraphrase the comment. If you cannot state the *why*, ask in the open-questions section rather than guessing — the lane will guess too if you don't.
 

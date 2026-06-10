@@ -89,6 +89,7 @@ Rules:
 - Only enough code to pass current test
 - Don't anticipate future tests
 - Keep tests focused on observable behavior
+- **No full-file re-reads between cycles.** The test file and the unit under test are already in context from the previous cycle; your own Edit results show the current state. Locate symbols with grep; when you must re-read, use `offset`/`limit` on the edited range only. (14d audit: test files fully re-read 10–13× per session inside TDD loops — pure cache burn.)
 
 ### 4. Refactor
 
