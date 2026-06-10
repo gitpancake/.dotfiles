@@ -8,7 +8,7 @@
   "permissions": {
     "defaultMode": "auto"
   },
-  "model": "opus",
+  "model": "fable",
   "hooks": {
     "Notification": [
       {
@@ -55,10 +55,6 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/debug-router.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/search-intent-router.sh"
           }
         ]
       }
@@ -93,20 +89,11 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/linear-ticket-guard.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/big-file-read-advisor.sh"
           }
         ]
       }
     ],
-    "PostToolUse": [
-      {
-        "matcher": "",
-        "hooks": []
-      }
-    ]
+    "PostToolUse": []
   },
   "worktree": {
     "baseRef": "head"
@@ -118,8 +105,8 @@
   "enabledPlugins": {
     "context7@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true,
-    "caveman@caveman": true,
-    "ralph-skills@ralph-marketplace": true
+    "caveman@caveman": false,
+    "ralph-skills@ralph-marketplace": false
   },
   "extraKnownMarketplaces": {
     "notion-plugin-marketplace": {
@@ -143,9 +130,14 @@
   },
   "effortLevel": "high",
   "awaySummaryEnabled": false,
+  "voice": {
+    "enabled": false,
+    "mode": "hold"
+  },
   "skipDangerousModePermissionPrompt": true,
   "theme": "dark",
   "fileCheckpointingEnabled": true,
   "skipAutoPermissionPrompt": true,
-  "useAutoModeDuringPlan": false
+  "useAutoModeDuringPlan": false,
+  "voiceEnabled": false
 }

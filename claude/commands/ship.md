@@ -154,9 +154,13 @@ Chuck (Railway PR reviewer) reviews PRs in the repos wired to his webhook + allo
 gh pr comment "$PR_NUM" --body "@chuck-noland-cartage review"
 ```
 
-Chuck reacts 👀 on the comment within ~1s, then posts a single COMMENT review (Opus) in
-~1–2 min, once per PR (loop-guarded). Don't wait. For repos outside that set, skip review
-and report no convention.
+Chuck reacts 👀 on the comment within ~1s, then posts his review in ~1–2 min, once per PR
+(loop-guarded). **Format: a single issue comment from `chuck-noland[bot]` on the PR
+conversation containing a "### Chuck PR Review" section** — he creates no GitHub Review
+object, no inline review comments, and never touches `reviewDecision`. Anything polling
+for his review must read `issues/<PR>/comments` (author `chuck-noland[bot]`), not
+`reviews`/`reviewDecision`/`pulls/<PR>/comments`. Don't wait. For repos outside that set,
+skip review and report no convention.
 
 ## 5. Report — terse
 

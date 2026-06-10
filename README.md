@@ -37,7 +37,7 @@ Each top-level folder has its own README with the deep dive — this tree is jus
 │                            #   parallel-lane agent board  → tmux/README.md
 ├── claude/                  # Claude Code: settings, hooks,
 │                            #   agents, commands, skills,
-│                            #   wt / ralph, cost           → claude/README.md
+│                            #   wt lanes, cost             → claude/README.md
 ├── pi/                      # Pi: settings, keybindings,
 │                            #   extensions, prompts,
 │                            #   skills, themes, bin        → pi/README.md
@@ -63,7 +63,7 @@ Each top-level folder has its own README with the deep dive — this tree is jus
 
 **Lane workflow.** Parallel Claude lanes spawn via `wt <slug>` (claude/bin/wt). Each lane is fire-and-forget through to a PR. The `tmux/agent-board.sh` pane is the visible contract — one row per lane, color-coded by state. Full details in `claude/README.md`.
 
-**Cost discipline.** Three layers (statusline, post-mortem `transcript-costs.sh`, `tool-loop-warn.sh` hook) keep heavy Opus usage from silently draining Max-plan buckets. See `claude/README.md`.
+**Cost discipline.** Two layers (statusline, post-mortem `transcript-costs.sh`) keep heavy Opus usage from silently draining Max-plan buckets. See `claude/README.md`.
 
 **Focus-guard is opt-in.** Not part of the main installer. `./focus-guard/install.sh` to install, `./focus-guard/uninstall.sh` to remove.
 
@@ -76,6 +76,6 @@ Each top-level folder has its own README with the deep dive — this tree is jus
 - [jq](https://jqlang.org/) — required by statusline + cost + warn hooks
 - [tmux](https://github.com/tmux/tmux), [zoxide](https://github.com/ajeetdsouza/zoxide), [fzf](https://github.com/junegunn/fzf), [glow](https://github.com/charmbracelet/glow)
 - [`tix`](https://github.com/gitpancake/tix) — ticket explorer. `pipx install tix-cli`. `TIX_PRELOAD_HOOK` (set in `zsh/.zshenv`) points it at `claude/scripts/ticket-status-sync.py`.
-- [`wt-lanes`](https://github.com/gitpancake/wt-lanes) — parallel-lane infrastructure. `git clone https://github.com/gitpancake/wt-lanes ~/.wt-lanes && ~/.wt-lanes/install.sh`. Provides `wt`, `wt-gc`, `agent-board`, lane hooks, Ralph. `WT_TICKET_SYNC` (set in `zsh/.zshenv`) wires `wt` spawn → `ticket-status-sync.py`.
+- [`wt-lanes`](https://github.com/gitpancake/wt-lanes) — parallel-lane infrastructure. `git clone https://github.com/gitpancake/wt-lanes ~/.wt-lanes && ~/.wt-lanes/install.sh`. Provides `wt`, `wt-gc`, `agent-board`, lane hooks. `WT_TICKET_SYNC` (set in `zsh/.zshenv`) wires `wt` spawn → `ticket-status-sync.py`.
 - [mkcert](https://github.com/FiloSottile/mkcert) + [nginx](https://nginx.org/) — focus-guard only
 - Python 3 stdlib (`curses`) — terminal toys

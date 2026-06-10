@@ -42,22 +42,20 @@ Slash commands often dispatch subagents internally, but they aren't the same reg
 
 ## Lane orchestration — owned by wt-lanes
 
-Lane infrastructure (`wt`, `wt-gc`, `ralph-bootstrap`, `agent-board`, state-writer hooks, Ralph orchestrator, lane-watch, lane-pause, epic-parse, dag-parse) now lives in [gitpancake/wt-lanes](https://github.com/gitpancake/wt-lanes). Install: `git clone https://github.com/gitpancake/wt-lanes ~/.wt-lanes && ~/.wt-lanes/install.sh`. Its install.sh symlinks files into the same `~/.claude/scripts`, `~/.claude/hooks`, `~/.local/bin`, and `~/.tmux/` namespaces as the dotfiles, alongside the bits still here.
+Lane infrastructure (`wt`, `wt-gc`, `agent-board`, state-writer hooks, lane-watch, lane-pause, dag-parse) now lives in [gitpancake/wt-lanes](https://github.com/gitpancake/wt-lanes). Install: `git clone https://github.com/gitpancake/wt-lanes ~/.wt-lanes && ~/.wt-lanes/install.sh`. Its install.sh symlinks files into the same `~/.claude/scripts`, `~/.claude/hooks`, `~/.local/bin`, and `~/.tmux/` namespaces as the dotfiles, alongside the bits still here.
 
 This repo still owns `claude/scripts/ticket-status-sync.py` (status derivation). Both the tix preload (`$TIX_PRELOAD_HOOK`) and wt spawn (`$WT_TICKET_SYNC`) point at it — both env vars exported from `zsh/.zshenv`.
 
-For lane semantics (state machine vocab, monitor pane contract, Ralph loop), read wt-lanes' own README + CLAUDE.md. Don't duplicate that doctrine here.
+For lane semantics (state machine vocab, monitor pane contract), read wt-lanes' own README + CLAUDE.md. (Ralph loop retired 2026-06-09 — epics now run as sequential single lanes via /epic.) Don't duplicate that doctrine here.
 
 ## Turn-cap + handoff hooks
 
-Turn cap is **20 across the board** (was 30 halt / 50 gate). Soft nudge at 15. Tuned down because the self-audit showed 0% turn-cap obedience and `/clear`-dominant sessions (186 `/clear` vs 4 `/handoff` in 7d) — capture must be automatic, not compliance-dependent. Shared doc generator `claude/hooks/_handoff-doc.sh` (`write_handoff_doc` + `effective_ctx_tokens`) is sourced by both writers below so the handoff format lives in one place.
+Turn cap is **20 across the board**. Soft nudge at 15. Registered hooks (see `claude/settings.json` — that list is the truth, this section just annotates it):
 
-- `turn-cap-warn.sh` (UserPromptSubmit) — soft reminder at 15; HARD HALT directive at 20, re-fires every turn past 20. cwd-aware (normal / wt lane / Ralph lane).
-- `auto-handoff.sh` (UserPromptSubmit, after turn-cap-warn) — at turn ≥20 **or** ctx ≥300k tokens, dumps last prompts + tool calls + active files + git state to `~/.claude/handoffs/<UTC>-auto-<branch>.md`. Once per session (sentinel `${TMPDIR}/claude-turn-cap-warn/session-<id>.warned`, tag `auto-handoff`).
-- `clear-handoff.sh` (SessionEnd, `session_end_reason=="clear"`) — captures state on **any** `/clear`, even below the cap, when turns ≥5 **or** ctx ≥100k. Skips trivial sessions and no-ops if a handoff already exists (marker `session-<id>.handoff`). Closes the "/clear at p50≈2 turns loses state" gap the cap can't see.
-- `handoff-gate.sh` (PreToolUse) — at turn ≥20 **blocks every tool** (exit 2). One exception: a single work-saving `git status/add/commit` (per-session `.savedone` sentinel; second save blocked too) — push/gh/Edit/Read/Agent/etc. blocked outright. The doc existing is the green light to *recycle*, not to keep working, so the gate no longer self-disables once auto-handoff writes the marker (old bug: marker present → passed forever → interactive lanes ran unbounded, burning context + OAuth quota). Recycle is out-of-process: wt-loop/Ralph spawn the next iteration that `/resume`s the handoff; plain sessions `/clear` + `/resume`.
+- `turn-cap-warn.sh` (UserPromptSubmit) — soft reminder at 15; HARD HALT directive at 20, re-fires every turn past 20. cwd-aware (normal / wt lane).
+- `clear-handoff.sh` (SessionEnd, `session_end_reason=="clear"`) — captures state on **any** `/clear` when turns ≥5 **or** ctx ≥100k. Skips trivial sessions and no-ops if a handoff already exists (marker `session-<id>.handoff`). Sources `claude/hooks/_handoff-doc.sh` (`write_handoff_doc` + `effective_ctx_tokens`) for the doc format.
 
-All pure shell — no LLM call, no compliance dependency. The doc exists *before* `/clear` is plausible, so `/resume` always has a target.
+The old auto-recycle stack (`auto-handoff.sh`, `handoff-gate.sh`, `tool-loop-warn.sh`) was unregistered 2026-05-27 and deleted 2026-06-09 — nothing auto-writes a handoff at the cap and nothing blocks tools past 20. The halt directive is compliance-based; `clear-handoff` is the capture net; state worth carrying → `/handoff` before the halt.
 
 ## Debug-intent router
 
@@ -69,7 +67,7 @@ Lane Claudes spawned via `wt` route through `claude/bin/claude-lane` (via `$WT_C
 
 1. **`ulimit -t 1800`** — per-process CPU cap (30min). Inherited by all descendants (RLIMIT_CPU preserved across fork+exec). Counted per-process, so each `tsc --noEmit` gets its own clock — won't kill a healthy long-running session, will reap a runaway typecheck.
 2. **`PATH=~/.claude/lane-bin:$PATH`** — slots a `bun` shim ahead of the real one that wraps invocations in `timeout 300`. Cartage's `bun type-check` (= `tsc --noEmit`) peaks at ~4.4 GB RSS; the shim ensures it can't outlive its lane Claude. The shim resolves the real `bun` by walking PATH and skipping its own dir, so it doesn't recurse.
-3. **`--strict-mcp-config --mcp-config ~/.claude/mcp.lane.json`** — drops every stdio MCP server (slack, playwright, gcloud, posthog, figma, trigger, axiom) for lane work. Keeps only HTTP MCPs (linear-server, sentry) which are free local-process-wise. Saves ~5 node procs × 50–100 MB per lane.
+3. **`--strict-mcp-config --mcp-config ~/.claude/mcp.lane.json`** — drops **every** MCP server for lane work (config is an empty `mcpServers`). Stdio ones save ~5 node procs × 50–100 MB per lane; HTTP ones (linear-server, sentry) were dropped 2026-06-09 after 7d of lane transcripts showed 0 calls — and Linear is doctrine-banned in lanes anyway (write-only via `linear-ticket.py`).
 
 Plus `hooks/lane-reaper.sh` runs at SessionEnd: if cwd is inside `.claude/worktrees/`, it SIGTERMs any `tsc/vitest/jest/playwright` proc whose own cwd lives under the lane (3s grace, then SIGKILL). Covers the orphan-after-crash case the ulimit can't catch — e.g. Claude SIGKILL'd while child build was mid-flight and reparented to launchd. macOS bash 3.2 compatible (no `mapfile`). Logs to `~/.claude/logs/lane-reaper.log`.
 
@@ -77,21 +75,15 @@ Cap is per-lane; concurrent lane count is intentionally uncapped.
 
 ## Worktree write guard
 
-`claude/hooks/worktree-write-guard.sh` (PreToolUse, before `handoff-gate.sh`) — kills the recurring wt-lane **cwd→main leak**: a lane runs with cwd in its worktree but an Edit/Write fires with an absolute path rooted at the main checkout (or a sibling lane), so the edit lands outside the lane while the branch looks clean. Engages only for write tools (Edit/Write/NotebookEdit/MultiEdit) **and** only when cwd is a linked worktree (`git-dir != git-common-dir`). Blocks (exit 2) when the canonical target is under the main checkout but not under the current worktree — sibling worktrees caught for free. Passes relative paths, in-lane abs paths, `~/.claude/tickets` briefs, `/tmp`, and any normal main-repo session. Pure shell + one `python3 realpath` (resolves non-existent Write targets).
+`claude/hooks/worktree-write-guard.sh` (PreToolUse) — kills the recurring wt-lane **cwd→main leak**: a lane runs with cwd in its worktree but an Edit/Write fires with an absolute path rooted at the main checkout (or a sibling lane), so the edit lands outside the lane while the branch looks clean. Engages only for write tools (Edit/Write/NotebookEdit/MultiEdit) **and** only when cwd is a linked worktree (`git-dir != git-common-dir`). Blocks (exit 2) when the canonical target is under the main checkout but not under the current worktree — sibling worktrees caught for free. Passes relative paths, in-lane abs paths, `~/.claude/tickets` briefs, `/tmp`, and any normal main-repo session. Pure shell + one `python3 realpath` (resolves non-existent Write targets).
 
 ## Linear ticket guard
 
 `claude/hooks/linear-ticket-guard.sh` (PreToolUse) — closes the **scope→Linear leak**: free-form work calling `~/.dotfiles/scripts/linear-ticket.py create` directly, producing orphan Linear issues with no PR, no `$TICKETS_DIR` brief, no local home. Doctrine: Linear is a write-only sink touched only by `/ship` (PR's reference ticket) and the `bugfinder` agent (one ticket per confirmed bug). Authorization is by inline env — the authorized call sites prefix the command with `LINEAR_TICKET_CREATE_OK=1` and pass through; any other invocation is blocked (exit 2) with a corrective message pointing back at `$TICKETS_DIR` + `/ship`. Subcommands other than `create` (e.g. `comment`, `update`) pass — that's the agent-comment path. Engages only for Bash tool calls.
 
-## Cost-economy hooks (preventive)
+## Cost economy
 
-Three hooks that pre-empt the reactive `tool-loop-warn` / `subagent-nudge` warnings — catch the cost-blow-up shape *before* the parent transcript fills with Read/Bash/Grep results:
-
-- `claude/hooks/search-intent-router.sh` (UserPromptSubmit) — mirrors `debug-router.sh`. Matches broad-lookup vocab ("where is X defined", "find all usages", "which file", "audit all", "grep the codebase") and injects a directive to dispatch an `Explore` or `general-purpose` subagent on the first turn instead of grepping/reading directly. Once per session. Skips slash-command prompts and wt-lane cwds (briefs contain search vocab as acceptance criteria — same false-fire shape `debug-router` learned).
-- `claude/hooks/big-file-read-advisor.sh` (PreToolUse, Read tool) — when a Read targets a >500-line file with no `offset`/`limit`, emits the CLAUDE.md §Cost Discipline rule as `systemMessage` + `additionalContext`. Skips bounded reads, images/PDFs/notebooks, non-existent paths. Once per (session, file). Doesn't block — Read proceeds — but the next call usually doesn't repeat the pattern.
-- `claude/hooks/subagent-nudge.sh` — threshold lowered from 30 IO calls to 15. By 30 the linear cache_read curve is already steep; 15 is past the noise floor of normal orientation reads but early enough to salvage the rest of the session.
-
-Order matters: router fires at prompt-submit (turn 0), advisor fires per-Read, nudge fires once after 15 unbatched IO calls. Together they cover prompt → tool selection → accumulated drift.
+Hook-based nudges (search-intent-router, big-file-read-advisor, subagent-nudge, tool-loop-warn) were measured over 7d (2026-06-09) at <0.03% of token throughput with ~0–25% behavioral conversion, and deleted. Cost discipline lives in the global CLAUDE.md §Cost Discipline rules + `debug-router.sh` (the one router that converted). Throughput is dominated by long-session cache reads — recycle sessions, don't add hooks.
 
 ## Editing rules
 

@@ -1,20 +1,21 @@
 ---
-description: Pickup epic — confirm story list, spawn Ralph lane.
+description: Pickup epic — confirm story order, spawn next child as single lane.
 argument-hint: <EPIC> <BASE-BRANCH> [extra context...]
 ---
 
 # /epic $ARGUMENTS
 
-Spawns `wt --ralph` — a lane running the Ralph autonomous loop over an epic.
+Drives an epic as a sequence of single lanes. (The Ralph loop was retired 2026-06-09 —
+`wt --ralph`, `epic-parse.sh`, and `scripts/ralph/` no longer exist.)
 
-An **epic** is a folder with an `_epic.md` at its root — the durable, Ralph-ready PRD
-(contract: `$TICKETS_DIR/README.md`). `_epic.md` carries the `<!-- epic-stories:start -->`
-block: the authoritative ordered story list + dependency DAG. `/epic` confirms that order with
-the user, then spawns the lane. The lane runs `epic-parse.sh` to project `_epic.md` into
-`scripts/ralph/prd.json` and executes it — **Ralph never decomposes; it executes a confirmed
-list.** There is one epic shape. No `.epics.json`, no in-lane `/prd` + `/ralph` synthesis.
+An **epic** is a folder with an `_epic.md` at its root (contract: `$TICKETS_DIR/README.md`),
+holding the `<!-- epic-stories:start -->` block — the authoritative ordered story list +
+dependency DAG — plus one `NN-<child>.md` brief per story. `/epic` confirms that order with
+the user, then spawns the **next incomplete child** as a normal `wt` single lane. Re-run
+`/epic` after each child's PR merges to spawn the next — the command is resumable; child
+`status:` frontmatter (kept current by ticket-status-sync) is the progress marker.
 
-Syncs the cockpit to a base branch, folds in any extra context, spawns the lane. Do **not**
+Syncs the cockpit to a base branch, folds in any extra context, spawns one lane. Do **not**
 edit project source — this command only prepares and spawns.
 
 ## 1. Parse
@@ -23,14 +24,14 @@ edit project source — this command only prepares and spawns.
 - **token 1** — `EPIC` (required). An epic folder slug, a Linear epic id, or an `_epic.md`
   path — `wt --print-brief` resolves all three. Empty → ask, stop.
 - **token 2** — `BASE` (required). Base branch to spawn off. `.` = cockpit's current branch.
-- **rest** — `CONTEXT` (optional). Free-text notes for the lane.
+- **rest** — `CONTEXT` (optional). Free-text notes for the epic.
 
 ## 2. Resolve the epic
 
 `wt --print-brief <EPIC>` → `EPIC_MD`.
 - **Non-zero exit / no path** → stop. Tell the user to `/scope` it into an epic first.
 - **Resolved, but the path is not an `_epic.md`** → it's a single ticket, not an epic. Stop.
-  Tell User: `/scope` it into an epic folder first (an `_epic.md` + `NN-<child>.md`
+  Tell user: `/scope` it into an epic folder first (an `_epic.md` + `NN-<child>.md`
   children), or `wt <EPIC>` to work it as a single ticket.
 
 `EPIC_DIR` = the directory holding `EPIC_MD`. `SLUG` = its basename.
@@ -57,40 +58,43 @@ Append to `EPIC_MD` under `## Local notes` (create that section at end of file i
 <CONTEXT>
 ```
 
-It rides with the epic — every Ralph iteration reads `_epic.md`.
+It rides with the epic — child briefs reference `_epic.md` for shared context.
 
-## 5. Confirm the story order
+## 5. Pick the next child + confirm
 
-Read the `<!-- epic-stories:start -->` block in `EPIC_MD`. Print a terse numbered list —
-`priority  id  title`, plus each story's `needs` edges. This block *is* the decomposition;
-the user confirms it before the lane runs. Ralph will not re-plan it.
+Read the `<!-- epic-stories:start -->` block in `EPIC_MD` and the `status:` frontmatter of
+every `NN-<child>.md` in `EPIC_DIR`:
 
-Ask: spawn the Ralph lane with this order, or stop so the user can edit the block in `EPIC_MD`
-first? **Wait for "go".**
+- `done` / `cancelled` → complete, skip.
+- `review` / `active` → in flight. Stop and report — don't double-spawn a story.
+- Anything else (`open`, `draft`, missing) → candidate.
+
+**NEXT** = the lowest-`NN` candidate whose `needs` edges (from the stories block) all point
+at complete children. No candidate and nothing in flight → epic done; say so, stop.
+
+Print a terse numbered list — `NN  child  status`, marking NEXT — and ask: spawn NEXT, or
+stop so the user can edit the stories block / briefs first? **Wait for "go".** The stories
+block *is* the decomposition; never re-plan it here.
 
 ## 6. Spawn
 
 ```bash
-wt --ralph <SLUG>
+wt <NN-CHILD-SLUG>
 ```
 
-`wt --ralph <slug>` resolves the epic folder, branches off the now-current `BASE`, and the
-lane: `ralph-bootstrap` → `~/.claude/scripts/epic-parse.sh <EPIC_MD> > scripts/ralph/prd.json`
-→ stamps `branchName` + tunes `scripts/ralph/CLAUDE.md` test commands →
-`./scripts/ralph/ralph.sh --tool claude`, one story per fresh-context iteration → `/ship` on
-`<promise>COMPLETE</promise>`.
-
-Branch type defaults to `feature/` — override with `wt --ralph --type <prefix> <SLUG>`.
+Normal single lane off the now-current `BASE`: the child brief drives it end-to-end through
+`/ship`. Branch type defaults to `feature/` — override with `wt --type <prefix> <slug>`.
 
 ## 7. Report, then stop
 
-> Ralph lane spawned off `<BASE>`. Autonomous epic loop running in a new tmux window —
-> <N> stories from `<EPIC_MD>`. This pane is done.
+> Lane spawned for `<NN-child>` (<k> of <N> stories complete) off `<BASE>`. Re-run
+> `/epic <EPIC> <BASE>` after its PR merges to spawn the next story. This pane is done.
 
 ## Stop conditions
 
 - Missing `EPIC` / `BASE`, or epic not found — ask or report, stop.
 - Resolved to a single ticket, not an `_epic.md` — stop; tell the user to `/scope` it into an epic.
 - ff-merge failure — surface, stop.
-- User doesn't confirm the story order — stop, leave `EPIC_MD` for the user to edit.
+- A child is already `active`/`review` — report it, stop. One story in flight at a time.
+- User doesn't confirm NEXT — stop, leave `EPIC_MD` for the user to edit.
 - After spawn — done. Don't follow the lane.

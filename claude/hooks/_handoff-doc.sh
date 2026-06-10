@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared handoff-doc generator. Sourced by auto-handoff.sh (turn/ctx trigger)
+# Shared handoff-doc generator. Sourced by clear-handoff.sh (/clear trigger)
 # and clear-handoff.sh (SessionEnd reason=clear trigger). Keeps the doc format
 # in one place so both triggers emit identical, /resume-readable handoffs.
 #

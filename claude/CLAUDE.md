@@ -10,6 +10,8 @@ Uncertain: 1) grep source 2) re-read brief 3) re-read prompt 4) ask. No guesses,
 
 Direct, terse, opinionated. Match user energy. No disclaimers/hedging/preamble.
 
+**Compressed replies (caveman), always on.** Drop articles/filler/pleasantries. Fragments OK. Abbreviate (DB/auth/config/fn/impl), arrows for causality (X → Y), one word when one word enough. Technical terms exact; errors quoted exact; code blocks unchanged. Write NORMAL prose for: code/commits/PR bodies/tickets, security warnings, irreversible-action confirmations, multi-step sequences where fragment order risks misread. "stop caveman" / "normal mode" → revert.
+
 ## Subagents & Slash Commands
 
 Self-describe via Agent/skills schemas — don't list. Org preamble: known org codebase → prepend `~/.claude/org/<org>/preamble.md`.
@@ -24,10 +26,14 @@ Self-describe via Agent/skills schemas — don't list. Org preamble: known org c
 
 **Slug rule.** No numbers in ticket/epic slugs. Use descriptors, not IDs. `pr3475-split` → `pr-token-pricing-split`. `issue-1284-fix` → `fix-auth-timeout`. Reason: IDs rot (PR# changes pre-merge, issue# meaningless out of tracker), descriptors carry meaning when grepping `tickets/`. Exception: epic-child file ordering prefix (`NN-<child>.md`) — structural, not part of slug.
 
-- **Single**: `/scope` → brief `<area>/<slug>.md` (grill-with-docs runs inside /scope, lanes do not re-grill). `wt <slug>` (or `/pickup <slug> <BASE> [ctx]`) → autonomous lane: reads brief, plans slices, opens `/tdd` for behavior-changing slices, commits per layer, auto-handoff at 120K ctx, `/ship`.
-- **Epic**: `/scope` → `<area>/<epic-slug>/_epic.md` + `NN-<child>.md`. `/epic <slug> <BASE> [ctx]` confirms order + spawns `wt --ralph`. Ralph: one story/iteration, fresh context, memory via git + `progress.txt` + `prd.json`. `epic-parse.sh` projects `_epic.md` → `prd.json`. Executes confirmed list, never decomposes.
+- **Single**: `/scope` → brief `<area>/<slug>.md` (grill-with-docs runs inside /scope, lanes do not re-grill). `wt <slug>` (or `/pickup <slug> <BASE> [ctx]`) → autonomous lane: reads brief, plans slices, opens `/tdd` for behavior-changing slices, commits per layer, `/handoff` at ~120K ctx, `/ship`.
+- **Epic**: `/scope` → `<area>/<epic-slug>/_epic.md` + `NN-<child>.md`. Ralph loop retired 2026-06-09 (`wt --ralph` + `epic-parse` removed from wt-lanes) — pick up children as single lanes in `NN` order via `/pickup <child-slug>`.
 
-**Autonomous semantics.** `wt` = fire-and-forget. Stops only on: (1) PR opened + required repo review triggered or explicitly skipped, (2) blocker (ambiguity not in brief, repeated test fail same cause, missing cred). Tix repo review policy: Chuck reviews `cartage-agent` + `ai-employees` (tag `@chuck-noland-cartage review` on the PR); other repos skip review. Slice protocol + parallel gotchas: `~/.dotfiles/CLAUDE.md`.
+**Autonomous semantics.** `wt` = fire-and-forget. Stops only on: (1) PR opened + required repo review triggered or explicitly skipped, (2) blocker (ambiguity not in brief, repeated test fail same cause, missing cred). Tix repo review policy: Chuck reviews `cartage-agent` + `ai-employees` (tag `@chuck-noland-cartage review` on the PR); other repos skip review. **Chuck's review = single issue comment from `chuck-noland[bot]` ("### Chuck PR Review" in body), NOT a GitHub Review object** — to find it, read `gh api repos/{owner}/{repo}/issues/<PR>/comments`; `reviews`, `reviewDecision`, and `pulls/<PR>/comments` stay empty forever, so never poll those for Chuck. Slice protocol + parallel gotchas: `~/.dotfiles/CLAUDE.md`.
+
+## Shell Gotchas (zsh)
+
+The Bash tool runs zsh. zsh `echo` expands backslash escapes — `echo "$json" | jq` corrupts any JSON whose strings contain `\n`/`\t`/`\uXXXX` (PR comment bodies always do) → `jq: parse error: control characters from U+0000 through U+001F must be escaped`. Never round-trip JSON through `echo`. Use `gh ... --jq '...'` directly, pipe without a variable (`gh ... | jq`), or `printf '%s' "$json" | jq`.
 
 ## Session Start
 
@@ -64,20 +70,16 @@ Tool calls re-read full context. Loops compound.
 
 ## Turn-Cap Protocol
 
-`turn-cap-warn.sh` hard-halts turn 20. Soft turn 15. `auto-handoff.sh` writes `~/.claude/handoffs/` at 20 (or ctx ≥300k) → `/clear` safe, `/resume` reads back. `clear-handoff.sh` (SessionEnd reason=clear) captures state on any `/clear` ≥5 turns / ≥100k ctx, even below the cap.
+`turn-cap-warn.sh` soft-warns turn 15, hard-halts turn 20 (directive re-fires every prompt past 20 — cost is quadratic, no push-through). `clear-handoff.sh` (SessionEnd reason=clear) captures state on any `/clear` ≥5 turns / ≥100k ctx. Nothing auto-writes a doc at the cap and nothing blocks tools — state worth carrying → run `/handoff` *before* the halt.
 
-- **15 soft**: wrap in-flight. No new scope.
+- **15 soft**: wrap in-flight. No new scope. `/handoff` now if the session must continue elsewhere.
 - **20 HARD HALT** by cwd:
-  - Normal: tell user `/clear`. No tools.
-  - `wt` lane (`<repo>/.claude/worktrees/`): one `git add -A && git commit` max, stop. User runs `/resume` in fresh lane.
-  - Ralph lane (lane + `scripts/ralph/`): end iteration silently. `ralph.sh` spawns next w/ fresh ctx.
-- **Past 20**: directive re-fires every prompt; `handoff-gate.sh` blocks tools until a handoff doc exists. Cost = quadratic. No push-through.
-
-`/handoff` skill = richer; auto doc = safety net.
+  - Normal: tell user `/clear` (clear-handoff captures state on the way out). No tools.
+  - `wt` lane (`<repo>/.claude/worktrees/`): one `git add -A && git commit` max, stop. Git + brief `## Local notes` carry context; user runs `/resume` in fresh lane.
 
 ## Briefs & PRDs
 
-Re-read every lane resume / loop iteration — compounds. Brief = context + acceptance criteria. `## Local notes` = decisions, not narration. Ralph stories sized to one context window.
+Re-read every lane resume / loop iteration — compounds. Brief = context + acceptance criteria. `## Local notes` = decisions, not narration. Epic child stories sized to one context window.
 
 ## Git Workflow
 
@@ -89,7 +91,7 @@ Re-read every lane resume / loop iteration — compounds. Brief = context + acce
 
 ## Secrets / Env
 
-Need API key, token, or env var → check `.env.local` (project root) first, then `.env`, then `~/.claude/.env` (cross-project shared keys — LangSmith, Axiom, etc; source with `set -a; . ~/.claude/.env; set +a`). Don't ask the user for a value that's already there. Never hardcode secrets, never echo a full key to output/logs/commits — reference by name (`$OPENAI_API_KEY`), mask when shown. Missing from all → ask.
+Need API key, token, or env var (for a tool call or otherwise) → check `.env.local` (project root) first, then `.env`, then the cross-project shared stores `~/.claude/.env` and `~/.pi/.env` (LangSmith, Axiom, etc; source with `set -a; . ~/.claude/.env; . ~/.pi/.env 2>/dev/null; set +a`). Don't ask the user for a value that's already there. Never hardcode secrets, never echo a full key to output/logs/commits — reference by name (`$OPENAI_API_KEY`), mask when shown. Missing from all → ask.
 
 LangSmith REST: key is workspace-scoped — every request needs BOTH `-H "x-api-key: $LANGSMITH_API_KEY"` AND `-H "X-Tenant-Id: $LANGSMITH_WORKSPACE_ID"`, else `{"detail":"Forbidden"}`.
 

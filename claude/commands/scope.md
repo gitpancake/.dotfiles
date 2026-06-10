@@ -123,10 +123,12 @@ Copy the templates. Do not freehand the frontmatter.
 - Epic root → `$TICKETS_DIR/_EPIC-TEMPLATE.md`
 - Epic child → `$TICKETS_DIR/_CHILD-TEMPLATE.md`
 
-Every ticket uses the same shape, so lanes read it identically. Set `created` to the current
-UTC instant as full ISO-8601 with a `Z` suffix (e.g. `2026-05-27T18:13:00Z`) — never a bare
-date, which tix can't anchor to an instant and which forces a fallback to file birthtime.
-Get the value from `date -u +%Y-%m-%dT%H:%M:%SZ` if unsure. Set `status: open` on every
+Every ticket uses the same shape, so lanes read it identically. Set `created` to the output
+of `date -u +%Y-%m-%dT%H:%M:%SZ` — run the command, ALWAYS; never compose the timestamp
+yourself (you have no clock — model-guessed instants have shipped up to an hour off, which
+skews tix's created-sort and timestamp column). Never a bare date either, which tix can't
+anchor to an instant and which forces a fallback to file birthtime. One `date -u` call
+covers a batch — reuse its value across every ticket written in the same pass. Set `status: open` on every
 ticket AND every epic child (the reconciler does not run on `tix` launch, so a missing
 `status:` shows as a muted non-ticket until the next `wt`/manual sweep). Leave
 `linear:` empty — it's only a breadcrumb on tickets that predate the local-only move.
@@ -134,9 +136,9 @@ ticket AND every epic child (the reconciler does not run on `tix` launch, so a m
 **For an epic:** `_epic.md` carries the `<!-- epic-stories:start -->` block — the
 authoritative ordered story list plus dependency DAG. Each story's `context:` points at its
 `NN-<child>.md`. The children carry the deep per-story detail; `_epic.md` carries
-context / goal / constraints / story-list. Ralph reads `_epic.md` to start and opens a child
-when it picks that story — so the block must be complete and correctly ordered before any
-lane spawns.
+context / goal / constraints / story-list. `/epic` reads `_epic.md` to pick the next story
+and each child lane opens its `NN-<child>.md` — so the block must be complete and correctly
+ordered before any lane spawns.
 
 ## 5. Show the draft. Stop.
 
@@ -152,7 +154,7 @@ write yet.
 For an epic:
 
 > Epic at `$TICKETS_DIR/<area>/<epic-slug>/`. Run `/epic <epic-slug> <base>` to review
-> the story order and spawn the Ralph lane.
+> the story order and spawn the next child lane.
 
 ## Stop conditions
 

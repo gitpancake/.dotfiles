@@ -27,10 +27,10 @@ slug → epic folder name) — do **not** re-implement the lookup here.
 - **Non-zero exit / no path printed** → stop. Tell the user to `/scope` it first.
 - **`basename "$BRIEF"` == `_epic.md`** → it's an epic, wrong command. Stop:
   > Resolved to epic `<TICKET>`. Use `/epic <TICKET> <BASE>` to confirm story order +
-  > spawn Ralph lane. `/pickup` is for single tickets only.
+  > spawn the next child lane. `/pickup` is for single tickets only.
 
-  Story-order confirmation in `/epic` is the contract that makes Ralph deterministic —
-  don't bypass it by auto-routing.
+  Story-order confirmation in `/epic` is the contract that keeps epic execution
+  deterministic — don't bypass it by auto-routing.
 
 ## 3. Fold in context — only if `CONTEXT` non-empty
 

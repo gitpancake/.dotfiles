@@ -22,7 +22,7 @@ Configuration, hooks, agents, commands, skills, and lane primitives for [Claude 
 | `skills/` | Skills — `grill-with-docs`, `to-issues`, `tdd`, `diagnose`, `handoff`. Each is a dir with `SKILL.md`. |
 | `hooks/` | Shell hooks invoked on session events (notification, tool use, stop, user-prompt-submit). |
 | `scripts/` | Remaining helper scripts — `ticket-status-sync.py` (used by `TIX_PRELOAD_HOOK` and `WT_TICKET_SYNC`), `plan-lint.sh`, `verify-clean.sh`, `prune-*.sh`. Lane-orchestration scripts moved to **[wt-lanes](https://github.com/gitpancake/wt-lanes)**. |
-| `bin/` | PATH-exposed leftover tools — `git-watch`, `slack-tldr`, `slack-watch`. Lane bins (`wt`, `wt-gc`, `ralph-bootstrap`) moved to **[wt-lanes](https://github.com/gitpancake/wt-lanes)**. `tix` ships from **[tix](https://github.com/gitpancake/tix)** (`pipx install tix-cli`). |
+| `bin/` | PATH-exposed leftover tools — `git-watch`, `slack-tldr`, `slack-watch`. Lane bins (`wt`, `wt-gc`) moved to **[wt-lanes](https://github.com/gitpancake/wt-lanes)**. `tix` ships from **[tix](https://github.com/gitpancake/tix)** (`pipx install tix-cli`). |
 
 LaunchAgent plists (installed into `~/Library/LaunchAgents/`):
 
@@ -35,7 +35,7 @@ LaunchAgent plists (installed into `~/Library/LaunchAgents/`):
 
 ## Parallel worktree lanes
 
-Lane orchestration (`wt`, `wt-gc`, `ralph-bootstrap`, `agent-board`, hooks, Ralph) now lives in **[wt-lanes](https://github.com/gitpancake/wt-lanes)**. Install with `git clone https://github.com/gitpancake/wt-lanes ~/.wt-lanes && ~/.wt-lanes/install.sh`. The rest of this section describes how this dotfiles repo uses it.
+Lane orchestration (`wt`, `wt-gc`, `agent-board`, hooks) now lives in **[wt-lanes](https://github.com/gitpancake/wt-lanes)**. Install with `git clone https://github.com/gitpancake/wt-lanes ~/.wt-lanes && ~/.wt-lanes/install.sh`. The rest of this section describes how this dotfiles repo uses it.
 
 `wt <slug-or-epic>` spawns one parallel lane per ticket. Each lane is fire-and-forget: reads the local brief, works it through to a PR, then stops.
 
@@ -54,8 +54,6 @@ Modes:
 | Mode | When |
 | --- | --- |
 | `wt <slug>` | Single one-shot lane. Default. |
-| `wt --loop <slug>` | Outer shell loop wrapping `claude --print` iterations bridged by auto-handoff docs. Stays autonomous past the turn-20 halt. |
-| `wt --ralph <epic-slug>` | Ralph autonomous loop for epics — one story per fresh-context iteration, memory via git + `progress.txt` + `prd.json`. |
 | `wt --dag <slug>` | Parse plan DAG, spawn ready-set lanes (dormant until prereqs done). |
 | `wt --branch <name>` | Spawn a lane on an existing branch (e.g. a PR head). |
 
@@ -77,7 +75,7 @@ tix                          → terminal ticket explorer (github.com/gitpancake
                                +/− priority · d done · x cancel · N paste from clipboard
 wt <slug>                    → autonomous lane (see "Parallel worktree lanes")
 /pickup <slug> <BASE> [ctx]  → wt wrapper: sync to a base branch + fold in extra context
-/epic <epic-slug> <BASE>     → confirm an epic's ordered story list, then spawn a Ralph lane
+/epic <epic-slug> <BASE>     → confirm an epic's ordered story list, then spawn the next child lane
 /ship                        → commit + push + PR + repo-appropriate review (Claude only for cartage-agent tix tasks)
 /address-feedback <PR#>      → triage PR comments, spawn a lane on the PR's branch
 /resume [desc]               → resume from the most recent handoff doc
@@ -104,15 +102,15 @@ Three layers of friction keep heavy Opus usage from silently draining Max-plan b
 
 **Reactive — Post-mortem.** `transcript-costs.sh [days=7] [top=10]` ranks sessions by estimated cost using Anthropic list prices per model.
 
-**Preventive — Hook.** `hooks/tool-loop-warn.sh` fires a one-time warning per session when the same tool has been called ≥30× or total tool calls cross 100. `CLAUDE.md` instructs Claude to propose the **batch pattern** (one LLM call → plan, script applies) before any N-item operation.
+**Preventive — CLAUDE.md.** `CLAUDE.md` instructs Claude to propose the **batch pattern** (one LLM call → plan, script applies) before any N-item operation, grep-before-read on big files, and subagent dispatch for broad lookups.
 
 Model selection:
-- **Opus** — everything. Workflow (local briefs, fresh-context Ralph loops, `/handoff`) is context-efficient enough.
+- **Opus** — everything. Workflow (local briefs, fresh-context lanes, `/handoff`) is context-efficient enough.
 - **Haiku** — bulk mechanical edits only (20+ identical changes).
 
 ## Turn-cap protocol
 
-`hooks/turn-cap-warn.sh` hard-halts at turn 20. Soft warn at turn 15. `hooks/auto-handoff.sh` writes `~/.claude/handoffs/<UTC>-auto-<branch>.md` at turn 20 (or ctx ≥300k) so `/clear` is safe and `/resume` has a target. `hooks/clear-handoff.sh` (SessionEnd, `reason=clear`) captures state on any `/clear` ≥5 turns / ≥100k ctx, even below the cap. `hooks/handoff-gate.sh` (PreToolUse) blocks tools at turn ≥20 until a handoff doc exists. Doc format is shared via `hooks/_handoff-doc.sh`.
+`hooks/turn-cap-warn.sh` hard-halts at turn 20 (directive re-fires every turn past it). Soft warn at turn 15. `hooks/clear-handoff.sh` (SessionEnd, `reason=clear`) captures state on any `/clear` ≥5 turns / ≥100k ctx. Doc format lives in `hooks/_handoff-doc.sh`. State worth carrying → run `/handoff` before the halt; git + brief Local notes are the lane carryover.
 
 Behavior by cwd at turn 20:
 
@@ -120,7 +118,6 @@ Behavior by cwd at turn 20:
 | --- | --- |
 | Normal session | Tell user `/clear`. No tools. |
 | `wt` lane (`<repo>/.claude/worktrees/`) | One `git add -A && git commit` max, then stop. User runs `/resume` in fresh lane. |
-| Ralph lane (lane + `scripts/ralph/`) | End iteration silently. `ralph.sh` spawns next w/ fresh ctx. |
 
 `hooks/debug-router.sh` (UserPromptSubmit) — routes free-form debug prompts ("why is PR #X failing", "tests failing") to `/why-failing` or the `diagnose` skill, once per session.
 

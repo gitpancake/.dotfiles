@@ -135,15 +135,20 @@ printf '%s\n' "PR: <pr-url>" | LINEAR_TICKET_CREATE_OK=1 ~/.dotfiles/scripts/lin
 
 ## 5. Review
 
-Tix project rule: only `cartage-agent` has Claude reviews. For tix tasks in any other repo, do not trigger `@claude review`; skip review and say the repo has no Claude review convention.
+Chuck (Railway PR reviewer) reviews `cartage-ai/cartage-agent` and `cartage-ai/ai-employees`. For a PR in either:
 
-For non-tix repos, trigger only the repo's current review convention. Inspect recent PR comments or repo docs before assuming a bot name.
+```bash
+gh pr comment <PR> --body "@chuck-noland-cartage review"
+```
+
+Chuck's review lands as a **single issue comment from `chuck-noland[bot]`** ("### Chuck PR Review" in the body) on the PR conversation — he creates no GitHub Review object, no inline review comments, and never sets `reviewDecision`. To read his findings: `gh api repos/{owner}/{repo}/issues/<PR>/comments`, never `reviews`/`reviewDecision`/`pulls/<PR>/comments`.
+
+For other repos, trigger only the repo's current review convention. Inspect recent PR comments or repo docs before assuming a bot name.
 
 Common choices:
 
 - No bot: skip review trigger and say so.
-- `cartage-agent`: `gh pr comment <PR> --body "@claude review"`.
-- Repo-specific non-Claude bot: use the exact repo convention.
+- Repo-specific bot: use the exact repo convention.
 - Human review: leave the PR ready and report the URL.
 
 Do not wait for asynchronous review results unless the user asks.

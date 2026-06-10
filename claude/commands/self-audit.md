@@ -73,7 +73,7 @@ Aggregate:
 
 The script also emits two pre-computed Stage 2 flags directly in `sessionAgg.flags`:
 
-- **`adoptionGaps`** — for each frequent prompt-theme (token-frequency, ≥2 events), fuzzy-match (Levenshtein ≥ 0.6, substring boost) to a slash/project command by name and emit `themeCount − invocations` where positive. Heads-up: autonomous `wt --ralph` lane spawn prompts dominate the histogram; treat very-high-count themes that look like lane spawn text as noise, not user intent. The Haiku clustering in §4 is the authoritative theme source — `adoptionGaps` is a cheap fallback when Haiku is unavailable.
+- **`adoptionGaps`** — for each frequent prompt-theme (token-frequency, ≥2 events), fuzzy-match (Levenshtein ≥ 0.6, substring boost) to a slash/project command by name and emit `themeCount − invocations` where positive. Heads-up: autonomous `wt` lane spawn prompts dominate the histogram; treat very-high-count themes that look like lane spawn text as noise, not user intent. The Haiku clustering in §4 is the authoritative theme source — `adoptionGaps` is a cheap fallback when Haiku is unavailable.
 - **`handoffVsClear`** — `{handoff, clear, handoffShare, flagged, note}`. `flagged: true` when ≥3 hygiene events and `handoffShare < 0.5`.
 
 ## 4. Shell command history (last 7 days)
@@ -224,8 +224,7 @@ Note: separate real stale feature lanes from dormant repo-main checkouts.
 - Slash commands > 200 lines → refactor candidates (encyclopedia drift)
 - Empty (0-line) slash command stubs → delete candidates
 - CLAUDE.md > 150 lines → lean-config refactor candidates
-- /handoff vs /clear split → if `flagged: true`, surface as session-hygiene candidate (auto-handoff hook)
-- Turn-cap obedience < 50% → session-hygiene candidate (auto-handoff hook)
+- Turn-cap obedience < 50% → session-hygiene candidate
 - Stale worktrees > 3 → cleanup-automation candidate
 - Top tool calls dominated by Bash → possible workflow-script candidate
 - Shell cmd+subcommand ≥ 50 invocations → wrapper-script candidate

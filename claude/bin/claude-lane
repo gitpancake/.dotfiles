@@ -8,9 +8,10 @@
 #   2. PATH prepend ~/.claude/lane-bin — shims wall-clock timeouts around
 #      slow build tools (currently `bun`).
 #   3. --strict-mcp-config + --mcp-config ~/.claude/mcp.lane.json — drops
-#      the heavy stdio MCP servers (playwright, slack, gcloud, posthog,
-#      figma, trigger, axiom) for lane work. Cuts ~5 node procs * 50–100MB
-#      per lane. Keeps HTTP MCPs (linear, sentry) because they're free.
+#      ALL MCP servers for lane work. Stdio ones (playwright, slack, gcloud,
+#      posthog, figma, trigger, axiom) cost ~5 node procs * 50–100MB per
+#      lane; HTTP ones (linear, sentry) showed 0 lane calls in 7d and Linear
+#      is doctrine-banned in lanes (write-only via linear-ticket.py).
 #
 # Set as $WT_CLAUDE in zshenv so `wt` picks it up.
 

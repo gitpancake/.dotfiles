@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # SessionEnd hook: when the user runs /clear, write a handoff doc *before* the
-# context is wiped — unless the session is trivial or auto-handoff already
-# captured it.
+# context is wiped — unless the session is trivial or one was already captured
+# (e.g. via /handoff).
 #
 # Why: /clear fires SessionEnd with session_end_reason="clear" while the
-# transcript is still on disk. auto-handoff.sh only fires at the turn-20 cap or
-# 300k-token threshold; the audit showed /clear dominating at a p50 of ~2 turns,
-# i.e. most state loss happens *below* the cap. This closes that gap.
+# transcript is still on disk. The audit showed /clear dominating at a p50 of
+# ~2 turns — most state loss happens well below the turn cap. This is the
+# automatic capture net.
 #
 # Not every /clear deserves a doc — a 2-turn throwaway has nothing to save.
 # Floor: capture only if turns >= 5 OR context >= 100k tokens (the "few turns
@@ -32,7 +32,7 @@ logDir="${HOME}/.claude/state/turn-counters"
 counterFile="${logDir}/session-${sessionId}.count"
 handoffMarker="${logDir}/session-${sessionId}.handoff"
 
-# Already captured this session (auto-handoff or a prior /clear attempt) → done.
+# Already captured this session (a prior /clear attempt or /handoff) → done.
 if [[ -f "$handoffMarker" ]]; then
   existing=$(cat "$handoffMarker" 2>/dev/null)
   [[ -n "$existing" && -f "$existing" ]] && exit 0

@@ -20,16 +20,16 @@ Take an open PR, harvest every comment, triage into actionable feedback, write a
 **Stop conditions** (report, wait):
 - PR not `OPEN` → refuse (merged/closed — nothing to push to).
 - `isCrossRepository: true` (fork PR) → refuse: "fork PR — the head branch isn't on origin, so `wt --branch` can't check it out. Check out the fork manually." 
-- No comments and no reviews → report "no feedback to address", stop.
+- No comments and no reviews → report "no feedback to address", stop. (Check **issue comments** before concluding this — Chuck's review is an issue comment, not a review; see §2.)
 
 ## 2. Harvest — everything
 
 Collect all comment surfaces, no pre-filter (`Comment scope: everything`):
-- **Issue comments** (`comments`) — general PR discussion.
-- **Review summaries** (`reviews[].body`) — the review wrapper text. Chuck (`@chuck-noland-cartage`) posts a single `COMMENT` review whose body is only a terse summary (e.g. "🔴 Type safety: … Details inline."); the actionable findings are **not** here — they are the inline comments below. Read the body for orientation, never as the full feedback.
-- **Inline review comments** (`pulls/<PR_NUM>/comments`) — each with `file:line` + diff hunk + a `pull_request_review_id` linking it to its review. This is where Chuck's findings live: one inline comment = one bullet. Harvest **every** one — do not stop at the review body or sample a subset.
+- **Issue comments** (`comments` / `gh api repos/{owner}/{repo}/issues/<PR_NUM>/comments`) — general PR discussion **and Chuck's entire review**. Chuck (author login `chuck-noland[bot]`, triggered via `@chuck-noland-cartage review`) posts **no GitHub Review object and no inline review comments** — his full review is a single issue comment on the PR conversation: a "**### Chuck PR Review**" section with findings inline in the body (severity-tagged, `file:line` references in prose). Parse that body — one finding = one triage row. `reviews: []` + 0 inline comments does **not** mean "no feedback" when a `chuck-noland[bot]` comment exists.
+- **Review summaries** (`reviews[].body`) — review wrapper text from human reviewers or other bots.
+- **Inline review comments** (`pulls/<PR_NUM>/comments`) — each with `file:line` + diff hunk + a `pull_request_review_id` linking it to its review. Harvest **every** one — do not sample a subset. (Human reviewers' findings live here; Chuck's do not.)
 
-Tag each: author, source type, the `pull_request_review_id` it belongs to, `resolved`/`outdated` state.
+Tag each: author, source type, the `pull_request_review_id` it belongs to (issue comments have none), `resolved`/`outdated` state.
 
 ## 3. Triage
 
