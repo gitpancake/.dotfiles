@@ -8,10 +8,8 @@
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
-    <string>DOTFILES_DIR_PLACEHOLDER/claude/bin/wt-gc</string>
-    <string>--quiet</string>
-    <string>--hours</string>
-    <string>4</string>
+    <string>-c</string>
+    <string>exec "$HOME/.local/bin/wt-gc" --quiet --hours 4</string>
   </array>
 
   <key>StartInterval</key>
