@@ -7,7 +7,7 @@ Configuration, hooks, agents, commands, skills, and lane primitives for [Claude 
 | File | Purpose |
 | --- | --- |
 | `settings.json` | Claude Code settings: enabled plugins, statusline command, hooks, model, permission defaults. |
-| `CLAUDE.md` | **Global instructions** loaded into every Claude session — workflow rules, code-quality, cost discipline, OpenViking protocol, agent routing, turn-cap protocol. |
+| `CLAUDE.md` | **Global instructions** loaded into every Claude session — workflow rules, code-quality, cost discipline, agent routing, context-cap protocol. |
 | `statusline-command.sh` | Renders Claude Code's bottom status bar: context-window bar + 5h/7d rate-limit alerts, color-coded by severity. |
 | `transcript-costs.sh` | Post-mortem tool: ranks recent sessions by cost so you can spot expensive transcripts. |
 | `agent-state-vocab.md` | Reason-code vocab for lane `WAITING:<code>` states. |

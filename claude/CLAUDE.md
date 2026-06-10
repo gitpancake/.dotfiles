@@ -38,9 +38,8 @@ The Bash tool runs zsh. zsh `echo` expands backslash escapes — `echo "$json" |
 ## Session Start
 
 1. Read project CLAUDE.md. None → scan repo, create.
-2. Check OV for context.
-3. `git status` + branch. Feature branch for new work.
-4. `~/.claude/org/` org folder → apply `context.md`.
+2. `git status` + branch. Feature branch for new work.
+3. `~/.claude/org/` org folder → apply `context.md`.
 
 ## Code Quality
 
@@ -52,8 +51,6 @@ The Bash tool runs zsh. zsh `echo` expands backslash escapes — `echo "$json" |
 - `const` default. Declare near first use.
 - No code comments. Names + structure carry intent. Exceptions: license headers, tooling pragmas (`eslint-disable`, `ts-expect-error`, `@ts-ignore`), and public-API doc blocks (JSDoc/docstring) where the toolchain consumes them.
 - Composition > inheritance. Narrow interfaces.
-
-Detail: OV `resources/agents/code-structure-reference`.
 
 ## Design Principles
 
@@ -99,14 +96,3 @@ LangSmith REST: key is workspace-scoped — every request needs BOTH `-H "x-api-
 
 After each chunk: update project `CLAUDE.md` (conventions, decisions, gotchas). Update `README.md` if user-facing behavior changes. ≤150 lines. Cut anything derivable from code.
 
-## OpenViking
-
-Vector-indexed MCP: cross-project knowledge, external API docs, research.
-
-**Not for**: project context (CLAUDE.md), work summaries (git), user prefs (auto-memory).
-
-**MANDATORY**: Before `WebFetch`/`WebSearch`/`context7` for API docs → `find`/`search` OV first. Not found → fetch + `add_resource`.
-
-`mcp__openviking__ls` at `resources/` to discover. List before assuming paths.
-
-Namespaces: `resources/agents/`, `resources/<project>/`, `resources/<api-name>/`.

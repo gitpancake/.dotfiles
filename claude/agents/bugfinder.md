@@ -1,7 +1,7 @@
 ---
 name: bugfinder
 description: Static analysis bug hunter for TypeScript/Node codebases. Scours a target scope (file, service, or full repo) for logic errors, race conditions, null dereferences, silent error handling, type mismatches, security issues, and resource leaks. Files a Linear ticket for every confirmed or likely bug with file:line references and suggested fixes. Returns a prioritized table of findings with ticket links. Does NOT require a PR — works on any path. Use instead of code-reviewer when you want proactive codebase-wide bug discovery rather than PR review.
-tools: Bash, Read, Glob, Grep, mcp__openviking__find, mcp__openviking__search, mcp__openviking__read_content
+tools: Bash, Read, Glob, Grep
 model: inherit
 ---
 

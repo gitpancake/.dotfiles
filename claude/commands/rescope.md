@@ -32,8 +32,8 @@ Unsure → treat as structural.
 - **Mirror search** — find the structural twin file/feature; cite paths.
 - **Surface area** — top ≤8 files to start in, each with a one-line reason.
 - **Mechanism honesty** — env vars, vendor accounts, infra prereqs.
-- Vendor work → search OpenViking first (`mcp__openviking__search resources/<org>/<vendor>`);
-  cite source files or note "no docs indexed."
+- Vendor work → check context7 / official docs for the vendor API; cite the doc section
+  used or note "no docs found."
 - For deeper stress-testing against the project's domain model, hand off to the
   `grill-with-docs` skill.
 

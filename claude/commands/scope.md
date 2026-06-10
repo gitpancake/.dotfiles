@@ -50,8 +50,8 @@ This is the part that makes the brief pickable rather than a wishlist.
 A lot of work is "mirror an existing integration for a new vendor" shaped. Find
 the structural twin first — name it, and for each layer it touches (workflow / route / model
 / UI / task / tool def) name the mirror's entry-point file, path + one-line reason. Vendor
-work → search OpenViking first (`mcp__openviking__search resources/<org>/<vendor>`); cite
-`source_file § section` or note "no docs indexed."
+work → check context7 / official docs for the vendor API; cite the doc section used or
+note "no docs found."
 
 ### 2b. Surface area (grounded grep)
 
