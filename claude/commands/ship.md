@@ -156,8 +156,9 @@ gh pr comment "$PR_NUM" --body "@chuck-noland-cartage review"
 
 Chuck reacts 👀 on the comment within ~1s, then posts his review in ~2–3 min, once per PR
 (loop-guarded). **Format: a single issue comment from `chuck-noland[bot]` on the PR
-conversation — body starts `**Chuck finished …**` followed by a `### Review — <title>`
-section; 🔴 findings are blockers, "Advisory (non-blocking)" items are nits** — he creates
+conversation — body starts `**Chuck finished …**` followed by a review section whose
+header varies (`### Review — <title>`, `### Chuck review`); match on author + that opener,
+never the header. 🔴 findings are blockers, "Advisory" items are nits** — he creates
 no GitHub Review object, no inline review comments, and never touches `reviewDecision`.
 Anything polling for his review must read `issues/<PR>/comments` (author
 `chuck-noland[bot]`), not `reviews`/`reviewDecision`/`pulls/<PR>/comments`. /ship itself
