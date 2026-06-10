@@ -43,16 +43,6 @@ else
 fi
 echo "  launchd: OK"
 
-# focus-guard — only refresh if already installed at the system level.
-# Standalone installer + uninstaller live at focus-guard/{install,uninstall}.sh.
-if [ -f /Library/LaunchDaemons/local.focus-guard.plist ] && command -v sudo &>/dev/null \
-   && sudo -n true 2>/dev/null; then
-  "$DOTFILES_DIR/focus-guard/install.sh"
-  echo "  focus-guard: refreshed"
-else
-  echo "  focus-guard: skipped (not installed, or sudo unavailable)"
-fi
-
 # Clean up empty ~/Documents/code if it exists
 if [ -d "$HOME/Documents/code" ] && [ -z "$(ls -A "$HOME/Documents/code")" ]; then
   rmdir "$HOME/Documents/code"

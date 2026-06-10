@@ -1,5 +1,0 @@
-#!/bin/bash
-# Manual override: engage block now, persist until `unblock`.
-# focus-guard.sh writes the override file + swaps /etc/hosts in one path
-# (single writer — no separate switch-hosts.sh).
-exec sudo /usr/local/bin/focus-guard.sh block

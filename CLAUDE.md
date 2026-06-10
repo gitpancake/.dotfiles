@@ -6,12 +6,11 @@ Personal dotfiles for macOS and WSL2 (Ubuntu). Symlinked into `$HOME` by `instal
 
 Most surface area is documented in subdirectory READMEs:
 
-- `README.md` — top-level: tree, lane workflow, agent board, slack TLDR, focus-guard, art tooling
+- `README.md` — top-level: tree, lane workflow, agent board, slack TLDR, art tooling
 - `pi/README.md` — Pi config layout (settings, keybindings, extensions, prompts, skills, themes)
 - `claude/README.md` — Claude Code config layout (settings, hooks, agents, commands)
 - `tmux/README.md` — tmux config + status bar
 - `scripts/README.md` — terminal art toys + reactive matrix protocol
-- `focus-guard/README.md` — site blocker setup
 
 This file is the project memory layer for Claude — it captures the gotchas and editing rules that aren't obvious from the source.
 
@@ -26,7 +25,6 @@ This file is the project memory layer for Claude — it captures the gotchas and
 - `~/.pi/agent/AGENTS.md`, `settings.json`, `keybindings.json`, `extensions/`, `prompts/`, `skills/`, `themes/`, `bin/` → `pi/`; private Pi runtime state stays outside git (`auth.json`, `.env.local`, `sessions/`, `npm/`, `git/`)
 - `~/.dotfiles/scripts/*` is on PATH via `.zshenv` so `slack-watch`, `slack-tldr` etc. resolve from any cwd
 - `~/Library/LaunchAgents/local.*.plist` → `claude/local.*.plist` (user agents)
-- focus-guard plists are **LaunchDaemons** — `install-mac.sh`/`rewire-symlinks.sh` *copy* (not symlink) `focus-guard/local.focus-*.plist` → `/Library/LaunchDaemons/` (root) and `bootstrap` them; scripts copied to `/usr/local/bin`. Editing the repo files does **not** hot-update — re-run install or `sudo rewire-symlinks.sh`.
 
 `rewire-symlinks.sh` re-runs the symlinking pass alone. Use after adding a new file under a managed dir.
 
@@ -106,7 +104,6 @@ Battery is inverted (low = red).
 ## Privacy
 
 - `~/.claude/org/<org>/` is gitignored — never committed.
-- `/etc/hosts.blocked` (focus-guard's real domain list) is OS-side only — never committed. `focus-guard/hosts.blocked.example` is the template.
 - `scripts/*.config.local` files are gitignored — copy `*.config.example.json` to seed.
 - `scripts/redact_chatlogs.py` scrubs `~/.claude/projects/` transcripts before sharing.
 

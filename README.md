@@ -43,8 +43,6 @@ Each top-level folder has its own README with the deep dive — this tree is jus
 │                            #   skills, themes, bin        → pi/README.md
 ├── scripts/                 # Slack TLDR, git-watch,
 │                            #   reactive art, redactor     → scripts/README.md
-├── focus-guard/             # macOS time-aware site blocker
-│                            #   (opt-in install)           → focus-guard/README.md
 ├── ghostty/                 # Ghostty config (Gruvbox Material Medium Dark)
 ├── iterm/                   # iTerm2 Gruvbox presets       → iterm/README.md
 ├── vim/                     # minimal .vimrc (gruvbox)     →  (file is the doc)
@@ -57,15 +55,13 @@ Each top-level folder has its own README with the deep dive — this tree is jus
 
 ## Cross-cutting concepts
 
-**Symlinks, not copies.** Almost everything is `ln -sf`'d into `$HOME`. Edit the file in this repo, the change is live. Exception: focus-guard's `LaunchDaemon` plists are *copied* to `/Library/LaunchDaemons/` (root-owned), and the `claude/local.*.plist` files are *generated* into `~/Library/LaunchAgents/` with `DOTFILES_DIR_PLACEHOLDER` substituted — re-run `rewire-symlinks.sh` after editing those.
+**Symlinks, not copies.** Almost everything is `ln -sf`'d into `$HOME`. Edit the file in this repo, the change is live. Exception: the `claude/local.*.plist` files are *generated* into `~/Library/LaunchAgents/` with `DOTFILES_DIR_PLACEHOLDER` substituted — re-run `rewire-symlinks.sh` after editing those.
 
-**Private state lives outside the repo.** `~/.claude/org/<org>/`, `~/.pi/agent/auth.json`, `~/.pi/agent/.env.local`, `~/.pi/agent/sessions/`, `~/.zshenv.local`, `/etc/hosts.blocked`, `scripts/*.config.local` — all gitignored or system-side only. `.gitignore` is the source of truth for what stays out.
+**Private state lives outside the repo.** `~/.claude/org/<org>/`, `~/.pi/agent/auth.json`, `~/.pi/agent/.env.local`, `~/.pi/agent/sessions/`, `~/.zshenv.local`, `scripts/*.config.local` — all gitignored or system-side only. `.gitignore` is the source of truth for what stays out.
 
 **Lane workflow.** Parallel Claude lanes spawn via `wt <slug>` (claude/bin/wt). Each lane is fire-and-forget through to a PR. The `tmux/agent-board.sh` pane is the visible contract — one row per lane, color-coded by state. Full details in `claude/README.md`.
 
 **Cost discipline.** Two layers (statusline, post-mortem `transcript-costs.sh`) keep heavy Opus usage from silently draining Max-plan buckets. See `claude/README.md`.
-
-**Focus-guard is opt-in.** Not part of the main installer. `./focus-guard/install.sh` to install, `./focus-guard/uninstall.sh` to remove.
 
 **Secret redaction.** `scripts/redact_chatlogs.py` scrubs `~/.claude/projects/` transcripts of common secret patterns. Run before sharing.
 
@@ -77,5 +73,4 @@ Each top-level folder has its own README with the deep dive — this tree is jus
 - [tmux](https://github.com/tmux/tmux), [zoxide](https://github.com/ajeetdsouza/zoxide), [fzf](https://github.com/junegunn/fzf), [glow](https://github.com/charmbracelet/glow)
 - [`tix`](https://github.com/gitpancake/tix) — ticket explorer. `pipx install tix-cli`. `TIX_PRELOAD_HOOK` (set in `zsh/.zshenv`) points it at `claude/scripts/ticket-status-sync.py`.
 - [`wt-lanes`](https://github.com/gitpancake/wt-lanes) — parallel-lane infrastructure. `git clone https://github.com/gitpancake/wt-lanes ~/.wt-lanes && ~/.wt-lanes/install.sh`. Provides `wt`, `wt-gc`, `agent-board`, lane hooks. `WT_TICKET_SYNC` (set in `zsh/.zshenv`) wires `wt` spawn → `ticket-status-sync.py`.
-- [mkcert](https://github.com/FiloSottile/mkcert) + [nginx](https://nginx.org/) — focus-guard only
 - Python 3 stdlib (`curses`) — terminal toys

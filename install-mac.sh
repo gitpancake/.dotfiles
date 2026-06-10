@@ -93,8 +93,5 @@ else
   echo "      launchctl load -w $SLACK_PLIST"
 fi
 
-# focus-guard is opt-in. Install separately:
-#   ./focus-guard/install.sh
-
 echo ""
 echo "Done! Run 'source ~/.zshrc' to reload."
