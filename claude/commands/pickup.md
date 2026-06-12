@@ -92,10 +92,12 @@ Run via the Bash tool — opens a new tmux window w/ claude in autonomous mode.
 
 - **fork-off**:
   ```bash
-  wt <TICKET>
+  wt --base <BASE> <TICKET>
   ```
-  Branches `<type>/<TICKET>` off current `BASE`, creates worktree + per-lane port. Branch
-  type defaults to `feature/` — for `fix/` or `refactor/`, run `wt --type <prefix> <TICKET>`
+  Branches `<type>/<TICKET>` off `BASE`, creates worktree + per-lane port. `--base` is
+  required even after the cockpit sync — without it `wt` defaults to origin's default
+  branch, not the cockpit HEAD. For `BASE` == `.` use `--base HEAD`. Branch type defaults
+  to `feature/` — for `fix/` or `refactor/`, run `wt --type <prefix> --base <BASE> <TICKET>`
   directly.
 
 - **onto**:
