@@ -156,9 +156,32 @@ For an epic:
 > Epic at `$TICKETS_DIR/<area>/<epic-slug>/`. Run `/epic <epic-slug> <base>` to review
 > the story order and spawn the next child lane.
 
+## 7. Commit the glossary edit — if §2c touched `CONTEXT.md`
+
+The brief lives in `$TICKETS_DIR` (its own tree), but `CONTEXT.md` is a **project-repo file**.
+A `CONTEXT.md` edit left uncommitted in the cockpit orphans: lanes branch off `origin/main` in a
+separate worktree, never see the cockpit's dirty file, and never carry it into a PR — so it
+sits dirty forever and stalls every `wt`/`/pickup` fast-forward (memory:
+wt-stale-base-dirty-tree-ff). Close the loop here.
+
+In the **project repo**, if §2c changed `CONTEXT.md`:
+
+```bash
+git -C "$REPO" diff --quiet -- CONTEXT.md || \
+  { git -C "$REPO" add CONTEXT.md; \
+    git -C "$REPO" commit -q -m "docs: pin <terms> in CONTEXT.md glossary"; }
+```
+
+- Stage **`CONTEXT.md` only** — never `git add -A`/`.`; the cockpit may hold unrelated dirty work.
+- This is the one project-repo write `/scope` makes, and it is docs-only — it does NOT violate
+  the "never edit code" rule. Commit only; **never push** (precedent: direct `docs:` commit on
+  the cockpit branch, whatever it is — feature branch rides into that PR, `main` is a clean
+  standalone docs commit).
+- No `CONTEXT.md` change this run → skip silently.
+
 ## Stop conditions
 
 - After §1 clarifying questions — wait for answers.
 - After §5 draft — wait for "go".
-- After §6 write — done. the user runs `wt <slug>` (or `/epic <epic-slug>`) next. Never edit
-  code from this command.
+- After §6 write — done. the user runs `wt <slug>` (or `/epic <epic-slug>`) next. The §7
+  `CONTEXT.md` docs-commit is the only project-repo write; never edit code from this command.
