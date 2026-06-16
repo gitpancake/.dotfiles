@@ -13,7 +13,7 @@ holding the `<!-- epic-stories:start -->` block — the authoritative ordered st
 dependency DAG — plus one `NN-<child>.md` brief per story. `/epic` confirms that order with
 the user, then spawns the **next incomplete child** as a normal `wt` single lane. Re-run
 `/epic` after each child's PR merges to spawn the next — the command is resumable; child
-`status:` frontmatter (kept current by ticket-status-sync) is the progress marker.
+`status:` frontmatter (hand-set, e.g. via tix's `d`/`x` pins) is the progress marker.
 
 Syncs the cockpit to a base branch, folds in any extra context, spawns one lane. Do **not**
 edit project source — this command only prepares and spawns.

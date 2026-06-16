@@ -10,14 +10,9 @@ if [[ -s "$NVM_DIR/alias/default" ]]; then
   unset nvm_ver
 fi
 
-# tix preload hook — run the dotfiles' status reconciler before each tix launch.
-# tix itself is a pure reader (see github.com/gitpancake/tix); status: derivation
-# from live worktrees + merged PRs lives here in claude/scripts/ticket-status-sync.py.
-export TIX_PRELOAD_HOOK="$HOME/.claude/scripts/ticket-status-sync.py"
-
-# wt-lanes (github.com/gitpancake/wt-lanes): tell `wt` to flip a ticket's
-# status: → active on spawn by invoking the same reconciler with the slug.
-export WT_TICKET_SYNC="$HOME/.claude/scripts/ticket-status-sync.py"
+# ticket-status-sync was sunset (2026-06-16): status: is now a hand-driven field
+# (set directly or via tix's d/x pins), not auto-derived. No TIX_PRELOAD_HOOK /
+# WT_TICKET_SYNC — tix and wt no longer rewrite status: on launch/spawn.
 
 # Skip the auto-attached lane-watch monitor pane on `wt` spawn. Preference:
 # single pane per lane, no split. Re-enable per-spawn by unsetting or =0.

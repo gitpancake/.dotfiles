@@ -71,6 +71,6 @@ Each top-level folder has its own README with the deep dive — this tree is jus
 - [Claude Code](https://claude.ai/code)
 - [jq](https://jqlang.org/) — required by statusline + cost + warn hooks
 - [tmux](https://github.com/tmux/tmux), [zoxide](https://github.com/ajeetdsouza/zoxide), [fzf](https://github.com/junegunn/fzf), [glow](https://github.com/charmbracelet/glow)
-- [`tix`](https://github.com/gitpancake/tix) — ticket explorer. `pipx install tix-cli`. `TIX_PRELOAD_HOOK` (set in `zsh/.zshenv`) points it at `claude/scripts/ticket-status-sync.py`.
-- [`wt-lanes`](https://github.com/gitpancake/wt-lanes) — parallel-lane infrastructure. `git clone https://github.com/gitpancake/wt-lanes ~/.wt-lanes && ~/.wt-lanes/install.sh`. Provides `wt`, `wt-gc`, `agent-board`, lane hooks. `WT_TICKET_SYNC` (set in `zsh/.zshenv`) wires `wt` spawn → `ticket-status-sync.py`.
+- [`tix`](https://github.com/gitpancake/tix) — ticket explorer. `pipx install tix-cli`. Pure reader; `status:` is hand-driven (set directly or via tix's `d`/`x` pins) since `ticket-status-sync` was sunset.
+- [`wt-lanes`](https://github.com/gitpancake/wt-lanes) — parallel-lane infrastructure. `git clone https://github.com/gitpancake/wt-lanes ~/.wt-lanes && ~/.wt-lanes/install.sh`. Provides `wt`, `wt-gc`, `agent-board`, lane hooks.
 - Python 3 stdlib (`curses`) — terminal toys

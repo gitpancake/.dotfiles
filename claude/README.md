@@ -21,7 +21,7 @@ Configuration, hooks, agents, commands, skills, and lane primitives for [Claude 
 | `commands/` | Slash commands available in every project (see catalog below). |
 | `skills/` | Skills — `grill-with-docs`, `to-issues`, `tdd`, `diagnose`, `handoff`. Each is a dir with `SKILL.md`. |
 | `hooks/` | Shell hooks invoked on session events (notification, tool use, stop, user-prompt-submit). |
-| `scripts/` | Remaining helper scripts — `ticket-status-sync.py` (used by `TIX_PRELOAD_HOOK` and `WT_TICKET_SYNC`), `plan-lint.sh`, `verify-clean.sh`, `prune-*.sh`. Lane-orchestration scripts moved to **[wt-lanes](https://github.com/gitpancake/wt-lanes)**. |
+| `scripts/` | Remaining helper scripts — `plan-lint.sh`, `verify-clean.sh`, `prune-*.sh`. (`ticket-status-sync.py` was sunset 2026-06-16; `status:` is now hand-driven.) Lane-orchestration scripts moved to **[wt-lanes](https://github.com/gitpancake/wt-lanes)**. |
 | `bin/` | PATH-exposed leftover tools — `git-watch`, `slack-tldr`, `slack-watch`. Lane bins (`wt`, `wt-gc`) moved to **[wt-lanes](https://github.com/gitpancake/wt-lanes)**. `tix` ships from **[tix](https://github.com/gitpancake/tix)** (`pipx install tix-cli`). |
 
 LaunchAgent plists (installed into `~/Library/LaunchAgents/`):
@@ -69,8 +69,7 @@ The filesystem is the database — there is no external tracker. Briefs live in 
 /scope <free text>           → engineer a local brief at $TICKETS_DIR/<area>/<slug>.md
                                (single ticket, or an _epic.md + NN-<child>.md folder)
 tix                          → terminal ticket explorer (github.com/gitpancake/tix).
-                               status: derivation runs via $TIX_PRELOAD_HOOK →
-                               claude/scripts/ticket-status-sync.py.
+                               pure reader; status: is hand-driven (sync sunset).
                                p pickup → wt · e $EDITOR · R/n /rescope|/scope via claude
                                +/− priority · d done · x cancel · N paste from clipboard
 wt <slug>                    → autonomous lane (see "Parallel worktree lanes")

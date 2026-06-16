@@ -42,7 +42,7 @@ Slash commands often dispatch subagents internally, but they aren't the same reg
 
 Lane infrastructure (`wt`, `wt-gc`, `agent-board`, state-writer hooks, lane-watch, lane-pause, dag-parse) now lives in [gitpancake/wt-lanes](https://github.com/gitpancake/wt-lanes). Install: `git clone https://github.com/gitpancake/wt-lanes ~/.wt-lanes && ~/.wt-lanes/install.sh`. Its install.sh symlinks files into the same `~/.claude/scripts`, `~/.claude/hooks`, `~/.local/bin`, and `~/.tmux/` namespaces as the dotfiles, alongside the bits still here.
 
-This repo still owns `claude/scripts/ticket-status-sync.py` (status derivation). Both the tix preload (`$TIX_PRELOAD_HOOK`) and wt spawn (`$WT_TICKET_SYNC`) point at it — both env vars exported from `zsh/.zshenv`.
+`ticket-status-sync.py` was sunset (2026-06-16). `status:` in `~/.claude/tickets` is now a hand-driven frontmatter field (set directly, or via tix's `d`/`x` pins) — nothing auto-derives it from worktrees/PRs anymore. The `TIX_PRELOAD_HOOK` / `WT_TICKET_SYNC` env vars are gone from `zsh/.zshenv`; tix and wt no longer rewrite `status:`.
 
 For lane semantics (state machine vocab, monitor pane contract), read wt-lanes' own README + CLAUDE.md. (Ralph loop retired 2026-06-09 — epics now run as sequential single lanes via /epic.) Don't duplicate that doctrine here.
 
