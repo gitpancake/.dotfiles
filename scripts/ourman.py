@@ -12,8 +12,8 @@ import time
 import random
 import sys
 
-BPM = 140
-BEAT_TIME = 60.0 / BPM        # seconds per beat (~0.4286s)
+DEFAULT_BPM = 140             # the 140 scene's tempo; override with `art ourman <bpm>`
+MIN_BPM, MAX_BPM = 20, 300
 TARGET_FPS = 30
 FRAME_TIME = 1.0 / TARGET_FPS
 
@@ -32,8 +32,10 @@ FALLBACK = {
 
 
 class BassRenderer:
-    def __init__(self, stdscr):
+    def __init__(self, stdscr, bpm=DEFAULT_BPM):
         self.stdscr = stdscr
+        self.bpm = bpm
+        self.beat_time = 60.0 / bpm    # seconds per beat
         self.frame = 0
         self.start = time.monotonic()
         self.rings = []          # active bass rings: list of [radius, energy]
@@ -100,8 +102,8 @@ class BassRenderer:
     def _beat_phase(self):
         """Returns (beat_index, phase 0..1 through current beat)."""
         elapsed = time.monotonic() - self.start
-        beat_index = int(elapsed / BEAT_TIME)
-        phase = (elapsed % BEAT_TIME) / BEAT_TIME
+        beat_index = int(elapsed / self.beat_time)
+        phase = (elapsed % self.beat_time) / self.beat_time
         return beat_index, phase
 
     def _on_beat(self, beat_index):
@@ -198,7 +200,7 @@ class BassRenderer:
 
     def _draw_hud(self, beat_index):
         bar = beat_index % 4 + 1
-        label = f"OURMAN · {BPM} BPM · 1/{bar}  [q]uit"
+        label = f"OURMAN · {self.bpm} BPM · 1/{bar}  [q]uit"
         attr = self._color(5, bold=True)
         self._safe_addstr(0, max(0, (self.width - len(label)) // 2), label, attr)
 
@@ -244,12 +246,26 @@ class BassRenderer:
             pass
 
 
+def parse_bpm(argv):
+    """First positional arg sets BPM (clamped to [MIN_BPM, MAX_BPM]). Non-numeric → default."""
+    for arg in argv:
+        if arg in ("-h", "--help"):
+            print(f"usage: ourman [BPM]   (default {DEFAULT_BPM}, range {MIN_BPM}-{MAX_BPM})")
+            raise SystemExit(0)
+        try:
+            return max(MIN_BPM, min(MAX_BPM, int(float(arg))))
+        except ValueError:
+            continue
+    return DEFAULT_BPM
+
+
 def main(stdscr):
-    BassRenderer(stdscr).run()
+    BassRenderer(stdscr, parse_bpm(sys.argv[1:])).run()
 
 
 def run_no_altscreen():
     """Run curses on the main screen buffer to preserve scrollback and copy/paste."""
+    bpm = parse_bpm(sys.argv[1:])
     stdscr = curses.initscr()
     sys.stdout.write('\033[?1049l')
     sys.stdout.flush()
@@ -257,7 +273,7 @@ def run_no_altscreen():
     curses.cbreak()
     stdscr.keypad(True)
     try:
-        BassRenderer(stdscr).run()
+        BassRenderer(stdscr, bpm).run()
     finally:
         stdscr.keypad(False)
         curses.echo()

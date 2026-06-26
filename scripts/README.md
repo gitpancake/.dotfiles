@@ -18,7 +18,7 @@ User-facing helpers + terminal toys. Most are on `PATH` via `~/.dotfiles/scripts
 | `watch.py` | Generic file-change watcher. |
 | `city.py` | Animated ASCII night-city skyline. |
 | `hologram.py` | Rotating 3D wireframe cube with holographic effects. |
-| `ourman.py` | Ourman-inspired 140 BPM deep-dubstep bass visualizer: a throbbing sub-bass orb pulses on the beat, radiating bass rings under an oriental lattice over a tribal-rhythm spectrum. `q`/ESC quits. |
+| `ourman.py` | Ourman-inspired deep-dubstep bass visualizer: a throbbing sub-bass orb pulses on the beat, radiating bass rings under an oriental lattice over a tribal-rhythm spectrum. Tempo defaults to 140 BPM; `art ourman <bpm>` overrides (clamped 20–300). `q`/ESC quits. |
 
 ## ASCII art toys
 
