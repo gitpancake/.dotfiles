@@ -115,3 +115,4 @@ Battery is inverted (low = red).
 - `.zshrc` has a duplicate `brew shellenv` line (~116-118) — harmless but could be cleaned up.
 - `wt` lanes get per-lane ports `3100 + lane_index` written to `<wt>/.env.local.port`. Dev servers must read `PORT` from there, never hardcode.
 - `node_modules` is per-worktree — first action in a fresh lane is usually `bun install`.
+- ASCII art toys (`scripts/{hologram,city,ourman}.py`) are launched by the `art` zsh function, which resolves `art <name>` to `~/.local/share/art/<name>.py` (defaults to `hologram`). That dir is **hand-symlinked and installer-unmanaged** — neither `install*.sh` nor `rewire-symlinks.sh` populates it. A new toy needs a manual `ln -sf ~/.dotfiles/scripts/<name>.py ~/.local/share/art/`; without the link `art <name>` reports `Unknown art` even though the script is committed.

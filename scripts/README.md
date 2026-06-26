@@ -18,6 +18,18 @@ User-facing helpers + terminal toys. Most are on `PATH` via `~/.dotfiles/scripts
 | `watch.py` | Generic file-change watcher. |
 | `city.py` | Animated ASCII night-city skyline. |
 | `hologram.py` | Rotating 3D wireframe cube with holographic effects. |
+| `ourman.py` | Ourman-inspired 140 BPM deep-dubstep bass visualizer: a throbbing sub-bass orb pulses on the beat, radiating bass rings under an oriental lattice over a tribal-rhythm spectrum. `q`/ESC quits. |
+
+## ASCII art toys
+
+Launched via the `art` zsh function (defined in `zsh/.zshrc`): `art <name>` runs `~/.local/share/art/<name>.py`, defaulting to `hologram` with no args. Current toys: `art hologram`, `art city`, `art ourman` (plus `art watch` for the reactive matrix).
+
+**Adding a toy is two steps** — the launcher resolves names from `~/.local/share/art/`, *not* from this `scripts/` dir, and that directory is **hand-managed** (no installer or `rewire-symlinks.sh` touches it):
+
+1. Drop `scripts/<name>.py` here.
+2. `ln -sf ~/.dotfiles/scripts/<name>.py ~/.local/share/art/<name>.py`
+
+Skip step 2 and `art <name>` prints `Unknown art: <name>` — the script exists but the dispatcher can't see it.
 
 ## Slack alerts → tmux pane
 
