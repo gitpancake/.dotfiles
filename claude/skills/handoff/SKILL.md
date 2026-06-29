@@ -12,6 +12,18 @@ Save it to `~/.claude/handoffs/<UTC-date>-<slug>.md`:
   passed, else from the conversation topic.
 - `mkdir -p ~/.claude/handoffs` first; read the file path before writing to it.
 
+After writing the doc, **always** auto-prune spent handoffs so the directory does not grow
+unbounded (nothing else ever deletes them — `/resume` and the wt-lanes runner only read):
+
+```bash
+find ~/.claude/handoffs -maxdepth 1 -name '*.md' -mtime +"${HANDOFF_RETENTION_DAYS:-14}" -delete
+```
+
+Run it every time, after the new doc is on disk — the just-written doc is far younger than the
+window so it is never caught. A lane consumes its handoff within minutes of the respawn, so a
+doc older than the window is provably spent; deleting it cannot strand an in-flight `/resume`.
+Override the window with `HANDOFF_RETENTION_DAYS` (default 14).
+
 This directory is durable and survives `/clear` — the companion `/resume` command reads
 the most recent handoff (or one matched by description) to pick the thread back up.
 

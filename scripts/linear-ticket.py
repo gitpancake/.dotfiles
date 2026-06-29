@@ -262,6 +262,12 @@ def cmd_create(args: argparse.Namespace, api_key: str) -> None:
         label_ids = pick_label_ids(team, label_names)
         if label_ids:
             issue_input["labelIds"] = label_ids
+    if args.parent:
+        found = graphql(api_key, ISSUE_BY_ID_QUERY, {"id": args.parent})
+        parent = found.get("issue")
+        if not parent:
+            die(f'parent issue "{args.parent}" not found')
+        issue_input["parentId"] = parent["id"]
 
     result = graphql(api_key, CREATE_MUTATION, {"input": issue_input})
     payload = result["issueCreate"]
@@ -333,6 +339,7 @@ def main() -> None:
     create.add_argument("--priority", type=int, choices=[0, 1, 2, 3, 4],
                         help="0 none, 1 urgent, 2 high, 3 medium, 4 low")
     create.add_argument("--labels", default="", help="comma-separated label names")
+    create.add_argument("--parent", help="parent issue identifier (e.g. AE-1234) to nest this as a sub-issue")
     create.add_argument("--description")
     create.add_argument("--description-file")
     create.add_argument(
