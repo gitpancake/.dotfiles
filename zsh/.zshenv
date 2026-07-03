@@ -35,10 +35,11 @@ export WT_CLAUDE="$HOME/.local/bin/claude-lane"
 # lane via `wt`; tix sets WT_AGENT_CMD per the ticket's owning root from this
 # <root>=<cmd> map. Pi-home tickets (~/.pi/agent/tickets) have no entry → wt's
 # default (one-shot pi). Claude-home tickets (~/.claude/tickets) route to the
-# lane Claude launcher pinned to Opus — the old cdsp-autonomous pickup, back
-# but dir-scoped. WT_MODEL=opus is inlined so it survives into the tmux window
-# (tmux new-window doesn't inherit the spawning shell's env).
-export TIX_PICKUP_AGENTS="$HOME/.claude/tickets=WT_MODEL=opus ${WT_CLAUDE}"
+# lane Claude launcher on Sonnet — same default as plain `wt`. WT_MODEL=sonnet
+# is inlined so it survives into the tmux window (tmux new-window doesn't
+# inherit the spawning shell's env). `WT_MODEL=opus wt ...` per lane when
+# reasoning-heavy.
+export TIX_PICKUP_AGENTS="$HOME/.claude/tickets=WT_MODEL=sonnet ${WT_CLAUDE}"
 
 # Machine-local secrets and env overrides. Lives outside the dotfiles repo so it's
 # never tracked. Optional — absent on fresh machines until you populate it.
