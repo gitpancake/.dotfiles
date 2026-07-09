@@ -333,7 +333,7 @@ def main() -> None:
 
     create = sub.add_parser("create", help="create an issue, print id<tab>url")
     create.add_argument("--title", required=True)
-    create.add_argument("--team", default="Autonomy Eng")
+    create.add_argument("--team", default="AO", help="team key or name. Default AO (human work). Agent-created work belongs on AOA.")
     create.add_argument("--state", default="In Progress")
     create.add_argument("--assignee", default="me", choices=["me", "none"])
     create.add_argument("--priority", type=int, choices=[0, 1, 2, 3, 4],

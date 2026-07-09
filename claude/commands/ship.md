@@ -42,20 +42,23 @@ conflicts; don't resolve silently.
 
 ## 2.5. Linear ticket (always linked)
 
-Every PR carries `[AE-NNNN] <desc>` so it links to a ticket with description, reasoning,
-implementation, assignee.
+Every PR carries `[<TICKET_ID>] <desc>` so it links to a ticket with description, reasoning,
+implementation, assignee. New tickets are created on the **AOA** team (`AO - Agents`). The old
+`AE` / `Autonomy Eng` team is **retired** — creating there fails with
+`GraphQL error: Entity is retired: team`. Existing briefs still carrying `linear: AE-NNNN`
+are reconciled in place: reuse the id, never re-create it on AOA.
 
 1. **Resolve brief** from current branch. Reuse `wt --resolve` if available; else
    `grep -rlE "^linear:" "${TICKETS_DIR:-$HOME/.claude/tickets}" --include='*.md'` matched
    by branch slug in filename or `## Local notes`. Found → `BRIEF_FILE=<path>`.
-2. **Read `linear:` frontmatter** from `$BRIEF_FILE` (if any). Non-empty → `AE_ID=<that>`,
+2. **Read `linear:` frontmatter** from `$BRIEF_FILE` (if any). Non-empty → `TICKET_ID=<that>`,
    **skip to §3**.
 3. **No linked ticket** → create one. Script composes body itself from git — do NOT build
    description/reasoning/implementation bullets here, do NOT pass `--description`:
    ```
    LINEAR_TICKET_CREATE_OK=1 ~/.dotfiles/scripts/linear-ticket.py create \
-     --team "Autonomy Eng" \
-     --title "<≤80 chars, action-oriented, no [AE-] prefix — Linear adds its own ID>" \
+     --team "AOA" \
+     --title "<≤80 chars, action-oriented, no id prefix — Linear adds its own ID>" \
      --state "In Progress" \
      --assignee me \
      --auto-body origin/main \
@@ -64,11 +67,12 @@ implementation, assignee.
    `--auto-body origin/main` triggers the script's `compose_body_from_git`: dedup subjects
    → Description, commit `%b` paragraphs → Reasoning, `git diff --stat` grouped by top-dir
    → Implementation. `state` = `In Progress` because work is done (PR is the deliverable).
-   stdout on success: `AE-NNNN<TAB>url`.
-4. **Capture `AE-NNNN`** from stdout → `AE_ID`. Brief exists → write `linear: AE-NNNN` back
-   into its frontmatter so future runs reuse. Brief missing → skip writeback.
+   stdout on success: `AOA-NNN<TAB>url`.
+4. **Capture the id** from stdout → `TICKET_ID`. Brief exists → write `linear: <TICKET_ID>`
+   back into its frontmatter so future runs reuse. Brief missing → skip writeback.
 5. **Script failure** (nonzero exit: no key, network, team not found) → reason on stderr.
-   Log one line, set `AE_ID=""`, continue with no-prefix title. Don't block ship.
+   Log one line, set `TICKET_ID=""`, continue with no-prefix title. Don't block ship. Never
+   substitute a different team on your own — report the failure and let the user decide.
 
 ## 3. PR body — choose sparse vs rich deliberately
 
@@ -82,7 +86,7 @@ Use only when the branch touches a few files and does not add/change providers, 
 schemas, workflows, routing, auth, persistence, observability, or multi-subsystem behavior.
 
 ```
-Linear: https://linear.app/<workspace>/issue/AE-NNNN
+Linear: https://linear.app/<workspace>/issue/<TICKET_ID>
 
 ## Summary
 
@@ -104,7 +108,7 @@ routing, auth, persistence, observability, generated tests, or crosses multiple 
 ```
 ## Linear ticket
 
-[AE-NNNN](https://linear.app/<workspace>/issue/AE-NNNN)
+[<TICKET_ID>](https://linear.app/<workspace>/issue/<TICKET_ID>)
 
 ## Summary
 
@@ -136,7 +140,7 @@ repo convention. Derive bullets from the **cached** `LOG_LINES` + `DIFF_STAT` fr
 re-run git. Abstract, don't restate.
 
 Then `gh pr create`:
-- `--title`: `$AE_ID` non-empty → `[AE-NNNN] <desc>` (≤70 chars total).
+- `--title`: `$TICKET_ID` non-empty → `[<TICKET_ID>] <desc>` (≤70 chars total).
   Empty → action-oriented title, no ID prefix.
 - `--body` from shape above via heredoc.
 - `--base` usually `main`; for `*/slice-N` branches infer parent from `git log`, confirm

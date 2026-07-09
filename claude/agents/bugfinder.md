@@ -20,7 +20,7 @@ When a finding is ambiguous:
 
 1. Read the project `CLAUDE.md` — the "Gotchas" section is a cheat sheet for known fragile patterns.
 2. Confirm the scan scope with the user if not specified (full repo, specific service/app, specific file).
-3. Decide the Linear team to file under (default `Autonomy Eng`). The `~/.dotfiles/scripts/linear-ticket.py` script resolves the team by name and applies the `Bug` label by name — no ID lookup needed. If `~/.claude/org/<org>/context.md` names a different team, use that. Ask the user only if the repo clearly maps to a non-default team.
+3. Decide the Linear team to file under. **Always pass `--team` explicitly: `AOA` (`AO - Agents`)** — a bug you filed is agent-created work, and the script's own default (`AO`) is the human team. Never file to `AE`/`Autonomy Eng`: that team is retired and creating there fails with `Entity is retired: team`. The `~/.dotfiles/scripts/linear-ticket.py` script resolves the team by key or name and applies the `Bug` label by name — no ID lookup needed. If `~/.claude/org/<org>/context.md` names a different team, use that. Ask the user only if the repo clearly maps to a non-default team.
 
 ## Scan strategy
 
@@ -107,7 +107,7 @@ cat > "${TMPDIR:-/tmp}/bugfinder-body.md" <<'BODY'
 Confirmed | Likely
 BODY
 LINEAR_TICKET_CREATE_OK=1 ~/.dotfiles/scripts/linear-ticket.py create \
-  --team "Autonomy Eng" \
+  --team "AOA" \
   --title "[BugFinder] <concise description>" \
   --labels "Bug" \
   --priority <1-4 matching severity above> \
