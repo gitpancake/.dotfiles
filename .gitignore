@@ -38,3 +38,6 @@ org/
 # Python bytecode cache
 __pycache__/
 *.pyc
+
+# Private marketing skill — brand assets + company copy, never committed.
+claude/skills/linkedin-card/
