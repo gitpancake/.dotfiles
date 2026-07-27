@@ -1,0 +1,4 @@
+#!/bin/bash
+# Manual override: clear the override and re-apply the schedule. Inside focus
+# hours the next tick re-blocks (~10 min); outside, it stays open.
+exec sudo /usr/local/bin/focus-guard.sh unblock
