@@ -5,8 +5,6 @@ argument-hint: <free-text problem statement>
 
 # /scope $ARGUMENTS
 
-**Caveman: ultra for all chat (grill Qs, status, draft preamble). Brief content written normal prose — artifact, caveman rule exempts code/commits/PRs/briefs.**
-
 User's standard ask: "scope this out, ready for engineering." Output is a **local brief** a
 `wt` lane can pick up without redoing discovery — it carries the surface area, the mirror
 reference, the gotchas. Refine the request, don't restate it.
@@ -90,23 +88,19 @@ will offer to write it.
 Routine choices (which existing helper to call, which existing table to extend) — skip §2e.
 Reserve for decisions that survive past the PR.
 
-Apply your org's risk callouts where they fit — see `~/.claude/org/<org>/preamble.md` for the
-per-org checklist (LLM-cache thresholds, error-budget gates, infra-pairing rules, the project
-test command, vendor-proxy routing). Org-specific specifics live in that gitignored file, not here.
+Apply the org's risk callouts where they fit — `~/.claude/org/<org>/preamble.md`.
 
 ## 3. Name it — slug, area, shape
 
 No counter, no `DRAFT-N`. **The filename is the handle.**
 
-- **Slug** — kebab-case, ≤40 chars, descriptive. Derive it from the end state:
-  `auth-refactor`, not `draft-7`. **No numbers in slugs** — no PR#/issue#/ticker IDs.
-  `pr3475-split` → `pr-token-pricing-split`. IDs rot; descriptors survive grep.
+- **Slug** — kebab-case, ≤40 chars, derived from the end state. No numbers (slug rule +
+  rationale: global CLAUDE.md §Slug rule).
 - **Area** — one of the buckets in `$TICKETS_DIR/` (`integrations`, `platform`, `ops`,
   `tooling`, `spikes`). Pick the closest; ask only if genuinely ambiguous.
 - **Shape** — single ticket or epic (from §1).
 
-Target path — a ticket lives in its area from creation. `/scope` output is already refined
-(grill-with-docs ran), so it is born `status: open`, not draft — draft is retired:
+Target path — a ticket lives in its area from creation, born `status: open`:
 
 - **Single ticket** → `$TICKETS_DIR/<area>/<slug>.md`
 - **Epic** → `$TICKETS_DIR/<area>/<epic-slug>/_epic.md` (the PRD) plus
@@ -123,15 +117,11 @@ Copy the templates. Do not freehand the frontmatter.
 - Epic root → `$TICKETS_DIR/_EPIC-TEMPLATE.md`
 - Epic child → `$TICKETS_DIR/_CHILD-TEMPLATE.md`
 
-Every ticket uses the same shape, so lanes read it identically. Set `created` to the output
-of `date -u +%Y-%m-%dT%H:%M:%SZ` — run the command, ALWAYS; never compose the timestamp
-yourself (you have no clock — model-guessed instants have shipped up to an hour off, which
-skews tix's created-sort and timestamp column). Never a bare date either, which tix can't
-anchor to an instant and which forces a fallback to file birthtime. One `date -u` call
-covers a batch — reuse its value across every ticket written in the same pass. Set `status: open` on every
-ticket AND every epic child (the reconciler does not run on `tix` launch, so a missing
-`status:` shows as a muted non-ticket until the next `wt`/manual sweep). Leave
-`linear:` empty — it's only a breadcrumb on tickets that predate the local-only move.
+Every ticket uses the same shape, so lanes read it identically. Set `created` from
+`date -u +%Y-%m-%dT%H:%M:%SZ` — run the command, never compose the timestamp (no clock;
+model-guessed instants have shipped an hour off). One `date -u` call covers the whole batch.
+Set `status: open` on every ticket AND every epic child (a missing `status:` renders as a
+muted non-ticket in tix until the next sweep). Leave `linear:` empty — legacy breadcrumb.
 
 **For an epic:** `_epic.md` carries the `<!-- epic-stories:start -->` block — the
 authoritative ordered story list plus dependency DAG. Each story's `context:` points at its
@@ -158,12 +148,8 @@ For an epic:
 
 ## 7. Commit the glossary edit — if §2c touched `CONTEXT.md`
 
-The brief lives in `$TICKETS_DIR` (its own tree), but `CONTEXT.md` is a **project-repo file**.
-A `CONTEXT.md` edit left uncommitted in the cockpit orphans: lanes branch off `origin/main` in a
-separate worktree, never see the cockpit's dirty file, and never carry it into a PR — so it
-sits dirty forever and stalls every `wt`/`/pickup` fast-forward (memory:
-wt-stale-base-dirty-tree-ff). Close the loop here.
-
+`CONTEXT.md` is a **project-repo file** — left uncommitted in the cockpit it orphans (lanes
+branch off `origin/main` and never see it) and stalls every `wt`/`/pickup` fast-forward.
 In the **project repo**, if §2c changed `CONTEXT.md`:
 
 ```bash
@@ -173,10 +159,7 @@ git -C "$REPO" diff --quiet -- CONTEXT.md || \
 ```
 
 - Stage **`CONTEXT.md` only** — never `git add -A`/`.`; the cockpit may hold unrelated dirty work.
-- This is the one project-repo write `/scope` makes, and it is docs-only — it does NOT violate
-  the "never edit code" rule. Commit only; **never push** (precedent: direct `docs:` commit on
-  the cockpit branch, whatever it is — feature branch rides into that PR, `main` is a clean
-  standalone docs commit).
+- This is the one project-repo write `/scope` makes (docs-only). Commit only; **never push**.
 - No `CONTEXT.md` change this run → skip silently.
 
 ## Stop conditions

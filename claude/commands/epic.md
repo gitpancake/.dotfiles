@@ -5,8 +5,7 @@ argument-hint: <EPIC> <BASE-BRANCH> [extra context...]
 
 # /epic $ARGUMENTS
 
-Drives an epic as a sequence of single lanes. (The Ralph loop was retired 2026-06-09 —
-`wt --ralph`, `epic-parse.sh`, and `scripts/ralph/` no longer exist.)
+Drives an epic as a sequence of single lanes.
 
 An **epic** is a folder with an `_epic.md` at its root (contract: `$TICKETS_DIR/README.md`),
 holding the `<!-- epic-stories:start -->` block — the authoritative ordered story list +

@@ -1,19 +1,14 @@
 ---
-description: Commit + push + open PR (reviews fire automatically — Arbiter/Devin/Codex). Pass PR# to check review status only.
-argument-hint: [optional: PR number or URL to skip create and check review status only]
+description: Commit + push + open PR (reviews fire automatically — Arbiter/Devin/Codex).
 model: sonnet
 ---
 
 # /ship $ARGUMENTS
 
-Commit → push → PR (reviews fire automatically on open/push). PR body chooses **small** or **rich**
-shape from diff size/risk. Meaningful code PRs include Changed / Preserved + tests. Work lives
-in repo + local ticket tree.
+Commit → push → PR (reviews fire automatically on open/push — nothing to trigger, see
+`~/.claude/docs/lane-protocol.md` for the review loop). Work lives in repo + local ticket tree.
 
 ## 0. Pre-flight (parallel)
-
-Parse `$ARGUMENTS`: non-empty token → PR number/URL → `PR_TARGET=<x>`, **skip §1–§3,
-jump §4**.
 
 Run in parallel and cache outputs — §2.5 + §3 reuse, never re-run:
 - `git status --porcelain`
@@ -43,10 +38,8 @@ conflicts; don't resolve silently.
 ## 2.5. Linear ticket (always linked)
 
 Every PR carries `[<TICKET_ID>] <desc>` so it links to a ticket with description, reasoning,
-implementation, assignee. New tickets are created on the **AOA** team (`AO - Agents`). The old
-`AE` / `Autonomy Eng` team is **retired** — creating there fails with
-`GraphQL error: Entity is retired: team`. Existing briefs still carrying `linear: AE-NNNN`
-are reconciled in place: reuse the id, never re-create it on AOA.
+implementation, assignee. New tickets → **AOA** team (full teams doctrine, incl. the retired
+AE team and id reconciliation: global CLAUDE.md §Linear teams).
 
 1. **Resolve brief** from current branch. Reuse `wt --resolve` if available; else
    `grep -rlE "^linear:" "${TICKETS_DIR:-$HOME/.claude/tickets}" --include='*.md'` matched
@@ -77,75 +70,16 @@ are reconciled in place: reuse the id, never re-create it on AOA.
 ## 3. PR body — repo template first, always
 
 **If `.github/PULL_REQUEST_TEMPLATE.md` exists, the body MUST use its sections verbatim —
-every heading present, genuinely filled in, none replaced or renamed.** The Arbiter gate
-🔴-blocks bodies that swap template sections for ad-hoc headings (learned on PR #6490).
-For cartage-agent that means: `## Linear ticket`, `## Summary`, `## Root Cause` (write
-`N/A` + one-line justification for feature/docs/refactor work — never omit the section),
-`## Automated tests added` (or why not), `## Manual testing steps` (for docs/CI-only
-changes, state what was verified and how), and the author `## Checklist` with every box
-honestly ticked. The sparse-vs-rich choice below governs only how much depth goes INSIDE
-those sections.
+every heading present, genuinely filled in (`N/A` + one-line justification beats omitting a
+section), none replaced or renamed.** The Arbiter gate 🔴-blocks bodies that swap template
+sections for ad-hoc headings (learned on PR #6490). Org-specific section notes:
+`~/.claude/org/<org>/preamble.md`. Depth inside the sections scales with diff size/risk.
 
-The shapes below are the fallback for repos WITHOUT a PR template only.
-
-### Small PR shape
-
-Use only when the branch touches a few files and does not add/change providers, external APIs,
-schemas, workflows, routing, auth, persistence, observability, or multi-subsystem behavior.
-
-```
-Linear: https://linear.app/<workspace>/issue/<TICKET_ID>
-
-## Summary
-
-### Changed
-- <structural change>
-
-### Preserved
-- <load-bearing behavior unchanged>
-
-## Tests
-- <verification step and result>
-```
-
-### Large / platform / integration PR shape
-
-Use when the diff adds or changes integrations, providers, external APIs, schemas, workflows,
-routing, auth, persistence, observability, generated tests, or crosses multiple subsystems.
-
-```
-## Linear ticket
-
-[<TICKET_ID>](https://linear.app/<workspace>/issue/<TICKET_ID>)
-
-## Summary
-
-### Changed
-- <new capability or interface>
-- <wiring / schema / workflow change>
-- <operational behavior change>
-
-### Preserved
-- <existing behavior intentionally unchanged>
-- <compatibility / default / fallback behavior>
-- <blast-radius limit or no-new-dependency/index/migration note>
-
-## Automated tests added
-
-- `<test file>` — <behavior covered>.
-
-## Manual testing steps
-
-- `<command>` ✅
-- `<command>` ⚠️ <known existing failure or credential/staging blocker>
-- <post-credential or production smoke step, if applicable>
-```
-
-Rules: "Preserved" reassures reviewers blast radius is small. Keep bullets one line where
-practical; allow short phrases for test coverage and manual blockers. List new/changed test
-files separately from commands for non-trivial diffs. No emoji, no generated-with footer unless
-repo convention. Derive bullets from the **cached** `LOG_LINES` + `DIFF_STAT` from §0 — don't
-re-run git. Abstract, don't restate.
+**No template in the repo** → compose: Linear link, `## Summary` with `### Changed` +
+`### Preserved` (blast-radius reassurance), tests (automated + manual verification for
+non-trivial diffs). Scale depth to the diff — a platform/integration PR earns full
+test/manual-steps detail; a small fix doesn't. Derive bullets from the **cached**
+`LOG_LINES` + `DIFF_STAT` from §0 — don't re-run git. Abstract, don't restate.
 
 Then `gh pr create`:
 - `--title`: `$TICKET_ID` non-empty → `[<TICKET_ID>] <desc>` (≤70 chars total).
@@ -159,20 +93,9 @@ Capture URL.
 
 ## 4. Review — automatic, nothing to trigger
 
-**Chuck is RETIRED (2026-08-04) — never tag `@chuck-noland-cartage`, never poll for a
-`chuck-noland[bot]` comment.** Reviews now fire automatically on PR open/push:
-
-- **Devin** (`devin-ai-integration[bot]`) + **Codex** post normal GitHub Review objects
-  with inline comments (`pulls/<PR>/comments`).
-- **Arbiter** (`.github/workflows/arbiter.yml`, where present — e.g. `cartage-agent`)
-  synthesizes reviewer output + diff + CI into a REQUIRED `arbiter` commit status
-  (`approve`=success, `block`/`needs-human`=failure) plus an issue comment from
-  `github-actions[bot]` starting `<!-- arbiter-verdict -->`. A new push resets it to
-  `pending` and re-reviews automatically.
-
-/ship posts nothing and does not wait. To check status later:
-`gh api repos/{owner}/{repo}/commits/<head-sha>/status --jq '.statuses[] | select(.context=="arbiter")'`.
-Address findings via `/address-feedback`.
+Reviews fire automatically on PR open/push (Arbiter/Devin/Codex — mechanics + poll command:
+`~/.claude/docs/lane-protocol.md`). /ship posts nothing and does not wait. Address findings
+via `/address-feedback`.
 
 ## 5. Report — terse
 
@@ -190,6 +113,4 @@ reviewers. User decides. Single-character blocker spotted (typo, obvious null gu
 call out exact fix, still wait for "go" before editing.
 
 In a `wt` lane, /ship returning is NOT the end of the lane — the lane continues into the
-review-feedback loop (poll the `arbiter` commit status, address findings on `block`, push,
-`lane-done.sh` on `approve`) per its kickoff prompt and global CLAUDE.md §Autonomous
-semantics.
+review loop per `~/.claude/docs/lane-protocol.md`.

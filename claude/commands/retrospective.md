@@ -16,7 +16,7 @@ Parse `$ARGUMENTS` for:
 - **Date range** — if not given, default to last 3 weeks.
 - **Repo path** — if not given, check `$PWD`, then scan `~/Documents/code/`.
 
-If name is missing or ambiguous, ask up to 2 clarifying questions and stop until answered. Don't proceed to §2 with a vague scope — the git and PR queries depend on having a concrete keyword set.
+If name is missing or ambiguous, ask what's needed to pin it down and stop until answered. Don't proceed to §2 with a vague scope — the git and PR queries depend on having a concrete keyword set.
 
 Print the resolved scope + date range before continuing:
 
@@ -43,15 +43,8 @@ Compute from raw data. Don't infer what you can count.
 
 ### 3a. PR stats
 
-| Metric | Value |
-|--------|-------|
-| Total PRs matched | |
-| Merged | |
-| Abandoned (closed, not merged) | |
-| Still open | |
-| Abandon rate | X% |
-| Median time-to-merge | |
-| Total lines changed (additions + deletions) | |
+Compute: total matched, merged, abandoned (closed-not-merged), still open, abandon rate,
+median time-to-merge, total lines changed.
 
 ### 3b. Timeline phases
 
@@ -79,63 +72,8 @@ Group branches by prefix convention (e.g., `agent/`, `feature/`, `henry/`, `fix/
 
 ## §4. Draft retro
 
-Structure exactly as below. Keep bullets concrete and evidence-backed — cite PR numbers, commit hashes, or ticket IDs inline. No filler. This doc trains a planning agent; write it like an engineer, not a manager.
-
----
-
-**By the Numbers**
-
-| Metric | Value |
-|--------|-------|
-| PRs total | |
-| Merged | |
-| Abandoned | |
-| Abandon rate | |
-| Mega PRs | |
-| Architectural pivots | |
-| Rework clusters | |
-| Calendar days | |
-
-**Timeline**
-
-For each phase from §3b:
-- Phase name + date range
-- PR count, dominant theme
-- Key decisions made (what changed direction or got locked in)
-- Pivots that occurred in this phase
-
-**What Went Well**
-
-3–5 bullets. Each must cite evidence (PR #, ticket ID, or commit). No unsubstantiated claims.
-
-**What Went Wrong**
-
-For each item, state: what happened → why it hurt → what it cost (wasted PRs, delay, re-architecture). Categories to check:
-- Pivots identified in §3c
-- Mega PRs from §3e
-- Missing discovery (things only found during implementation)
-- Late testing or late integration testing
-- High-abandon-rate phases
-
-**Lessons for Future Work**
-
-Two callout blocks:
-
-> **Planning Phase**
-> - <lesson>: <what to do differently>
-
-> **Execution Phase**
-> - <lesson>: <what to do differently>
-
-Aim for 2–4 bullets per block. Only write what the data actually supports.
-
-**Abandoned PR Log**
-
-Collapsible list (Notion toggle) of all closed-not-merged PRs:
-- PR number, title, date closed, additions+deletions
-- Reason (inferred from title / surrounding commits / replacement PR — flag as "inferred" if not explicit)
-
----
+Structure per `~/.claude/docs/retro-template.md` — that file is the contract (sections,
+evidence rules, tone).
 
 Present the draft to the user. **Stop. Wait for feedback before publishing.**
 

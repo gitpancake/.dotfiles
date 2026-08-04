@@ -33,38 +33,22 @@ area you're touching.
 
 ### 3. Draft vertical slices
 
-Break the plan into **tracer bullet** tickets. Each ticket is a thin vertical slice that cuts
-through ALL integration layers end-to-end, NOT a horizontal slice of one layer.
+Break the plan into **tracer bullet** tickets: each a thin vertical slice through ALL
+integration layers end-to-end (schema, API, UI, tests) — never a horizontal slice of one
+layer. A completed slice is demoable or verifiable on its own; prefer many thin slices
+over few thick ones.
 
 Slices may be 'HITL' or 'AFK'. HITL slices require human interaction — an architectural
 decision, a design review. AFK slices can be implemented and merged without it. Prefer AFK
 over HITL where possible. HITL/AFK maps onto how the slice gets picked up: an AFK slice is a
 fire-and-forget `wt <slug>` lane; a HITL slice is worked interactively.
 
-<vertical-slice-rules>
-- Each slice delivers a narrow but COMPLETE path through every layer (schema, API, UI, tests)
-- A completed slice is demoable or verifiable on its own
-- Prefer many thin slices over few thick ones
-</vertical-slice-rules>
+### 4. Confirm the breakdown
 
-### 4. Quiz the user
-
-Present the proposed breakdown as a numbered list. For each slice, show:
-
-- **Title**: short descriptive name (this becomes the filename slug — kebab-case, no IDs)
-- **Area**: which bucket — `integrations` / `platform` / `ops` / `tooling` / `spikes`
-- **Type**: HITL / AFK
-- **Blocked by**: which other slices (if any) must complete first
-
-Ask the user:
-
-- Does the granularity feel right? (too coarse / too fine)
-- Are the dependency relationships correct?
-- Should any slices be merged or split further?
-- Are the correct slices marked HITL vs AFK?
-- Is the area assignment right?
-
-Iterate until the user approves the breakdown.
+Present the proposed breakdown as a numbered list — per slice: **Title** (becomes the
+filename slug — kebab-case, no IDs), **Area** bucket, **Type** (HITL/AFK), **Blocked by**.
+Flag anything you're genuinely unsure about (granularity, dependency order, area) with your
+recommendation. Wait for approval before writing.
 
 ### 5. Write the tickets to the local tree
 
@@ -72,38 +56,17 @@ For each approved slice, write `$TICKETS_DIR/<area>/<slug>.md` using the frontma
 from `_TEMPLATE.md` and the body template below. Write in dependency order (blockers first)
 so the "Blocked by" field can reference real sibling slugs.
 
-Frontmatter: `status: draft`, `area:` set, `epic:` empty (these are flat siblings, not an
+Frontmatter: `status: open`, `area:` set, `epic:` empty (these are flat siblings, not an
 epic folder), `linear:` empty, `created:` the output of `date -u +%Y-%m-%dT%H:%M:%SZ` —
-run the command, ALWAYS; never compose the timestamp yourself (you have no clock —
-model-guessed instants have shipped up to an hour off). Never a bare date; tix needs an
-instant. One `date -u` call covers the whole batch — reuse it across every ticket.
+run the command, never compose the timestamp (no clock; model-guessed instants have shipped
+an hour off, and tix needs an instant, not a bare date). One `date -u` call covers the
+whole batch.
 
-<ticket-body-template>
-
-## Context
-
-2-4 sentences — why this slice exists. Reference the source plan it was decomposed from.
-
-## Acceptance criteria
-
-- Each bullet independently verifiable. Describe end-to-end behaviour, not layer-by-layer
-  implementation. Avoid file paths / code snippets — they go stale. Exception: a snippet that
-  encodes a decision more precisely than prose (state machine, schema, type shape) — inline
-  the decision-rich part only.
-
-## Surface area
-
-- **Files to start in** (≤8): `path — reason`.
-- **Gotchas**: quoted project CLAUDE.md rules that apply.
-
-## Out of scope
-
-- Explicit — better to over-list. Name the sibling slices that cover adjacent work.
-
-## Blocked by
-
-- Sibling slug(s) that must land first, or "none — can start immediately".
-
-</ticket-body-template>
+Body: `_TEMPLATE.md`'s sections, with two slice-specific adjustments — `## Context`
+references the source plan it was decomposed from; add a `## Blocked by` section listing
+the sibling slug(s) that must land first (or "none — can start immediately"). In
+`## Acceptance criteria`, describe end-to-end behaviour, not layer-by-layer implementation;
+avoid file paths / code snippets except a snippet that encodes a decision more precisely
+than prose. In `## Out of scope`, name the sibling slices that cover adjacent work.
 
 Do not modify the source plan or any parent brief.

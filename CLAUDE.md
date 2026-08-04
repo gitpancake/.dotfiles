@@ -33,11 +33,11 @@ This file is the project memory layer for Claude — it captures the gotchas and
 
 Easy to confuse — they're different things:
 
-- `claude/agents/*.md` are **subagents** dispatched via the Agent tool with `subagent_type: "<name>"`. Available: `backend`, `frontend`, `infra`, `bugfinder`. (Dropped 2026-05-26: `database`, `fullstack`, `plan-lint`, `verifier` — lane IS those layers; self-delegation = ctx burn. 7d data showed 0 lane invocations.)
-- `claude/commands/*.md` are **slash commands** typed by the user. Available: `/scope`, `/rescope`, `/pickup`, `/epic`, `/ship`, `/address-feedback`, `/resume`, `/retrospective`, `/rebase`, `/rebase-all`, `/why-failing`. (Dropped 2026-05-26: `/simplify`, `/verify`, `/explain-flow`, `/ryder-docs` — 0 uses in 7d.)
-- `claude/skills/*/SKILL.md` are **skills** — symlinked into `~/.claude/skills/`. Available: `grill-with-docs`, `to-issues`, `tdd`, `diagnose`, `handoff`.
+- `claude/agents/*.md` are **subagents** dispatched via the Agent tool with `subagent_type: "<name>"`.
+- `claude/commands/*.md` are **slash commands** typed by the user.
+- `claude/skills/*/SKILL.md` are **skills** — symlinked into `~/.claude/skills/`.
 
-Slash commands often dispatch subagents internally, but they aren't the same registry.
+The directories ARE the registry — `ls` them rather than trusting any list here (lists in this file went stale twice). A few commands/skills live only in `~/.claude/{commands,skills}/` (not this repo) — check both when inventorying. Slash commands often dispatch subagents internally, but they aren't the same registry. Agents/commands dropped 2026-05-26 after 7d of zero invocations: `database`, `fullstack`, `plan-lint`, `verifier`, `/simplify`, `/verify`, `/explain-flow`, `/ryder-docs` — don't reference or recreate them.
 
 ## Lane orchestration — owned by wt-lanes
 
@@ -51,7 +51,7 @@ For lane semantics (state machine vocab, monitor pane contract), read wt-lanes' 
 
 Caps are context-based, not turn-based — `turn-cap-warn.sh` retired 2026-06-09 (fired once in 14d; lanes run 300+ assistant msgs per user turn, invisible to UserPromptSubmit). Registered hooks (see `claude/settings.json` — that list is the truth, this section just annotates it):
 
-- `lane-ctx-nudge.sh` (PostToolUse) — lane-only, non-blocking. Reads the last billed ctx from the transcript *tail* (never full-file jq); injects a handoff reminder once per tier at 260K/320K/380K (rescaled 2026-07-14 for the 400K window; was 130K/160K/190K). The first tier (260K) is phase-aware (2026-06-10): a review-only remainder means finish the loop + `lane-done.sh`, never hand off — a lane once stopped at 130K right before its review poll and stranded PR #143. Handoff = `/handoff` + wt-lanes' `lane-handoff.sh <doc>` as the lane's final tool call; the `HANDOFF:<doc>` state is what `lane-run.sh` (wt-lanes) keys on to respawn a fresh session that `/resume`s the doc — without it nothing respawns. Cockpit sessions untouched. Motivated by the 14d audit: 107 sessions peaked >150K ctx, <50% handed off, ~39% of cache-read spend bought past 150K.
+- `lane-ctx-nudge.sh` (PostToolUse) — lane-only, non-blocking. Reads the last billed ctx from the transcript *tail* (never full-file jq); injects a handoff reminder once per tier at 260K/320K/380K (rescaled 2026-07-14 for the 400K window). What to DO on a nudge (finish-vs-handoff, the `lane-handoff.sh` respawn contract) is `~/.claude/docs/lane-protocol.md`'s doctrine — this hook just fires the reminder. The first tier is phase-aware (2026-06-10): a lane once stopped at 130K right before its review poll and stranded PR #143. Cockpit sessions untouched. Motivated by the 14d audit: 107 sessions peaked >150K ctx, <50% handed off, ~39% of cache-read spend bought past 150K.
 - `clear-handoff.sh` (SessionEnd, `session_end_reason=="clear"`) — captures state on **any** `/clear` when turns ≥5 **or** ctx ≥100k. Turn count is derived from the transcript (the retired turn-cap hook was the old counter writer). Skips trivial sessions and no-ops if a handoff already exists (marker `session-<id>.handoff`). Sources `claude/hooks/_handoff-doc.sh` (`write_handoff_doc` + `effective_ctx_tokens`) for the doc format.
 
 Nothing blocks tools and nothing auto-writes a doc mid-session — nudges are ambient, `/handoff` stays deliberate, `clear-handoff` is the capture net. The old auto-recycle stack (`auto-handoff.sh`, `handoff-gate.sh`, `tool-loop-warn.sh`) stays dead.
@@ -113,7 +113,6 @@ Battery is inverted (low = red).
 - Target systems: macOS (uses `pmset` for battery) and WSL2/Linux (`/sys/class/power_supply/BAT1/capacity`).
 - The zsh theme uses `add-zsh-hook precmd` to print the status bar (not `PROMPT`, to avoid cursor issues).
 - Claude statusline keys session timers by `$PPID` so multiple concurrent sessions don't clobber each other's 5h/7d counters.
-- `.zshrc` has a duplicate `brew shellenv` line (~116-118) — harmless but could be cleaned up.
 - `wt` lanes get per-lane ports `3100 + lane_index` written to `<wt>/.env.local.port`. Dev servers must read `PORT` from there, never hardcode.
 - `node_modules` is per-worktree — first action in a fresh lane is usually `bun install`.
 - ASCII art toys (`scripts/{hologram,city,ourman}.py`) are launched by the `art` zsh function, which resolves `art <name>` to `~/.local/share/art/<name>.py` (defaults to `hologram`). That dir is **hand-symlinked and installer-unmanaged** — neither `install*.sh` nor `rewire-symlinks.sh` populates it. A new toy needs a manual `ln -sf ~/.dotfiles/scripts/<name>.py ~/.local/share/art/`; without the link `art <name>` reports `Unknown art` even though the script is committed.

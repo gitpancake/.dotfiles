@@ -13,7 +13,7 @@ If `$ARGUMENTS` is empty, default to `$USER`.
 
 ## Output
 
-One file: `~/.claude/audits/<name>-$(date +%Y-%m-%d).md`. Overwrite today's if it exists. Schema in §5 is the contract; everything else feeds it.
+One file: `~/.claude/audits/<name>-$(date +%Y-%m-%d).md`. Overwrite today's if it exists. Render per the schema at `~/.claude/docs/self-audit-schema.md` — that file is the contract; everything below feeds it.
 
 ## 1. Inventory (discover, don't assume)
 
@@ -51,7 +51,6 @@ Claude Code stores transcripts as JSONL under `~/.claude/projects/<encoded-cwd>/
 For each session with `mtime >= now - 7d`:
 
 - **Turn count** — user messages excluding tool results.
-- **Turn-cap obedience** — search the stream for the turn-cap-warn.sh warning strings (`Turn 30 reminder`, `Turn 50`, `Turn 75 PAUSE`, `Turn 100+`). For each warning fired, did the user `/handoff` + `/clear` within 5 turns? Obedience ratio = honored / fired.
 - **Slash command invocations** — regex user messages for `^/[a-z][a-z0-9-]*` and `<command-name>/foo</command-name>` form. Tally.
 - **Tool calls** — count tool-use blocks per tool name in assistant messages.
 - **Token usage** — sum `usage` blocks if present.
@@ -60,7 +59,6 @@ Aggregate:
 
 - Session count, turn-count distribution (p50 / p75 / p95 / max)
 - `/handoff` and `/clear` raw counts → flag if `clear`-dominant (state being dumped without state capture)
-- Turn-cap warnings fired, obedience ratio
 - Top-10 slash-command leaderboard
 - Top-10 tool-call leaderboard
 - Token usage totals (input / output / cache_read / cache_create)
@@ -142,106 +140,17 @@ Dispatch one subagent with `model: "haiku"`:
 
 > Cluster these Claude Code task openers by semantic theme. Return JSON: `[{ "theme": "...", "count": N, "examples": ["...", "..."] }]`. Themes with count ≥ 3 are signal; below that, group into "other". Aim for 5–15 themes. The themes will be reviewed as candidates for new slash commands or skills.
 
-Use the returned themes verbatim in §5. Do not re-cluster in the main session.
+Use the returned themes verbatim in the "Repeated prompt themes" section of the output. Do not re-cluster in the main session.
 
-## 7. Output schema
+## 7. Render
 
-Write to `~/.claude/audits/<name>-<YYYY-MM-DD>.md`:
-
-```
-# Audit Pack — <name> — <date>
-
-Part A — auto-collected data. Feeds Stage 2 synthesis. This document reports only; no config was edited.
-
-## Inventory
-
-### Slash commands (<count>)
-| Name | Lines | Flag |
-|------|-------|------|
-(⚠ if > 200, empty stub if 0)
-
-### Skills (<count>)
-(same shape)
-
-### Subagents (<count>)
-(same shape)
-
-### CLAUDE.md files
-| File | Lines | Flag |
-|------|-------|------|
-(⚠ if > 150)
-
-## Worktrees — <active> active, <stale> stale
-| Path | Branch | Age | PR | Stale? |
-|------|--------|-----|-----|--------|
-
-Note: separate real stale feature lanes from dormant repo-main checkouts.
-
-## Sessions (last 7 days)
-- Total sessions: N
-- Turn-count distribution: p50=X, p75=Y, p95=Z, max=W
-- /handoff: N      /clear: N
-- Turn-cap warnings fired: N
-- Turn-cap obedience: X% (honored within 5 turns of warning)
-- Token usage: input · output · cache-read · cache-create
-
-### Slash command leaderboard
-| Command | Invocations |
-
-### Tool-call leaderboard
-| Tool | Calls |
-
-## Shell history (<shell>, <window>)
-- Total commands: N
-- Top 20 cmd+subcommand
-| Cmd | Invocations |
-- Top 10 verbatim commands
-| Command | Count |
-- Long one-liners (>200 chars): top 5
-- `&&`-chains (≥3 segments): top 5 by frequency
-
-## Filesystem layout
-### Global ~/.claude/
-| Path | Count | Oldest | Flag |
-|------|-------|--------|------|
-(tickets per area, handoffs, plans, audits, scripts, projects size)
-
-### Orphan plans (no matching branch)
-- list
-
-### Per-worktree .claude/
-- Lanes missing agent-state / precheck.sh: list
-- Oversized files (>100KB) inside lane .claude/: list path + size
-- Wedged state (agent-state mtime > 7d on active lane): list
-
-## Repeated prompt themes
-| Theme | Count | Examples |
-|-------|-------|----------|
-(only themes with count ≥ 3; rest collapsed into "other")
-
-## Stage 2 flags
-- High-frequency themes (count ≥ 5) → command/skill candidates. Cross-reference each theme against the slash leaderboard — a theme with many openers but few matching command invocations is an adoption gap.
-- Slash commands > 200 lines → refactor candidates (encyclopedia drift)
-- Empty (0-line) slash command stubs → delete candidates
-- CLAUDE.md > 150 lines → lean-config refactor candidates
-- Turn-cap obedience < 50% → session-hygiene candidate
-- Stale worktrees > 3 → cleanup-automation candidate
-- Top tool calls dominated by Bash → possible workflow-script candidate
-- Shell cmd+subcommand ≥ 50 invocations → wrapper-script candidate
-- Verbatim shell command ≥ 10 invocations → alias candidate
-- `&&` chain ≥ 5 invocations → workflow-script candidate
-- Orphan plans → delete candidates
-- Handoffs > 30d → archive candidate
-- Tickets > 30d outside epics → /scope decay
-- ~/.claude/projects/ > 5GB → transcript rotation
-- Wedged lane state → manual reset
-```
+Render the JSON to `~/.claude/audits/<name>-<YYYY-MM-DD>.md` per `~/.claude/docs/self-audit-schema.md` — section names, table shapes, and the Stage 2 flag list all come from that file.
 
 Stage 2 (synthesis — what to *do* with this) is out of scope for this command. Produce the data, stop.
 
 ## 8. On completion
 
-Print the output path. Print a one-line summary of the top four flags (encyclopedia commands count, obedience ratio, stale worktree count, top repeated shell command). Stop.
+Print the output path. Print a one-line summary of the top four flags (encyclopedia commands count, handoff share, stale worktree count, top repeated shell command). Stop.
 
 ## Stop conditions
 

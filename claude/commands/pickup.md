@@ -24,7 +24,21 @@ command only prepares and spawns.
 
 `wt --print-brief <TICKET>` → `BRIEF`. This is the one resolver `wt` itself uses (Linear id →
 slug → epic folder name) — do **not** re-implement the lookup here.
-- **Non-zero exit / no path printed** → stop. Tell the user to `/scope` it first.
+- **Path printed** → use it.
+- **Non-zero exit AND `TICKET` is a Linear id** (`^[A-Za-z]+-[0-9]+$`) → the brief isn't local
+  yet, but Linear is the source of truth for it. Pull it down instead of stopping:
+  ```bash
+  BRIEF=$(~/.dotfiles/scripts/linear-brief.sh "<TICKET>")
+  ```
+  Fetches the ticket's description over the Linear API and writes it as a real local brief
+  (frontmatter `linear: <TICKET>`, `source: linear`) under `$TICKETS_DIR`, printing its path.
+  It's idempotent (an existing/hand-`/scope`d brief wins, never clobbered) and self-healing —
+  the file now lives on disk, so `wt` resolves it by id on the spawn call (§5) and the lane
+  reads it on every resume. **No `/scope` required.** The brief is the Linear description
+  verbatim (not grilled); the lane plans slices from it as-is. Non-zero exit (id not found in
+  Linear) → stop, report.
+- **Non-zero exit AND `TICKET` is a bare slug** (no Linear id to read from) → stop. Tell the
+  user to `/scope` it first.
 - **`basename "$BRIEF"` == `_epic.md`** → it's an epic, wrong command. Stop:
   > Resolved to epic `<TICKET>`. Use `/epic <TICKET> <BASE>` to confirm story order +
   > spawn the next child lane. `/pickup` is for single tickets only.
@@ -113,19 +127,9 @@ Report, then stop:
 
 ## Stop conditions
 
-- Missing `TICKET` / `BASE`, or brief not found — ask or report, stop.
+- Missing `TICKET` / `BASE` — ask, stop.
+- Brief not found locally AND not on Linear (bare slug, or Linear id that doesn't exist) —
+  report, stop. A Linear id that *does* resolve is materialized in §2, not a stop.
 - Resolved to an epic (`_epic.md`) — stop, redirect to `/epic`.
 - ff-merge failure (fork-off mode) — surface, stop.
 - After spawn — done. Don't follow the lane.
-
-## Example — your case
-
-```
-/pickup restore-slack-drop-teams-pipedream feature/settings-connections-carriers | icons in /integrations or /carriers
-```
-
-- BASE = `feature/settings-connections-carriers`, already checked out at
-  `.claude/worktrees/settings-connections-carriers/`.
-- Not in `main|master|develop|staging` + no `--fork` → **onto mode**.
-- Skip cockpit sync. Spawn `wt --branch feature/settings-connections-carriers restore-slack-drop-teams-pipedream`.
-- Lane reuses existing worktree. Commits land on `feature/settings-connections-carriers` → PR #3459 gets them.

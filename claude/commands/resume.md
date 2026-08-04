@@ -11,10 +11,8 @@ Pick up where a previous session left off. `/handoff` writes durable docs to
 **Resume loads context into THIS session and continues inline. It NEVER spawns a
 worktree or lane.** Do not run `wt`, `/pickup`, `/epic`, or `git worktree add` from a
 resume — the handoff is a thread to continue, not a ticket to pick up fresh. If the work
-originated in a lane, the lane's worktree already exists; resume runs *inside* it. The
-global "lane work → slash command" rule does NOT apply here — that rule is for *starting*
-work, and resume is *continuing* it. Spawning a lane on resume is what produced 3
-worktrees racing the same task; the whole point of resume is to avoid that.
+originated in a lane, the lane's worktree already exists; resume runs *inside* it.
+(Spawning a lane on resume is what produced 3 worktrees racing the same task.)
 
 **Budget discipline.** Resume rehydrates the session that needed a handoff — easy to burn
 50K+ tokens chasing refs before any real work. Default to the leanest path that still
@@ -74,14 +72,11 @@ don't blindly execute.
 ## 4. Continue
 
 Carry on with the work the handoff describes, **in this session**. The handoff's
-"Suggested skills" are advisory hints about *how* to do the work (e.g. `tdd`, `diagnose`),
-not a directive to spawn a lane — ignore any that would start a fresh worktree
-(`pickup`/`epic`/`wt`). Give a two-line orientation ("Resumed from `<file>` (`<mode>`).
-Picking up: `<next step>`.") and proceed — no need to re-summarise the whole handoff back
-to the user.
+"Suggested skills" are advisory hints about *how* to do the work (e.g. `tdd`, `diagnose`).
+Give a two-line orientation ("Resumed from `<file>` (`<mode>`). Picking up: `<next step>`.")
+and proceed — no need to re-summarise the whole handoff back to the user.
 
 ## Stop conditions
 
 - No handoffs, or an ambiguous multi-match description — ask or report, stop.
 - Handoff is stale / its anchor artifact is missing — surface, stop for direction.
-- Never: `wt`, `/pickup`, `/epic`, `git worktree add`. Resume continues inline only.

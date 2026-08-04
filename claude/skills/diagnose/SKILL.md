@@ -5,19 +5,13 @@ description: 'Diagnosis loop — reproduce → minimise → hypothesise → inst
 
 # Diagnose
 
-A discipline for hard bugs. Skip phases only when explicitly justified.
+A discipline for hard bugs — scale it to the bug. A trivial, obvious fix doesn't need the
+full loop; anything you can't fix on sight does, and the phases below are the order that
+works. Doctrine in one line: suspect your own code before the framework, every hypothesis
+ships with its falsifying probe, every fix ships with a regression test + sibling grep
+(PP §24–27, §66 — `~/.claude/docs/design-principles.md`).
 
 When exploring the codebase, use the project's domain glossary to get a clear mental model of the relevant modules, and check ADRs in the area you're touching.
-
-## Doctrine (Pragmatic Programmer ch 3)
-
-Re-read every time the loop tempts you to shortcut:
-
-- **Don't panic** (PP §25). Deadline pressure produces speculative fixes. A 30-min loop saves 4 hours of guessing.
-- **"select" isn't broken** (PP §26). The OS, framework, std lib, browser, DB is almost never the bug. Suspect your code first. Hoofprints → horses, not zebras.
-- **Don't assume — prove it** (PP §27). Every hypothesis ships with the probe that would falsify it. "Should work" is not a debugging step.
-- **Fix the problem, not the blame** (PP §24). Whose code broke it is irrelevant to fixing it.
-- **Find bugs once** (PP §66). Every fix lands with a regression test AND a grep for siblings. Bug-classes survive because nobody looked for peers.
 
 ## Phase 1 — Build a feedback loop
 
@@ -56,9 +50,7 @@ The goal is not a clean repro but a **higher reproduction rate**. Loop the trigg
 
 ### When you genuinely cannot build a loop
 
-Stop and say so explicitly. List what you tried. Ask the user for: (a) access to whatever environment reproduces it, (b) a captured artifact (HAR file, log dump, core dump, screen recording with timestamps), or (c) permission to add temporary production instrumentation. Do **not** proceed to hypothesise without a loop.
-
-Do not proceed to Phase 2 until you have a loop you believe in.
+Stop and say so explicitly. List what you tried. Ask the user for: (a) access to whatever environment reproduces it, (b) a captured artifact (HAR file, log dump, core dump, screen recording with timestamps), or (c) permission to add temporary production instrumentation. **Hypothesising without a loop is guessing — don't.**
 
 ## Phase 2 — Reproduce
 
@@ -74,7 +66,7 @@ Do not proceed until you reproduce the bug.
 
 ## Phase 3 — Hypothesise
 
-Generate **3–5 ranked hypotheses** before testing any of them. Single-hypothesis generation anchors on the first plausible idea.
+Generate **multiple ranked hypotheses** before testing any of them — single-hypothesis generation anchors on the first plausible idea.
 
 Each hypothesis must be **falsifiable**: state the prediction it makes.
 
@@ -124,4 +116,4 @@ Required before declaring done:
 - [ ] Throwaway prototypes deleted (or moved to a clearly-marked debug location)
 - [ ] The hypothesis that turned out correct is stated in the commit / PR message — so the next debugger learns
 
-**Then ask: what would have prevented this bug?** If the answer involves architectural change (no good test seam, tangled callers, hidden coupling) hand off to the `/improve-codebase-architecture` skill with the specifics. Make the recommendation **after** the fix is in, not before — you have more information now than when you started.
+**Then ask: what would have prevented this bug?** If the answer involves architectural change (no good test seam, tangled callers, hidden coupling), propose it — a `$TICKETS_DIR` brief via `/scope`, or `/arch-audit` on the area for a broader sweep. Make the recommendation **after** the fix is in, not before — you have more information now than when you started.

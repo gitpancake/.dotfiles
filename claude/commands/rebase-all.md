@@ -56,26 +56,17 @@ git worktree add "$WT" -B "$head" "origin/$head"
 git -C "$WT" rebase "origin/$base"
 ```
 
-Then resolve per `/rebase` §4:
+Then resolve — conflict classification is `/rebase` §4's doctrine, not re-specced here:
 - **Clean replay / already up-to-date** → if history changed, `git -C "$WT" push --force-with-lease origin "$head"`; if already up-to-date, no push. Record result. Remove worktree + local branch ref (`git worktree remove "$WT"; git branch -D "$head"`).
-- **Trivial conflicts** (import/dep unions, whitespace, lockfile regen, non-overlapping edits the driver mis-flagged) → auto-resolve, `git add`, `git rebase --continue`, loop. Then push as above.
-- **Ambiguous conflicts** (same lines edited semantically, logic/types/control-flow, delete-vs-modify, any doubt) → **do not guess, do not push**. `git -C "$WT" rebase --abort` to leave the branch unmoved on origin, record `skipped — conflict`, **keep the worktree**, capture the conflicted `file:line` list. Move to the next PR.
+- **Trivial conflicts** (per `/rebase` §4) → auto-resolve, `git add`, `git rebase --continue`, loop. Then push as above.
+- **Ambiguous conflicts** (per `/rebase` §4 — any doubt counts) → **do not guess, do not push**. `git -C "$WT" rebase --abort` to leave the branch unmoved on origin, record `skipped — conflict`, **keep the worktree**, capture the conflicted `file:line` list. Move to the next PR.
 
 Failures (`fetch`/`worktree add`/`push` rejected) → record `failed — <reason>`, keep worktree, continue to next PR. Never auto-retry, never `--force` without `--with-lease`.
 
 ## 4. Report — table
 
-```
-Rebase-all (author: $AUTHOR) onto <override or per-PR base>
-
-  PR     Branch                Result
-  #123   feature/foo           rebased + force-pushed (3 replayed, 1 auto-resolved)
-  #124   feature/bar           up-to-date
-  #125   fix/baz               skipped — conflict (src/x.ts:40-58)  WT: /tmp/rebaseall-fix-baz-AB12
-  #126   feature/qux           failed — push rejected (stale lease)  WT: /tmp/...
-
-Pushed: 1   Up-to-date: 1   Skipped: 1   Failed: 1
-```
+One table: PR, branch, result (rebased/up-to-date/skipped-conflict with `file:line`/failed
+with reason, preserved WT path where kept), plus a pushed/up-to-date/skipped/failed tally.
 
 For every skipped/failed PR, print the preserved worktree path + the resolve hint (`cd <WT>`, resolve, `git add`, `git rebase --continue`, `git push --force-with-lease`). Removed worktrees only for clean PRs.
 

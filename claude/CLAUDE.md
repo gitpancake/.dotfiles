@@ -16,7 +16,7 @@ Direct, terse, opinionated. Match user energy. No disclaimers/hedging/preamble.
 
 Self-describe via Agent/skills schemas — don't list. Org preamble: known org codebase → prepend `~/.claude/org/<org>/preamble.md`.
 
-**Lane work → slash command, never manual.** Picking up a ticket/epic, shipping, addressing feedback = always the slash command (`/pickup`, `/epic`, `/scope`, `/ship`, `/address-feedback`). Never hand-roll the equivalent (manual `git worktree add` + branch, raw Agent spawn for the lane). The command owns worktree/branch/lane creation — a manual worktree collides with `wt`'s own and gets the lane killed. If unsure a command covers the task, invoke it and let it decide. (Read-only Explore/research agents are exempt — this is about lane lifecycle, not all agents.)
+**Lane work → slash command, never manual.** Picking up a ticket/epic, shipping, addressing feedback = always the slash command (`/pickup`, `/epic`, `/scope`, `/ship`, `/address-feedback`). Never hand-roll the equivalent (manual `git worktree add` + branch, raw Agent spawn for the lane). The command owns worktree/branch/lane creation — a manual worktree collides with `wt`'s own and gets the lane killed. If unsure a command covers the task, invoke it and let it decide. (Exempt: read-only Explore/research agents, and `/resume` — which continues existing work in-session and never spawns. This rule is about *starting* lane work.)
 
 ## Ticket Lifecycle
 
@@ -31,7 +31,7 @@ Self-describe via Agent/skills schemas — don't list. Org preamble: known org c
 - **Single**: `/scope` → brief `<area>/<slug>.md` (grill-with-docs runs inside /scope, lanes do not re-grill). `wt <slug>` (or `/pickup <slug> <BASE> [ctx]`) → autonomous lane: reads brief, plans slices, opens `/tdd` for behavior-changing slices, commits per layer, `/handoff` at ~240K ctx, `/ship`.
 - **Epic**: `/scope` → `<area>/<epic-slug>/_epic.md` + `NN-<child>.md`. Ralph loop retired 2026-06-09 (`wt --ralph` + `epic-parse` removed from wt-lanes) — pick up children as single lanes in `NN` order via `/pickup <child-slug>`.
 
-**Autonomous semantics.** `wt` = fire-and-forget, and the lane OWNS its review loop end-to-end: `/ship` → reviews fire **automatically** on PR open/push — no tagging. **Chuck is RETIRED (2026-08-04): never tag `@chuck-noland-cartage`, never poll for a `chuck-noland[bot]` comment.** New model: Devin (`devin-ai-integration[bot]`) + Codex post normal GitHub Review objects with inline comments (`pulls/<PR>/comments`); **Arbiter** (`.github/workflows/arbiter.yml`, ENGH-250) synthesizes them + diff + CI into a REQUIRED `arbiter` commit status (`approve`=success, `block`/`needs-human`=failure) plus an explanatory issue comment from `github-actions[bot]` starting `<!-- arbiter-verdict -->`. Poll the commit status on the head sha (`gh api repos/{owner}/{repo}/commits/<sha>/status`) or that verdict comment — a new push resets the verdict to `pending` and re-reviews automatically. On `block`: address the Arbiter blocking findings + Devin/Codex inline comments, commit + push, poll again. On `needs-human`: the `needs-human-review` label is applied — stop and report; a human must release it. Then `~/.claude/scripts/lane-done.sh` as the final tool call (writes `DONE`, flashes the lane's tmux window green). Stops only on: (1) arbiter `approve` on the final sha (or repo without `arbiter.yml` → PR opened) + `lane-done.sh` run, (2) blocker (ambiguity not in brief, repeated test fail same cause, missing cred), (3) `needs-human` verdict, or verdict still `pending` ~15 min after CI settles → `lane-pause.sh review 'PR #<N> review pending'`, stop without claiming done, (4) ctx nudge fired with a full slice still remaining → `/handoff` + `~/.claude/scripts/lane-handoff.sh <doc>` as the final tool call — lane-run.sh respawns a fresh session that `/resume`s the doc; a review-only remainder NEVER justifies a handoff (one status poll + one feedback pass — finish it). A `/handoff` without the `lane-handoff.sh` state write strands the lane: nothing respawns. Feedback is NEVER deferred to a separate lane. Slice protocol + parallel gotchas: `~/.dotfiles/CLAUDE.md`.
+**Autonomous semantics.** `wt` = fire-and-forget; the lane OWNS its review loop end-to-end (reviews fire automatically on PR push — Arbiter/Devin/Codex; Chuck retired). **In a lane, or spawning one: READ `~/.claude/docs/lane-protocol.md` first** — it owns the review loop, stop conditions, and the handoff contract (`lane-done.sh` / `lane-handoff.sh` as final tool call).
 
 ## Shell Gotchas (zsh)
 
@@ -64,7 +64,6 @@ Tool calls re-read full context. Loops compound.
 
 - Batch: one LLM call → plan, script applies. Never same tool 20+ times.
 - Opus cockpit default. Lanes run Sonnet (`WT_MODEL=sonnet`, set by wt-lanes; `WT_MODEL=opus wt …` per lane when reasoning-heavy). Haiku only bulk mechanical (20+ identical edits).
-- >70% context or >50 tool calls → `/handoff` + `/clear`.
 - `Read` files >500 lines: use `offset`/`limit`. Never full-read a big file to find one symbol — grep first, then targeted read. Same for log dumps, JSON fixtures, transcripts.
 - After an `Edit`, never full-re-read the file — the edit result is already in context. Verify via the edited range only (`offset`/`limit`). Applies hardest to TDD loops: test file does NOT need a fresh Read per red-green cycle.
 - Subagent dispatch: compute shared setup once (tokens, env, IDs) and inline the *values* into the prompt — sibling agents must never re-derive. Anything poll-shaped = ONE `until`/`timeout` Bash loop (or Monitor), never N repeated calls.
@@ -73,8 +72,8 @@ Tool calls re-read full context. Loops compound.
 
 Cost driver = context size × agentic-loop length, NOT user turns (turn cap retired 2026-06-09 — fired once in 14d while lanes ran 300+ assistant msgs per turn, invisible to it).
 
-- **Cockpit**: watch the statusline ctx bar. >70% → `/handoff` + `/clear` at the next task boundary. `clear-handoff.sh` (SessionEnd reason=clear) captures state on any `/clear` ≥5 turns / ≥100k ctx — mechanical net; a deliberate `/handoff` beats it.
-- **Lane** (`<repo>/.claude/worktrees/`): `lane-ctx-nudge.sh` (PostToolUse, non-blocking) injects a reminder at 260K/320K/380K ctx (400K window). On nudge: review-only remainder → finish it (one arbiter-status poll + one feedback pass) + `lane-done.sh`, never hand off. Full slice remaining → wrap + commit, `/handoff`, then `~/.claude/scripts/lane-handoff.sh <doc>` as the FINAL tool call — wt-lanes' lane-run.sh respawns a fresh session that `/resume`s the doc and continues the brief, incl. any pending review loop. Skipping `lane-handoff.sh` strands the lane. Never compact in a lane.
+- **Cockpit**: watch the statusline ctx bar. >70% ctx or >50 tool calls → `/handoff` + `/clear` at the next task boundary. `clear-handoff.sh` (SessionEnd reason=clear) captures state on any `/clear` ≥5 turns / ≥100k ctx — mechanical net; a deliberate `/handoff` beats it.
+- **Lane**: ctx nudges at 260K/320K/380K; on-nudge rules (finish-vs-handoff, `lane-handoff.sh` contract) live in `~/.claude/docs/lane-protocol.md`. Never compact in a lane.
 
 ## Briefs & PRDs
 
@@ -90,9 +89,7 @@ Re-read every lane resume / loop iteration — compounds. Brief = context + acce
 
 ## Secrets / Env
 
-Need API key, token, or env var (for a tool call or otherwise) → check `.env.local` (project root) first, then `.env`, then the cross-project shared stores `~/.claude/.env` and `~/.pi/.env` (LangSmith, Axiom, etc; source with `set -a; . ~/.claude/.env; . ~/.pi/.env 2>/dev/null; set +a`). Don't ask the user for a value that's already there. Never hardcode secrets, never echo a full key to output/logs/commits — reference by name (`$OPENAI_API_KEY`), mask when shown. Missing from all → ask.
-
-LangSmith REST: key is workspace-scoped — every request needs BOTH `-H "x-api-key: $LANGSMITH_API_KEY"` AND `-H "X-Tenant-Id: $LANGSMITH_WORKSPACE_ID"`, else `{"detail":"Forbidden"}`.
+Need API key, token, or env var (for a tool call or otherwise) → check `.env.local` (project root) first, then `.env`, then the cross-project shared stores `~/.claude/.env` and `~/.pi/.env` (LangSmith, Axiom, etc; source with `set -a; . ~/.claude/.env; . ~/.pi/.env 2>/dev/null; set +a`). Don't ask the user for a value that's already there. Never hardcode secrets, never echo a full key to output/logs/commits — reference by name (`$OPENAI_API_KEY`), mask when shown. Missing from all → ask. (Per-API auth quirks live in the matching skill — e.g. `langsmith-api` for the dual-header requirement.)
 
 ## Project CLAUDE.md
 

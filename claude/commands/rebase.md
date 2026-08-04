@@ -140,13 +140,8 @@ Push skipped or escalated → keep worktree, print path.
 
 ## 7. Report — terse
 
-```
-Rebased $FEATURE onto origin/$BASE   (mode: <local|worktree>)
-Commits replayed: <N>
-Auto-resolved: <file count or "none">
-Push: <pushed | force-pushed | skipped — manual>
-Worktree: <removed | $WT preserved>
-```
+One short block: branch + base + mode, commits replayed, auto-resolved count, push result,
+worktree fate.
 
 ## 8. Stop
 

@@ -29,15 +29,9 @@ Unsure → treat as structural.
 
 ## 3. Codebase exploration (only if structural)
 
-- **Mirror search** — find the structural twin file/feature; cite paths.
-- **Surface area** — top ≤8 files to start in, each with a one-line reason.
-- **Mechanism honesty** — env vars, vendor accounts, infra prereqs.
-- Vendor work → check context7 / official docs for the vendor API; cite the doc section
-  used or note "no docs found."
-- For deeper stress-testing against the project's domain model, hand off to the
-  `grill-with-docs` skill.
-
-Never invent paths/symbols/env vars. "TBD — needs investigation" beats a guess.
+Run `/scope` §2's exploration pass (mirror search, surface area ≤8 files, mechanism honesty,
+vendor docs via context7); deeper stress-testing → the `grill-with-docs` skill. Never invent
+paths/symbols/env vars — "TBD — needs investigation" beats a guess.
 
 ## 4. Compose the refined brief
 
@@ -45,24 +39,12 @@ Rewrite the `## Context` and `## Acceptance criteria` sections of the brief. If 
 add or update a `## Surface area` section (Mirror / Files to start in / Gotchas). **Preserve
 `## Local notes` and everything below it verbatim** — that's lane/agent scratch.
 
-Apply your org's risk callouts where they apply — see `~/.claude/org/<org>/preamble.md` for the
-per-org checklist (LLM-cache thresholds, error-budget gates, infra-pairing rules, the project
-test command, vendor-proxy routing). Org-specific specifics live in that gitignored file.
+Apply the org's risk callouts where they apply — `~/.claude/org/<org>/preamble.md`.
 
 ## 5. Show the diff. Stop.
 
-```
-<current title>
-       ↓
-<new title>            # only if title changed
-
-DIFF:
-- <removed line>
-+ <added line>
-…
-```
-
-**Stop.** Wait for "go" or further edits. Don't write yet.
+Render a `-`/`+` diff of the changed lines (note a title change explicitly). **Stop.** Wait
+for "go" or further edits. Don't write yet.
 
 ## 6. On "go": write the brief
 

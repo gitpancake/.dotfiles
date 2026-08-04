@@ -27,11 +27,9 @@ Take an open PR, harvest every comment, triage into actionable feedback, write a
 (Chuck is RETIRED 2026-08-04 — a legacy `chuck-noland[bot]` comment on an old PR is parsed like any other bot comment; never tag `@chuck-noland-cartage` or wait for him.)
 
 Collect all comment surfaces, no pre-filter (`Comment scope: everything`):
-- **Issue comments** (`comments` / `gh api repos/{owner}/{repo}/issues/<PR_NUM>/comments`) — general PR discussion **and the Arbiter verdict**. Arbiter (author `github-actions[bot]`, body opener `<!-- arbiter-verdict -->`, then `## ✅/⛔ Arbiter verdict: \`approve|block|needs-human\``) synthesizes the bot reviews into blocking findings + advisory items, stamped with the head sha it judged (`_On <sha> · <model>_`). Use only the LATEST verdict comment; a `block` verdict's "Blocking findings" are mandatory triage rows. Arbiter also publishes the REQUIRED `arbiter` commit status on the head sha — `approve` there = nothing blocking remains.
+- **Issue comments** (`comments` / `gh api repos/{owner}/{repo}/issues/<PR_NUM>/comments`) — general PR discussion **and the Arbiter verdict** (author `github-actions[bot]`, body opener `<!-- arbiter-verdict -->`, then `## ✅/⛔ Arbiter verdict: \`approve|block|needs-human\``, stamped `_On <sha> · <model>_`). Use only the LATEST verdict comment; a `block` verdict's "Blocking findings" are mandatory triage rows. (Verdict/status mechanics: `~/.claude/docs/lane-protocol.md`.)
 - **Review summaries** (`reviews[].body`) — Devin (`devin-ai-integration[bot]`, "**Devin Review** found N potential issues"), Codex, and human reviewers.
 - **Inline review comments** (`pulls/<PR_NUM>/comments`) — each with `file:line` + diff hunk + a `pull_request_review_id` linking it to its review. Devin's findings live here (marker `<!-- devin-review-comment -->`, ids prefixed `BUG_`/`SEC_`/`ANALYSIS_` — treat BUG/SEC as candidate blockers, ANALYSIS as advisory), as do Codex's and humans'. Harvest **every** one — do not sample a subset.
-
-After pushing fixes, reviews + Arbiter re-run automatically on the new sha — no tagging; verify by polling the `arbiter` commit status.
 
 Tag each: author, source type, the `pull_request_review_id` it belongs to (issue comments have none), `resolved`/`outdated` state.
 
@@ -51,20 +49,20 @@ Resolved/outdated threads default to **skip** unless the body still names an una
 
 For each **actionable** item, grep the named `file:line`. List the top files to read first, one-line reason each. Note cross-file blast radius.
 
-**Find bugs once (PP §66).** For each actionable item that names a *bug class* (null deref, missing guard, async race, stray `as any`, hardcoded constant), grep the rest of the repo for siblings of the same pattern. List peer hits under the surface area, even if the reviewer didn't flag them — fixing one and leaving five is how the class survives. The lane's slice for that comment then either includes the peers or explicitly defers with a `find-bugs-once: <pattern>` note + a follow-up ticket.
+**Find bugs once (PP §66).** Actionable item names a *bug class* (null deref, missing guard, async race, stray `as any`) → grep the repo for siblings; list peer hits under the surface area. The slice includes the peers or explicitly defers with a follow-up ticket.
 
-**Don't program by coincidence (PP §44).** When a reviewer says "this is wrong" without saying *why*, the plan must name the contract that was violated, not just paraphrase the comment. If you cannot state the *why*, ask in the open-questions section rather than guessing — the lane will guess too if you don't.
+**Don't program by coincidence (PP §44).** Reviewer says "wrong" without *why* → the plan names the violated contract, or puts it in open-questions — never paraphrase-and-guess.
 
 ## 5. Write plan — `~/.claude/plans/PR-<PR_NUM>-feedback.md`
 
-≤200 lines. Heading: `# PR-<PR_NUM>-feedback — <pr title>`. Sections:
+Heading: `# PR-<PR_NUM>-feedback — <pr title>`. Sections:
 
 - **PR** — url, head branch (`headRefName`), base branch.
 - **Feedback triaged** — the §3 table. Actionable items numbered; skipped items with reason; questions listed.
 - **Slices** — one slice per actionable item (group by file/layer when they overlap). Each: what changes, `file:line`, why safe to merge. No flip pattern — these are follow-up commits to an already-open PR.
 - **Open questions** — the `question`-class comments. Lane answers them in its final report, not in the PR thread.
 - **Branch + worktree** — branch = `headRefName` (existing, do not create); worktree = `<repo>/.claude/worktrees/pr-<PR_NUM>-feedback`.
-- **Done when** — every actionable item committed + pushed to the PR branch, `/ship <PR_NUM>` re-review run, questions answered in the report.
+- **Done when** — every actionable item committed + pushed to the PR branch (the push itself re-triggers review — poll the `arbiter` status), questions answered in the report.
 
 The plan filename uses pseudo-ticket `PR-<PR_NUM>` so `wt` treats the slug as ticket-shaped and auto-kicks-off the autonomous loop.
 
@@ -89,7 +87,7 @@ wt --branch <headRefName> PR-<PR_NUM>-feedback
 tmux rename-window "feedback:PR-<PR_NUM>"
 ```
 
-`wt`'s pre-spawn `git fetch origin` makes `origin/<headRefName>` available; `--branch` checks the real PR branch into the worktree (DWIM tracking branch). If that branch is already checked out in an existing worktree (e.g. a still-open lane from when the PR was built), `wt` reuses that worktree instead of erroring on a double checkout. `tmux new-window` auto-selects the new window, so the follow-up `tmux rename-window` (no `-t`) retargets it to `feedback:PR-<PR_NUM>` — flags the lane as feedback work in the tmux status. The plan already exists at `~/.claude/plans/PR-<PR_NUM>-feedback.md`, so `wt` auto-kicks-off the autonomous loop. Then stop:
+(Spawn semantics — branch checkout, worktree reuse, plan auto-kickoff: `~/.claude/docs/lane-protocol.md` §Spawning.) Then stop:
 
 > Lane spawned on PR #<PR_NUM>'s branch. Autonomous feedback loop running in new tmux window. This pane is done.
 
@@ -97,6 +95,6 @@ tmux rename-window "feedback:PR-<PR_NUM>"
 
 Don't recurse. Continue inline:
 
-> Plan ready. Beginning autonomous feedback implementation. Commits push to the PR branch; `/ship <PR_NUM>` at end for re-review.
+> Plan ready. Beginning autonomous feedback implementation. Commits push to the PR branch — the push re-triggers review.
 
-Read the plan, implement each slice end-to-end (type-check + tests per slice, commit per logical fix), push to the PR's head branch, run `/ship <PR_NUM>` for a review-only re-review, and answer the open questions in the final report. Stop only on: PR pushed + re-review run, or a genuine blocker (ambiguity not in the plan, repeated test failure on the same root cause, missing credential).
+Read the plan, implement each slice end-to-end (type-check + tests per slice, commit per logical fix), push to the PR's head branch (re-review fires on push — poll the `arbiter` status per `~/.claude/docs/lane-protocol.md`), and answer the open questions in the final report. Stop only on: fixes pushed + arbiter verdict resolved, or a genuine blocker (ambiguity not in the plan, repeated test failure on the same root cause, missing credential).
