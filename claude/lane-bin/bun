@@ -27,12 +27,44 @@ if [[ -z "$real_bun" ]]; then
   exit 127
 fi
 
-# `timeout` GNU vs macOS: prefer gtimeout (coreutils) when available,
-# fall back to /usr/bin/timeout (Sequoia ships it), then to bare exec.
-if command -v gtimeout >/dev/null 2>&1; then
-  exec gtimeout --kill-after=10 300 "$real_bun" "$@"
-elif command -v timeout >/dev/null 2>&1; then
-  exec timeout --kill-after=10 300 "$real_bun" "$@"
-else
-  exec "$real_bun" "$@"
+# Typecheck serialization: a cartage-agent `tsc --noEmit` peaks ~5.4GB RSS,
+# so two concurrent lane typechecks swap-thrash the 16GB cockpit
+# (2026-07-14: load avg 20, 3.4GB swap). Machine-wide mkdir lock (macOS has
+# no flock) serializes them; stale locks are reaped via the stored pid.
+# After 15 min of waiting we proceed unlocked — a wedged holder must not
+# dead-stop every lane.
+lock=""
+if [[ "$*" == *type-check* || "$*" == *tsc* ]]; then
+  lock="${TMPDIR:-/tmp}/lane-typecheck.lock"
+  waited=0
+  while ! mkdir "$lock" 2>/dev/null; do
+    holder_pid="$(cat "$lock/pid" 2>/dev/null || true)"
+    if [[ -n "$holder_pid" ]] && ! kill -0 "$holder_pid" 2>/dev/null; then
+      rm -rf "$lock"
+      continue
+    fi
+    if (( waited >= 900 )); then
+      echo "lane-bin/bun: typecheck lock held >15min (pid ${holder_pid:-?}) — proceeding unserialized" >&2
+      lock=""
+      break
+    fi
+    sleep 5
+    waited=$((waited + 5))
+  done
+  if [[ -n "$lock" ]]; then
+    echo "$$" > "$lock/pid"
+    trap 'rm -rf "$lock"' EXIT INT TERM
+  fi
 fi
+
+# `timeout` GNU vs macOS: prefer gtimeout (coreutils) when available,
+# fall back to /usr/bin/timeout (Sequoia ships it), then bare run. No exec —
+# the shim must outlive bun to release the typecheck lock via its EXIT trap.
+if command -v gtimeout >/dev/null 2>&1; then
+  gtimeout --kill-after=10 300 "$real_bun" "$@"
+elif command -v timeout >/dev/null 2>&1; then
+  timeout --kill-after=10 300 "$real_bun" "$@"
+else
+  "$real_bun" "$@"
+fi
+exit $?
