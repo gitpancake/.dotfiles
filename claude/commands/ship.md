@@ -74,11 +74,19 @@ are reconciled in place: reuse the id, never re-create it on AOA.
    Log one line, set `TICKET_ID=""`, continue with no-prefix title. Don't block ship. Never
    substitute a different team on your own — report the failure and let the user decide.
 
-## 3. PR body — choose sparse vs rich deliberately
+## 3. PR body — repo template first, always
 
-If `.github/PULL_REQUEST_TEMPLATE.md` exists, fill its sections with the shape below.
-Default to the rich shape when reviewers need context; sparse bodies are only for obviously
-small, single-purpose changes.
+**If `.github/PULL_REQUEST_TEMPLATE.md` exists, the body MUST use its sections verbatim —
+every heading present, genuinely filled in, none replaced or renamed.** The Arbiter gate
+🔴-blocks bodies that swap template sections for ad-hoc headings (learned on PR #6490).
+For cartage-agent that means: `## Linear ticket`, `## Summary`, `## Root Cause` (write
+`N/A` + one-line justification for feature/docs/refactor work — never omit the section),
+`## Automated tests added` (or why not), `## Manual testing steps` (for docs/CI-only
+changes, state what was verified and how), and the author `## Checklist` with every box
+honestly ticked. The sparse-vs-rich choice below governs only how much depth goes INSIDE
+those sections.
+
+The shapes below are the fallback for repos WITHOUT a PR template only.
 
 ### Small PR shape
 
