@@ -1,5 +1,5 @@
 ---
-description: Pickup epic — confirm story order, spawn next child as single lane.
+description: Pickup epic (Linear project) — confirm story order, spawn next child as single lane.
 argument-hint: <EPIC> <BASE-BRANCH> [extra context...]
 ---
 
@@ -7,12 +7,11 @@ argument-hint: <EPIC> <BASE-BRANCH> [extra context...]
 
 Drives an epic as a sequence of single lanes.
 
-An **epic** is a folder with an `_epic.md` at its root (contract: `$TICKETS_DIR/README.md`),
-holding the `<!-- epic-stories:start -->` block — the authoritative ordered story list +
-dependency DAG — plus one `NN-<child>.md` brief per story. `/epic` confirms that order with
-the user, then spawns the **next incomplete child** as a normal `wt` single lane. Re-run
-`/epic` after each child's PR merges to spawn the next — the command is resumable; child
-`status:` frontmatter (hand-set, e.g. via tix's `d`/`x` pins) is the progress marker.
+An **epic** is a Linear **project**: children = issues carrying per-story detail, blocking
+relations = the authoritative dependency DAG (global CLAUDE.md §Ticket Lifecycle). `/epic`
+reads the project from Linear, confirms the next story with the user, then spawns it as a
+normal `wt` single lane. Re-run `/epic` after each child's PR merges to spawn the next — the
+command is resumable; Linear issue state is the progress marker.
 
 Syncs the cockpit to a base branch, folds in any extra context, spawns one lane. Do **not**
 edit project source — this command only prepares and spawns.
@@ -20,20 +19,31 @@ edit project source — this command only prepares and spawns.
 ## 1. Parse
 
 `$ARGUMENTS` = `<EPIC> <BASE> [context...]`:
-- **token 1** — `EPIC` (required). An epic folder slug, a Linear epic id, or an `_epic.md`
-  path — `wt --print-brief` resolves all three. Empty → ask, stop.
+- **token 1** — `EPIC` (required). A Linear project name fragment, project URL, or any child
+  issue id (its `project` field resolves the epic). Empty → ask, stop.
 - **token 2** — `BASE` (required). Base branch to spawn off. `.` = cockpit's current branch.
-- **rest** — `CONTEXT` (optional). Free-text notes for the epic.
+- **rest** — `CONTEXT` (optional). Free-text notes for the story about to spawn.
 
 ## 2. Resolve the epic
 
-`wt --print-brief <EPIC>` → `EPIC_MD`.
-- **Non-zero exit / no path** → stop. Tell the user to `/scope` it into an epic first.
-- **Resolved, but the path is not an `_epic.md`** → it's a single ticket, not an epic. Stop.
-  Tell user: `/scope` it into an epic folder first (an `_epic.md` + `NN-<child>.md`
-  children), or `wt <EPIC>` to work it as a single ticket.
+Via the `linear` skill: `projects(filter: {name: {containsIgnoreCase: ...}})` (or
+`issue(id:){ project }` for a child id) → project id. Then fetch children + DAG in one query:
 
-`EPIC_DIR` = the directory holding `EPIC_MD`. `SLUG` = its basename.
+```graphql
+query($id: String!) { project(id: $id) {
+  name url
+  issues(first: 50) { nodes {
+    identifier title sortOrder
+    state { name type }
+    relations { nodes { type relatedIssue { identifier } } }
+    inverseRelations { nodes { type issue { identifier } } }
+} } } }
+```
+
+- **No project matches / ambiguous** → list candidates or stop; tell the user to `/scope`
+  the epic first if it doesn't exist.
+- **Resolved to a lone issue with no project** → it's a single ticket, not an epic. Stop:
+  use `/pickup <id> <BASE>` instead.
 
 ## 3. Sync the cockpit to BASE
 
@@ -48,52 +58,49 @@ git merge --ff-only "origin/<BASE>"
 
 ff-merge fails (dirty tree / diverged) → stop, surface it. Never force.
 
-## 4. Fold in context — only if `CONTEXT` non-empty
+## 4. Pick the next child + confirm
 
-Append to `EPIC_MD` under `## Local notes` (create that section at end of file if missing):
+Classify every child by Linear `state.type`:
 
-```
-### Epic note — <ISO-8601 date>
-<CONTEXT>
-```
+- `completed` / `canceled` → done, skip.
+- `started` → in flight. Stop and report — don't double-spawn a story.
+- `backlog` / `unstarted` → candidate.
 
-It rides with the epic — child briefs reference `_epic.md` for shared context.
+**NEXT** = the candidate whose blockers (issues that *block* it, via relations) are all
+`completed`/`canceled`, lowest `sortOrder` (ties: lowest identifier). No candidate and
+nothing in flight → epic done; say so, stop.
 
-## 5. Pick the next child + confirm
+Print a terse numbered list — `identifier  title  state`, marking NEXT — and ask: spawn
+NEXT, or stop so the user can re-order / `/rescope` children first? **Wait for "go".** The
+project's DAG *is* the decomposition; never re-plan it here.
 
-Read the `<!-- epic-stories:start -->` block in `EPIC_MD` and the `status:` frontmatter of
-every `NN-<child>.md` in `EPIC_DIR`:
+## 5. Fold in context — only if `CONTEXT` non-empty
 
-- `done` / `cancelled` → complete, skip.
-- `review` / `active` → in flight. Stop and report — don't double-spawn a story.
-- Anything else (`open`, `draft`, missing) → candidate.
-
-**NEXT** = the lowest-`NN` candidate whose `needs` edges (from the stories block) all point
-at complete children. No candidate and nothing in flight → epic done; say so, stop.
-
-Print a terse numbered list — `NN  child  status`, marking NEXT — and ask: spawn NEXT, or
-stop so the user can edit the stories block / briefs first? **Wait for "go".** The stories
-block *is* the decomposition; never re-plan it here.
+After "go", `CONTEXT` rides with the child: post it as a comment on NEXT's Linear issue
+(`commentCreate`), so it survives materialization refreshes and is visible to the team.
 
 ## 6. Spawn
 
 ```bash
-wt <NN-CHILD-SLUG>
+BRIEF=$(~/.dotfiles/scripts/linear-brief.sh "<NEXT-ID>")
+wt <NEXT-ID>
 ```
 
-Normal single lane off the now-current `BASE`: the child brief drives it end-to-end through
-`/ship`. Branch type defaults to `feature/` — override with `wt --type <prefix> <slug>`.
+`linear-brief.sh` materializes the child's description as the lane's local cache brief; `wt`
+resolves it by the `linear:` frontmatter. Normal single lane off the now-current `BASE`: the
+brief drives it end-to-end through `/ship`. Branch type defaults to `feature/` — override
+with `wt --type <prefix> <NEXT-ID>`.
 
 ## 7. Report, then stop
 
-> Lane spawned for `<NN-child>` (<k> of <N> stories complete) off `<BASE>`. Re-run
+> Lane spawned for `<NEXT-ID>` (<k> of <N> stories complete) off `<BASE>`. Re-run
 > `/epic <EPIC> <BASE>` after its PR merges to spawn the next story. This pane is done.
 
 ## Stop conditions
 
-- Missing `EPIC` / `BASE`, or epic not found — ask or report, stop.
-- Resolved to a single ticket, not an `_epic.md` — stop; tell the user to `/scope` it into an epic.
+- Missing `EPIC` / `BASE`, or project not found — ask or report, stop.
+- Resolved to a single project-less issue — stop; redirect to `/pickup`.
 - ff-merge failure — surface, stop.
-- A child is already `active`/`review` — report it, stop. One story in flight at a time.
-- User doesn't confirm NEXT — stop, leave `EPIC_MD` for the user to edit.
+- A child is already `started` — report it, stop. One story in flight at a time.
+- User doesn't confirm NEXT — stop; they'll re-order or `/rescope` in Linear first.
 - After spawn — done. Don't follow the lane.

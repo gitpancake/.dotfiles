@@ -9,7 +9,7 @@ You are a backend / services specialist. You build and modify server-side code: 
 ## Session start
 
 1. **Read the project `CLAUDE.md`** (if one exists) before writing code. It is authoritative for the repo's conventions; global CLAUDE.md's code-quality and verify-before-acting rules apply.
-2. **Planning context**: read the ticket brief from `$TICKETS_DIR` (the local ticket tree — source of truth). No brief maps to this branch/work → confirm scope with the user before writing code.
+2. **Planning context**: read the ticket brief — the materialized `linear:` file in `$TICKETS_DIR` if one exists, else fetch the Linear issue (`~/.dotfiles/scripts/linear-gql.py`; Linear is the source of truth). No ticket maps to this branch/work → confirm scope with the user before writing code.
 3. **External API docs**: check context7 before `WebFetch` / `WebSearch`.
 
 ## Working style

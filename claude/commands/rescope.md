@@ -1,24 +1,24 @@
 ---
-description: Refine local ticket brief w/ the user's notes. Brief edit only.
+description: Refine a Linear ticket's brief w/ the user's notes. Description edit only.
 argument-hint: <ticket> [free-text adjustments]
 ---
 
 # /rescope $ARGUMENTS
 
 `$ARGUMENTS` is `<ticket> [optional adjustments]`. First whitespace-separated token = the
-ticket (a slug, a Linear id, or an epic folder name), rest = adjustment text.
+ticket (a Linear id, or the slug of a materialized brief — read its `linear:` frontmatter),
+rest = adjustment text.
 
-Refinement is **local**. This command edits the brief on disk — the file *is* the ticket,
-there is no upstream to reconcile with.
+Refinement happens **in Linear** — the issue description *is* the brief (global CLAUDE.md
+§Ticket Lifecycle). Any local materialized file is a cache this command refreshes at the end.
 
 If only the ticket is given, show the brief then **ask** for adjustments and stop.
 
 ## 1. Locate + show
 
-`wt --print-brief <ticket>` → the brief path (the one resolver `wt` uses — do not
-re-implement the lookup).
-- **Non-zero exit / no path** → tell the user to `/scope` it first, stop.
-- **Found** → render the current frontmatter + body verbatim so the user sees what changes.
+Fetch via the `linear` skill: `issue(id:){ id title description state { name } url }`.
+- **Not found** → tell the user to `/scope` it first, stop.
+- **Found** → render title + description verbatim so the user sees what changes.
 
 ## 2. Decide depth
 
@@ -35,10 +35,8 @@ paths/symbols/env vars — "TBD — needs investigation" beats a guess.
 
 ## 4. Compose the refined brief
 
-Rewrite the `## Context` and `## Acceptance criteria` sections of the brief. If structural,
-add or update a `## Surface area` section (Mirror / Files to start in / Gotchas). **Preserve
-`## Local notes` and everything below it verbatim** — that's lane/agent scratch.
-
+Rewrite the `## Context` and `## Acceptance criteria` sections of the description. If
+structural, add or update a `## Surface area` section (Mirror / Files to start in / Gotchas).
 Apply the org's risk callouts where they apply — `~/.claude/org/<org>/preamble.md`.
 
 ## 5. Show the diff. Stop.
@@ -46,13 +44,22 @@ Apply the org's risk callouts where they apply — `~/.claude/org/<org>/preamble
 Render a `-`/`+` diff of the changed lines (note a title change explicitly). **Stop.** Wait
 for "go" or further edits. Don't write yet.
 
-## 6. On "go": write the brief
+## 6. On "go": write to Linear + refresh the cache
 
-Write the refined sections back to the brief file. Update the frontmatter `title:` if it
-changed. Return the file path.
+`issueUpdate` with the refined description (and `title` if changed) via the `linear` skill —
+body through `--variables-file`, verify `success: true`, re-read to confirm markdown
+survived. Then refresh any local materialization:
+
+```bash
+old=$(grep -rlE "^linear:[[:space:]]+<ID>" "${TICKETS_DIR:-$HOME/.claude/tickets}" --include='*.md' 2>/dev/null | head -1)
+[[ -n "$old" ]] && { rm "$old"; ~/.dotfiles/scripts/linear-brief.sh "<ID>"; }
+```
+
+(Preserve any `## Local notes` from the old cache file by re-appending it — that's lane
+scratch, not scope.) Return the issue URL.
 
 ## 7. Stop conditions
 
 - After §1 if no adjustments given — ask once, stop.
 - After diff in §5 — wait for "go".
-- After write in §6 — done. The brief is ready for `wt <slug>` to pick up.
+- After write in §6 — done. The ticket is ready for `/pickup <id>`.

@@ -81,10 +81,6 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/worktree-write-guard.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/linear-ticket-guard.sh"
           }
         ]
       }
@@ -110,7 +106,8 @@
   },
   "enabledPlugins": {
     "context7@claude-plugins-official": true,
-    "typescript-lsp@claude-plugins-official": true
+    "typescript-lsp@claude-plugins-official": true,
+    "slack@claude-plugins-official": true
   },
   "extraKnownMarketplaces": {
     "notion-plugin-marketplace": {

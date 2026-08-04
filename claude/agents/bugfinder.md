@@ -64,7 +64,7 @@ cat > "${TMPDIR:-/tmp}/bugfinder-body.md" <<'BODY'
 ## Confidence
 Confirmed | Likely
 BODY
-LINEAR_TICKET_CREATE_OK=1 ~/.dotfiles/scripts/linear-ticket.py create \
+~/.dotfiles/scripts/linear-ticket.py create \
   --team "AOA" \
   --title "[BugFinder] <concise description>" \
   --labels "Bug" \

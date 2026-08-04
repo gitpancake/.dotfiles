@@ -1,15 +1,19 @@
 ---
-description: Free-text problem → engineered ticket brief under $TICKETS_DIR. Writes on "go".
+description: Free-text problem → engineered Linear ticket (or project + children). Writes on "go".
 argument-hint: <free-text problem statement>
 ---
 
 # /scope $ARGUMENTS
 
-User's standard ask: "scope this out, ready for engineering." Output is a **local brief** a
-`wt` lane can pick up without redoing discovery — it carries the surface area, the mirror
-reference, the gotchas. Refine the request, don't restate it.
+User's standard ask: "scope this out, ready for engineering." Output is a **Linear issue**
+(or, for an epic, a **Linear project + child issues**) whose description a `wt` lane can pick
+up without redoing discovery — it carries the surface area, the mirror reference, the
+gotchas. Refine the request, don't restate it.
 
-Contract + templates: `$TICKETS_DIR/README.md` (default `$TICKETS_DIR/<project>/`, set by zsh `chpwd` hook from git repo basename; flat `$TICKETS_DIR/` outside a repo). This command writes only markdown under `$TICKETS_DIR` — the brief *is* the ticket. There is no upstream tracker.
+Linear is the source of truth (global CLAUDE.md §Ticket Lifecycle); write via the `linear`
+skill (`linear-gql.py`). This command writes to Linear only — plus the one `CONTEXT.md`
+docs-commit in §7. Lanes get the brief via `linear-brief.sh` materialization at `/pickup`
+time, not from anything /scope leaves on disk.
 
 If `$ARGUMENTS` is empty, infer the problem from conversation context — what was just
 discussed, debugged, or decided. Summarize your interpretation in 1–2 sentences and proceed.
@@ -90,61 +94,60 @@ Reserve for decisions that survive past the PR.
 
 Apply the org's risk callouts where they fit — `~/.claude/org/<org>/preamble.md`.
 
-## 3. Name it — slug, area, shape
+## 3. Name it — title, team, shape
 
-No counter, no `DRAFT-N`. **The filename is the handle.**
+- **Title** — `Feature:`/`Fix:`/`Improvement:`/`Refactor:` prefix, action-oriented, derived
+  from the end state. Linear adds its own id — never bake one into the title.
+- **Team** — per global CLAUDE.md §Linear teams: engineering work → **ENGH**; ops → **AO**;
+  agent-behavior/config → **AOA**. Ask only if genuinely ambiguous.
+- **Shape** — single issue or epic (project + children), from §1.
 
-- **Slug** — kebab-case, ≤40 chars, derived from the end state. No numbers (slug rule +
-  rationale: global CLAUDE.md §Slug rule).
-- **Area** — one of the buckets in `$TICKETS_DIR/` (`integrations`, `platform`, `ops`,
-  `tooling`, `spikes`). Pick the closest; ask only if genuinely ambiguous.
-- **Shape** — single ticket or epic (from §1).
-
-Target path — a ticket lives in its area from creation, born `status: open`:
-
-- **Single ticket** → `$TICKETS_DIR/<area>/<slug>.md`
-- **Epic** → `$TICKETS_DIR/<area>/<epic-slug>/_epic.md` (the PRD) plus
-  `$TICKETS_DIR/<area>/<epic-slug>/NN-<child-slug>.md` for each sub-issue, `NN` =
-  execution order.
-
-Slug and epic-folder name both match `wt`'s resolver, so `wt <slug>` spawns a lane.
+Branch/lane slugs derive from the title at `/pickup` time (slug rule: global CLAUDE.md) —
+/scope doesn't mint filenames.
 
 ## 4. Brief — house style
 
-Copy the templates. Do not freehand the frontmatter.
+**Single issue** — description sections, in order:
 
-- Single ticket → `$TICKETS_DIR/_TEMPLATE.md`
-- Epic root → `$TICKETS_DIR/_EPIC-TEMPLATE.md`
-- Epic child → `$TICKETS_DIR/_CHILD-TEMPLATE.md`
+- `## Requirement` — what's needed, one short paragraph.
+- `## Context` — the refined problem: mirror reference, decisions from the grill, gotchas
+  quoted from project CLAUDE.md.
+- `## Surface area` — mirror / ≤8 starting files with one-line reasons / prerequisites +
+  unconfirmed mechanisms from §2d.
+- `## Acceptance criteria` — checkboxes, each a testable outcome.
+- `## Out of scope` — what this deliberately doesn't touch.
+- `## Reversibility` — only when §2e produced one.
 
-Every ticket uses the same shape, so lanes read it identically. Set `created` from
-`date -u +%Y-%m-%dT%H:%M:%SZ` — run the command, never compose the timestamp (no clock;
-model-guessed instants have shipped an hour off). One `date -u` call covers the whole batch.
-Set `status: open` on every ticket AND every epic child (a missing `status:` renders as a
-muted non-ticket in tix until the next sweep). Leave `linear:` empty — legacy breadcrumb.
+**Epic** — a Linear **project** plus one child issue per story:
 
-**For an epic:** `_epic.md` carries the `<!-- epic-stories:start -->` block — the
-authoritative ordered story list plus dependency DAG. Each story's `context:` points at its
-`NN-<child>.md`. The children carry the deep per-story detail; `_epic.md` carries
-context / goal / constraints / story-list. `/epic` reads `_epic.md` to pick the next story
-and each child lane opens its `NN-<child>.md` — so the block must be complete and correctly
-ordered before any lane spawns.
+- Project description follows the spec template: problem → before/after → north star →
+  design decisions → execution order (phases, issue-linked) → acceptance criteria →
+  hazards → reversibility → appendix (story table + working docs). Exemplars:
+  script-retirement `04c92e7d0001`, off-git `c9bdadb3cdfc`.
+- Children carry the deep per-story detail (same section shape as a single issue), sized to
+  one context window each.
+- **Blocking relations ARE the dependency DAG** — `issueRelationCreate` per `needs` edge.
+  `/epic` reads them to pick the next story, so they must be complete before any lane spawns.
 
 ## 5. Show the draft. Stop.
 
-Render the full brief(s) and the target path(s). **Stop.** Wait for "go" or edits. Do not
-write yet.
+Render the full draft(s) — title, team, description(s), and for an epic the story list +
+DAG. **Stop.** Wait for "go" or edits. Do not write yet.
 
-## 6. On "go": write
+## 6. On "go": write to Linear
 
-`mkdir -p` the parent dir, write the markdown file(s). Return:
+Via the `linear` skill: `issueCreate` (single), or `projectCreate` + `issueCreate` per child
++ `issueRelationCreate` per DAG edge (epic). Set state Backlog, assignee the user, labels
+per repo conventions. Bodies via `--variables-file` — never echo markdown through the shell.
+Verify `success: true` on every mutation and re-read the project/issue after save (Linear
+silently drops some markdown — tables/checkboxes — on bad input). Return:
 
-> Brief at `$TICKETS_DIR/<area>/<slug>.md`. Run `wt <slug>` to start a lane.
+> `<TEAM-123>` created. Run `/pickup <TEAM-123> <base>` to start a lane.
 
 For an epic:
 
-> Epic at `$TICKETS_DIR/<area>/<epic-slug>/`. Run `/epic <epic-slug> <base>` to review
-> the story order and spawn the next child lane.
+> Project `<name>` + `<N>` children created. Run `/epic <project> <base>` to review
+> story order and spawn the first child lane.
 
 ## 7. Commit the glossary edit — if §2c touched `CONTEXT.md`
 
@@ -166,5 +169,5 @@ git -C "$REPO" diff --quiet -- CONTEXT.md || \
 
 - After §1 clarifying questions — wait for answers.
 - After §5 draft — wait for "go".
-- After §6 write — done. the user runs `wt <slug>` (or `/epic <epic-slug>`) next. The §7
+- After §6 write — done. The user runs `/pickup <id>` (or `/epic <project>`) next. The §7
   `CONTEXT.md` docs-commit is the only project-repo write; never edit code from this command.

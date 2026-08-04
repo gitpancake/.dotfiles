@@ -20,18 +20,24 @@ Self-describe via Agent/skills schemas — don't list. Org preamble: known org c
 
 ## Ticket Lifecycle
 
-**Source of truth: `$TICKETS_DIR`. NOT Linear.** Layout: `~/.claude/tickets/<project>/<area>/...` — one centralized home tree, project subfolder = git repo basename. `$TICKETS_DIR` auto-sets via zsh `chpwd` hook when inside a project repo; outside repos / when unset, tools fall back to flat `~/.claude/tickets/`. Status/scope/progress/"what's left" → read local tree (`ls`/`grep`/`Read`). Never read state from Linear — lags + duplicates local. Linear has no MCP here: it's a write-only sink reached by `~/.dotfiles/scripts/linear-ticket.py` (GraphQL + `$LINEAR_API_KEY`) — `/ship` creates the PR's ticket, agents post comments. Anything beyond that script's `create`/`comment`/`state` → invoke the **`linear` skill** (arbitrary GraphQL via `~/.dotfiles/scripts/linear-gql.py`). User says "ticket"/"epic"/"AOA-###"/"AE-####" → check `$TICKETS_DIR` first, Linear never.
+**Source of truth: Linear.** Read AND write via the **`linear` skill** (arbitrary GraphQL via `~/.dotfiles/scripts/linear-gql.py`); `~/.dotfiles/scripts/linear-ticket.py` stays the fast path for `create`/`comment`/`state`. Local ticket tree RETIRED 2026-08-04 — `$TICKETS_DIR` survives only as a lane materialization cache (below), never a source of truth; no MCP either (skill covers everything). Status/scope/progress/"what's left" → query Linear. User says "ticket"/"epic"/"AOA-###"/"ENGH-###" → look it up in Linear.
 
-**Linear teams.** Agent-created work → **AOA** (`AO - Agents`): `/ship`'s PR ticket, `bugfinder`'s bugs, everything Chuck/Kelly write (`LINEAR_TEAM_KEY=AOA`). Human work → **AO** (`Autonomy Operations`), the `linear-ticket.py --team` default. **`AE`/`Autonomy Eng` is RETIRED** — creating there fails `Entity is retired: team`, and listing teams still shows it, so only a create attempt reveals this. Old `AE-####` ids stay valid and are reconciled in place; never re-create them on AOA. A create that fails → report and continue unprefixed, never substitute a team on your own.
+**Shapes.** Single ticket = Linear **issue**; the description IS the brief (Requirement / Context / Acceptance criteria; engineered `/scope` briefs add Surface area + Reversibility). Epic = Linear **project**: spec-template description (problem → before/after → north star → execution order → hazards → appendix; exemplars: script-retirement `04c92e7d0001`, off-git `c9bdadb3cdfc`), children = issues carrying per-story detail, **blocking relations mirror the dependency DAG**.
 
-`$TICKETS_DIR` = DB. Contract: its `README.md`. Slug filename; epic = folder w/ `_epic.md`. Brief missing → `/scope` it.
+**Linear teams.** Engineering epics/stories → **ENGH** (`Engineering`). Agent-created work → **AOA** (`AO - Agents`): `/ship`'s PR ticket, `bugfinder`'s bugs, everything Chuck/Kelly write (`LINEAR_TEAM_KEY=AOA`). Human ops work → **AO** (`Autonomy Operations`), the `linear-ticket.py --team` default. **`AE`/`Autonomy Eng` is RETIRED** — creating there fails `Entity is retired: team`, and listing teams still shows it, so only a create attempt reveals this. Old `AE-####` ids stay valid and are reconciled in place; never re-create them on AOA. A create that fails → report and continue unprefixed, never substitute a team on your own.
 
-**Slug rule.** No numbers in ticket/epic slugs. Use descriptors, not IDs. `pr3475-split` → `pr-token-pricing-split`. `issue-1284-fix` → `fix-auth-timeout`. Reason: IDs rot (PR# changes pre-merge, issue# meaningless out of tracker), descriptors carry meaning when grepping `tickets/`. Exception: epic-child file ordering prefix (`NN-<child>.md`) — structural, not part of slug.
+**Lane bridge.** `wt` reads a brief file on disk. `~/.dotfiles/scripts/linear-brief.sh <ID>` materializes a Linear issue's description into `$TICKETS_DIR` (frontmatter `linear: <ID>`) so `wt`/`/pickup` can resolve + spawn. The file is a **disposable cache**: scope edits go to Linear (`/rescope`), then delete + re-materialize. `## Local notes` appended by lanes = lane scratch, never scope. Ticket has no brief in Linear → `/scope` it.
 
-- **Single**: `/scope` → brief `<area>/<slug>.md` (grill-with-docs runs inside /scope, lanes do not re-grill). `wt <slug>` (or `/pickup <slug> <BASE> [ctx]`) → autonomous lane: reads brief, plans slices, opens `/tdd` for behavior-changing slices, commits per layer, `/handoff` at ~240K ctx, `/ship`.
-- **Epic**: `/scope` → `<area>/<epic-slug>/_epic.md` + `NN-<child>.md`. Ralph loop retired 2026-06-09 (`wt --ralph` + `epic-parse` removed from wt-lanes) — pick up children as single lanes in `NN` order via `/pickup <child-slug>`.
+**Slug rule.** Applies to branch names + materialized brief filenames: no numbers, descriptors not IDs. `pr3475-split` → `pr-token-pricing-split`. `issue-1284-fix` → `fix-auth-timeout`. Reason: IDs rot (PR# changes pre-merge, issue# meaningless out of tracker). Everywhere else the Linear id (`ENGH-###`) is the canonical handle.
+
+- **Single**: `/scope` → Linear issue (grill-with-docs runs inside /scope, lanes do not re-grill). `/pickup <ID> <BASE> [ctx]` (or `wt <ID>` after materializing) → autonomous lane: reads brief, plans slices, opens `/tdd` for behavior-changing slices, commits per layer, `/handoff` at ~240K ctx, `/ship`.
+- **Epic**: `/scope` → Linear project + child issues + blocking DAG. `/epic <project> <BASE>` reads child states from Linear, confirms order, spawns the next unblocked child as a single lane.
 
 **Autonomous semantics.** `wt` = fire-and-forget; the lane OWNS its review loop end-to-end (reviews fire automatically on PR push — Arbiter/Devin/Codex; Chuck retired). **In a lane, or spawning one: READ `~/.claude/docs/lane-protocol.md` first** — it owns the review loop, stop conditions, and the handoff contract (`lane-done.sh` / `lane-handoff.sh` as final tool call).
+
+## Tool Routing: Skills First, MCP Fallback
+
+Domain covered by a local skill or script → use it FIRST; MCP is the fallback, never the first reach. Mapping: Axiom → `axiom-api` skill, LangSmith → `langsmith-api` / `/langsmith`, Linear → `linear` skill / `linear-ticket.py`, Slack reads/cleanup → `cartage-bots`, Wilson store → `wilson-memories`, meetings → `granola`/`pocket`, paging → `rootly`. Skills carry the auth quirks, response-shape handling, and cost discipline the raw MCP tools lack; MCP schemas also bloat context via ToolSearch. Only fall back to `mcp__*` when the skill path genuinely fails (missing capability, hard auth error) — and say so when you do. No skill covers the domain (Sentry, Notion, PostHog, Playwright, Trigger, gcloud) → MCP fine directly.
 
 ## Shell Gotchas (zsh)
 
@@ -79,7 +85,7 @@ Cost driver = context size × agentic-loop length, NOT user turns (turn cap reti
 
 ## Briefs & PRDs
 
-Re-read every lane resume / loop iteration — compounds. Brief = context + acceptance criteria. `## Local notes` = decisions, not narration. Epic child stories sized to one context window.
+Brief = Linear issue description: context + acceptance criteria. Re-read every lane resume / loop iteration — compounds. Epic child stories sized to one context window. `## Local notes` in the materialized cache file = lane decisions, not narration — never treat as scope.
 
 ## Git Workflow
 

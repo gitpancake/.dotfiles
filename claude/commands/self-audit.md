@@ -108,7 +108,7 @@ The filesystem is the database (per `~/.claude/CLAUDE.md`). Sprawl = friction. P
 
 **Global `~/.claude/`:**
 
-- `tickets/` — count per area, oldest brief mtime, total count. Flag areas with ≥ 20 briefs (re-org candidate). Flag briefs older than 30d (likely abandoned).
+- `tickets/` — materialization cache only (Linear is the tracker). Flag cache files older than 30d (stale — safe to delete; `linear-brief.sh` re-materializes on demand).
 - `handoffs/` — count, oldest mtime. Flag if count > 50 (cleanup candidate) or any handoff > 30d (archive candidate).
 - `plans/` — count, oldest mtime. Cross-reference each `<slug>.md` against active git branches (`git -C <wt> branch --show-current` across worktrees from §2). Plans with no matching branch = **orphan**. List orphans.
 - `audits/` — count + dates.

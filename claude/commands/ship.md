@@ -6,7 +6,7 @@ model: sonnet
 # /ship $ARGUMENTS
 
 Commit → push → PR (reviews fire automatically on open/push — nothing to trigger, see
-`~/.claude/docs/lane-protocol.md` for the review loop). Work lives in repo + local ticket tree.
+`~/.claude/docs/lane-protocol.md` for the review loop). Work lives in repo + Linear.
 
 ## 0. Pre-flight (parallel)
 
@@ -41,15 +41,17 @@ Every PR carries `[<TICKET_ID>] <desc>` so it links to a ticket with description
 implementation, assignee. New tickets → **AOA** team (full teams doctrine, incl. the retired
 AE team and id reconciliation: global CLAUDE.md §Linear teams).
 
-1. **Resolve brief** from current branch. Reuse `wt --resolve` if available; else
-   `grep -rlE "^linear:" "${TICKETS_DIR:-$HOME/.claude/tickets}" --include='*.md'` matched
-   by branch slug in filename or `## Local notes`. Found → `BRIEF_FILE=<path>`.
-2. **Read `linear:` frontmatter** from `$BRIEF_FILE` (if any). Non-empty → `TICKET_ID=<that>`,
-   **skip to §3**.
+1. **Resolve the ticket** from the current branch. The branch name usually carries the
+   Linear id (`feature/ENGH-123-...`) → `TICKET_ID=<that>`, **skip to §3**. Else check the
+   materialized cache: `grep -rlE "^linear:" "${TICKETS_DIR:-$HOME/.claude/tickets}"
+   --include='*.md'` matched by branch slug in filename or `## Local notes` → read its
+   `linear:` frontmatter → `TICKET_ID`, **skip to §3**.
+2. **Still nothing** → search Linear (`searchIssues` via `linear-gql.py`) for an issue whose
+   title matches the branch slug/work. Confident match → `TICKET_ID`, **skip to §3**.
 3. **No linked ticket** → create one. Script composes body itself from git — do NOT build
    description/reasoning/implementation bullets here, do NOT pass `--description`:
    ```
-   LINEAR_TICKET_CREATE_OK=1 ~/.dotfiles/scripts/linear-ticket.py create \
+   ~/.dotfiles/scripts/linear-ticket.py create \
      --team "AOA" \
      --title "<≤80 chars, action-oriented, no id prefix — Linear adds its own ID>" \
      --state "In Progress" \

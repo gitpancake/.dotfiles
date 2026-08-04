@@ -1,11 +1,11 @@
 ---
-description: Retro on completed integration/feature. GH PRs + git + local ticket tree → Notion.
+description: Retro on completed integration/feature. GH PRs + git + Linear → Notion.
 argument-hint: <integration-name or free-text scope>
 ---
 
 # /retrospective $ARGUMENTS
 
-Data-driven retrospective on a completed feature or integration. Pulls from GitHub PRs, git commits, and the local ticket tree (`$TICKETS_DIR`) to build a structured retro, then publishes to Notion under the Engineering page. Linear is **not** a read source here — it has no MCP in this setup (write-only via `scripts/linear-ticket.py`); ticket state comes from the local tree, which is the source of truth.
+Data-driven retrospective on a completed feature or integration. Pulls from GitHub PRs, git commits, and Linear (the ticket source of truth — read via the `linear` skill / `linear-gql.py`) to build a structured retro, then publishes to Notion under the Engineering page.
 
 If `$ARGUMENTS` is empty, infer from conversation context — what integration or feature was just discussed, shipped, or closed. State the inferred scope in one sentence and proceed to §1. If no context either, ask and stop.
 
@@ -33,9 +33,9 @@ Run all in parallel. Use the resolved name to build keyword search strings.
 - `gh pr list --state all --limit 200 --json number,title,state,createdAt,mergedAt,headRefName,additions,deletions,closedAt,body --search "<keywords>"` — all PRs matching the integration name.
 - `git log --all --since="<start>" --until="<end>" --oneline --decorate` — full commit timeline in window.
 - `git log --all --since="<start>" --until="<end>" --format="%H %ad %s" --date=short | grep -iE "revert|rip|strip|drop|remove|undo|abandon"` — rework signals.
-- `grep -rl "<keywords>" "${TICKETS_DIR:-$HOME/.claude/tickets}" --include='*.md'` then read matches — the local ticket tree (source of truth) for briefs at every stage (done, cancelled, backlog, in-progress).
+- Linear via `linear-gql.py`: `searchIssues(term: "<keywords>")` plus a `projects(filter: {name: {containsIgnoreCase: ...}})` probe — issues + epic projects at every stage (done, cancelled, backlog, in-progress); read descriptions of the strong matches.
 
-Gracefully skip any source that's unavailable (no `gh` auth, no ticket tree, no git history). Note what was skipped.
+Gracefully skip any source that's unavailable (no `gh` auth, no `$LINEAR_API_KEY`, no git history). Note what was skipped.
 
 ## §3. Analysis
 

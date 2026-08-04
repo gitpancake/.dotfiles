@@ -37,7 +37,7 @@ LaunchAgent plists (installed into `~/Library/LaunchAgents/`):
 
 Lane orchestration (`wt`, `wt-gc`, `agent-board`, hooks) now lives in **[wt-lanes](https://github.com/gitpancake/wt-lanes)**. Install with `git clone https://github.com/gitpancake/wt-lanes ~/.wt-lanes && ~/.wt-lanes/install.sh`. The rest of this section describes how this dotfiles repo uses it.
 
-`wt <slug-or-epic>` spawns one parallel lane per ticket. Each lane is fire-and-forget: reads the local brief, works it through to a PR, triggers + waits for the repo's review, addresses every finding (blockers → nits) on the PR branch, then runs `lane-done.sh` — its tmux window flashes and stays green to signal done.
+`wt <ticket>` spawns one parallel lane per ticket. Each lane is fire-and-forget: reads the materialized brief, works it through to a PR, triggers + waits for the repo's review, addresses every finding (blockers → nits) on the PR branch, then runs `lane-done.sh` — its tmux window flashes and stays green to signal done.
 
 What `wt` produces:
 
@@ -47,7 +47,7 @@ What `wt` produces:
 - `.claude/agent-state` seeded to `IDLE` (visible to `tmux/agent-board.sh`)
 - new tmux window running `claude --dangerously-skip-permissions --model opus` (override with `WT_CLAUDE=…` or `WT_MODEL=…`)
 
-`wt` resolves its arg against `$TICKETS_DIR` (default `~/.claude/tickets`; zsh `chpwd` hook scopes it to `~/.claude/tickets/<project>/` inside a repo) as a filename slug, a `linear:` breadcrumb, or an epic folder name (in that order). Brief missing → lane asks you to `/scope` it first.
+`wt` resolves its arg against `$TICKETS_DIR` (default `~/.claude/tickets`; zsh `chpwd` hook scopes it to `~/.claude/tickets/<project>/` inside a repo) as a filename slug or a `linear:` breadcrumb. That tree is a **materialization cache**, not a tracker: Linear is the source of truth, and `scripts/linear-brief.sh <ID>` writes a Linear issue's description into the cache so `wt`/`/pickup` can spawn from it. No ticket in Linear → `/scope` it first.
 
 Modes:
 
@@ -63,11 +63,11 @@ Layout default = new tmux window; override `WT_LAYOUT=pane|session`. Monitor pan
 
 ## Workflow
 
-The filesystem is the database — there is no external tracker. Briefs live in `$TICKETS_DIR/<area>/` (centralized layout: `~/.claude/tickets/<project>/<area>/`); a single ticket is a `<slug>.md`, an epic is a folder with an `_epic.md`. Contract: `$TICKETS_DIR/README.md`.
+Linear is the database (read + write via the `linear` skill / `scripts/linear-gql.py`). A single ticket is a Linear issue whose description is the brief; an epic is a Linear project with child issues and blocking relations as the dependency DAG. `$TICKETS_DIR` holds only disposable materialized copies for lanes.
 
 ```
-/scope <free text>           → engineer a local brief at $TICKETS_DIR/<area>/<slug>.md
-                               (single ticket, or an _epic.md + NN-<child>.md folder)
+/scope <free text>           → engineer a Linear issue (or project + child issues
+                               with a blocking-relation DAG for an epic)
 tix                          → terminal ticket explorer (github.com/gitpancake/tix).
                                pure reader; status: is hand-driven (sync sunset).
                                p pickup → wt · e $EDITOR · R/n /rescope|/scope via claude
@@ -104,7 +104,7 @@ Three layers of friction keep heavy Opus usage from silently draining Max-plan b
 **Preventive — CLAUDE.md.** `CLAUDE.md` instructs Claude to propose the **batch pattern** (one LLM call → plan, script applies) before any N-item operation, grep-before-read on big files, and subagent dispatch for broad lookups.
 
 Model selection:
-- **Opus** — cockpit default. Workflow (local briefs, fresh-context lanes, `/handoff`) is context-efficient enough.
+- **Opus** — cockpit default. Workflow (Linear briefs, fresh-context lanes, `/handoff`) is context-efficient enough.
 - **Sonnet** — autonomous wt lanes (`WT_MODEL=sonnet` via wt-lanes; `WT_MODEL=opus wt …` per lane when reasoning-heavy). Lanes are 75% of cache-read spend — biggest model lever.
 - **Haiku** — bulk mechanical edits only (20+ identical changes).
 
