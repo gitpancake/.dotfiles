@@ -86,7 +86,7 @@ wt <slug>                    → autonomous lane (see "Parallel worktree lanes")
 /rescope                     → refine an existing brief with new notes
 ```
 
-Lane stops only on (1) PR + required repo review triggered or explicitly skipped, or (2) genuine blocker. Tix repo review policy: Chuck reviews `cartage-agent` + `ai-employees` (tag `@chuck-noland-cartage review` on the PR); other repos skip review. Watch the agent board — red row → look. Otherwise leave it alone. At the context threshold, `/handoff` to a fresh session instead of compacting.
+Lane stops only on (1) arbiter `approve` on the final sha (or PR opened, in repos without `arbiter.yml`), or (2) genuine blocker / `needs-human` verdict. Reviews fire automatically on PR open/push (Devin + Codex reviews → Arbiter required `arbiter` commit status); Chuck is retired (2026-08-04) — never tag `@chuck-noland-cartage`. Watch the agent board — red row → look. Otherwise leave it alone. At the context threshold, `/handoff` to a fresh session instead of compacting.
 
 ## Cost awareness
 

@@ -1,12 +1,12 @@
 ---
-description: Commit + push + open PR + trigger repo-appropriate review. Pass PR# for review-only.
-argument-hint: [optional: PR number or URL to skip create and review-only]
+description: Commit + push + open PR (reviews fire automatically — Arbiter/Devin/Codex). Pass PR# to check review status only.
+argument-hint: [optional: PR number or URL to skip create and check review status only]
 model: sonnet
 ---
 
 # /ship $ARGUMENTS
 
-Commit → push → PR → trigger repo-appropriate review. PR body chooses **small** or **rich**
+Commit → push → PR (reviews fire automatically on open/push). PR body chooses **small** or **rich**
 shape from diff size/risk. Meaningful code PRs include Changed / Preserved + tests. Work lives
 in repo + local ticket tree.
 
@@ -149,32 +149,28 @@ Then `gh pr create`:
 
 Capture URL.
 
-## 4. Trigger review
+## 4. Review — automatic, nothing to trigger
 
-Chuck (Railway PR reviewer) reviews PRs in the repos wired to his webhook + allowlist:
-`cartage-ai/cartage-agent` and `cartage-ai/ai-employees`. For a PR in either, tag Chuck:
+**Chuck is RETIRED (2026-08-04) — never tag `@chuck-noland-cartage`, never poll for a
+`chuck-noland[bot]` comment.** Reviews now fire automatically on PR open/push:
 
-```
-gh pr comment "$PR_NUM" --body "@chuck-noland-cartage review"
-```
+- **Devin** (`devin-ai-integration[bot]`) + **Codex** post normal GitHub Review objects
+  with inline comments (`pulls/<PR>/comments`).
+- **Arbiter** (`.github/workflows/arbiter.yml`, where present — e.g. `cartage-agent`)
+  synthesizes reviewer output + diff + CI into a REQUIRED `arbiter` commit status
+  (`approve`=success, `block`/`needs-human`=failure) plus an issue comment from
+  `github-actions[bot]` starting `<!-- arbiter-verdict -->`. A new push resets it to
+  `pending` and re-reviews automatically.
 
-Chuck reacts 👀 on the comment within ~1s, then posts his review in ~2–3 min, once per PR
-(loop-guarded). **Format: a single issue comment from `chuck-noland[bot]` on the PR
-conversation — body starts `**Chuck finished …**` followed by a review section whose
-header varies (`### Review — <title>`, `### Chuck review`); match on author + that opener,
-never the header. 🔴 findings are blockers, "Advisory" items are nits** — he creates
-no GitHub Review object, no inline review comments, and never touches `reviewDecision`.
-Anything polling for his review must read `issues/<PR>/comments` (author
-`chuck-noland[bot]`), not `reviews`/`reviewDecision`/`pulls/<PR>/comments`. /ship itself
-does not wait — but in a `wt` lane the lane then owns the feedback loop (poll → address
-all findings blockers→nits → push → `lane-done.sh`) per its kickoff prompt. For repos
-outside that set, skip review and report no convention.
+/ship posts nothing and does not wait. To check status later:
+`gh api repos/{owner}/{repo}/commits/<head-sha>/status --jq '.statuses[] | select(.context=="arbiter")'`.
+Address findings via `/address-feedback`.
 
 ## 5. Report — terse
 
 ```
 PR: <url>
-Review: <triggered via @chuck-noland-cartage review for <repo> | skipped: Chuck does not review this repo>
+Review: <automatic — arbiter status pending | no arbiter in this repo>
 ```
 
 Clean nothing-to-do → say so in one line.
@@ -186,5 +182,6 @@ reviewers. User decides. Single-character blocker spotted (typo, obvious null gu
 call out exact fix, still wait for "go" before editing.
 
 In a `wt` lane, /ship returning is NOT the end of the lane — the lane continues into the
-review-feedback loop (wait for the review, address every finding, push, `lane-done.sh`)
-per its kickoff prompt and global CLAUDE.md §Autonomous semantics.
+review-feedback loop (poll the `arbiter` commit status, address findings on `block`, push,
+`lane-done.sh` on `approve`) per its kickoff prompt and global CLAUDE.md §Autonomous
+semantics.

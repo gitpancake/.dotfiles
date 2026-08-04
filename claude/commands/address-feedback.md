@@ -20,14 +20,18 @@ Take an open PR, harvest every comment, triage into actionable feedback, write a
 **Stop conditions** (report, wait):
 - PR not `OPEN` → refuse (merged/closed — nothing to push to).
 - `isCrossRepository: true` (fork PR) → refuse: "fork PR — the head branch isn't on origin, so `wt --branch` can't check it out. Check out the fork manually." 
-- No comments and no reviews → report "no feedback to address", stop. (Check **issue comments** before concluding this — Chuck's review is an issue comment, not a review; see §2.)
+- No comments and no reviews → report "no feedback to address", stop. (Check **issue comments** before concluding this — the Arbiter verdict is an issue comment, not a review; see §2.)
 
 ## 2. Harvest — everything
 
+(Chuck is RETIRED 2026-08-04 — a legacy `chuck-noland[bot]` comment on an old PR is parsed like any other bot comment; never tag `@chuck-noland-cartage` or wait for him.)
+
 Collect all comment surfaces, no pre-filter (`Comment scope: everything`):
-- **Issue comments** (`comments` / `gh api repos/{owner}/{repo}/issues/<PR_NUM>/comments`) — general PR discussion **and Chuck's entire review**. Chuck (author login `chuck-noland[bot]`, triggered via `@chuck-noland-cartage review`) posts **no GitHub Review object and no inline review comments** — his full review is a single issue comment on the PR conversation. Detect it by **author `chuck-noland[bot]` + body opener `**Chuck finished`** — never by section header, which varies (`### Review — <title>` / `### Chuck review`). Findings are inline in the body (🔴 = blocker, "Advisory" = nits, `file:line` references in prose). Parse that body — one finding = one triage row. `reviews: []` + 0 inline comments does **not** mean "no feedback" when a `chuck-noland[bot]` comment exists.
-- **Review summaries** (`reviews[].body`) — review wrapper text from human reviewers or other bots.
-- **Inline review comments** (`pulls/<PR_NUM>/comments`) — each with `file:line` + diff hunk + a `pull_request_review_id` linking it to its review. Harvest **every** one — do not sample a subset. (Human reviewers' findings live here; Chuck's do not.)
+- **Issue comments** (`comments` / `gh api repos/{owner}/{repo}/issues/<PR_NUM>/comments`) — general PR discussion **and the Arbiter verdict**. Arbiter (author `github-actions[bot]`, body opener `<!-- arbiter-verdict -->`, then `## ✅/⛔ Arbiter verdict: \`approve|block|needs-human\``) synthesizes the bot reviews into blocking findings + advisory items, stamped with the head sha it judged (`_On <sha> · <model>_`). Use only the LATEST verdict comment; a `block` verdict's "Blocking findings" are mandatory triage rows. Arbiter also publishes the REQUIRED `arbiter` commit status on the head sha — `approve` there = nothing blocking remains.
+- **Review summaries** (`reviews[].body`) — Devin (`devin-ai-integration[bot]`, "**Devin Review** found N potential issues"), Codex, and human reviewers.
+- **Inline review comments** (`pulls/<PR_NUM>/comments`) — each with `file:line` + diff hunk + a `pull_request_review_id` linking it to its review. Devin's findings live here (marker `<!-- devin-review-comment -->`, ids prefixed `BUG_`/`SEC_`/`ANALYSIS_` — treat BUG/SEC as candidate blockers, ANALYSIS as advisory), as do Codex's and humans'. Harvest **every** one — do not sample a subset.
+
+After pushing fixes, reviews + Arbiter re-run automatically on the new sha — no tagging; verify by polling the `arbiter` commit status.
 
 Tag each: author, source type, the `pull_request_review_id` it belongs to (issue comments have none), `resolved`/`outdated` state.
 
