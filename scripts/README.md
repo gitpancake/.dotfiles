@@ -9,27 +9,21 @@ User-facing helpers + terminal toys. Most are on `PATH` via `~/.dotfiles/scripts
 | _(tix moved out)_ | `tix` now ships from github.com/gitpancake/tix — install with `pipx install tix-cli`. It's a pure reader; `status:` is a hand-driven field (`ticket-status-sync.py` was sunset 2026-06-16). |
 | `slack-tldr.py` | Socket-Mode daemon: subscribes to configured Slack channels, writes raw text alerts to a state file rendered by `slack-watch`. |
 | `slack-tldr-pane.sh` | Static (passive) renderer for the alert state. `watch -tcn2 ~/.dotfiles/scripts/slack-tldr-pane.sh`. |
-| `git-watch.py` | Lightweight git HEAD watcher. Writes commit feed state. Lighter cousin of `commit-watcher.py`. |
-| `commit-watcher.py` | Watches a git remote, computes palette/intensity from changed paths + LOC delta, writes shared state for reactive art renderers. |
-| `audio-watcher.py` | Audio-event watcher daemon. Configurable. |
+| _(art toys moved out)_ | The ASCII art pieces + their watcher daemons now ship from github.com/gitpancake/terminal-art (working copy: `$ART_REPO`, default `~/Documents/code/terminal-art`). Only the gitignored `*.config.local` watcher configs stay here. |
+| `git-watch.py` | Lightweight git HEAD watcher. Writes commit feed state. Lighter cousin of terminal-art's `commit-watcher.py`. |
 | `redact_chatlogs.py` | Regex secret redactor for `~/.claude/projects/` transcripts. Run before sharing. |
 | `granola-tix-review.py` | Pull today's Granola transcripts → Opus reviews them against `~/.claude/tickets/` → interactive prompt to accept/skip new tickets, edits, redundancy calls. Learns from past decisions. |
 | `linear-ticket.py` | Linear GraphQL client — replaces the Linear MCP so lanes never load its tool schemas. `create` → make an issue, print `identifier<TAB>url` (used by `/ship` §2.5 + bugfinder). `comment --id AE-NNNN` → post a comment (agents). Key from `$LINEAR_API_KEY` or `scripts/linear-ticket.config.local` (gitignored). |
-| `watch.py` | Generic file-change watcher. |
-| `city.py` | Animated ASCII night-city skyline. |
-| `hologram.py` | Rotating 3D wireframe cube with holographic effects. |
-| `ourman.py` | Ourman-inspired deep-dubstep bass visualizer: a throbbing sub-bass orb pulses on the beat, radiating bass rings under an oriental lattice over a tribal-rhythm spectrum. Tempo defaults to 140 BPM; `art ourman <bpm>` overrides (clamped 20–300). `q`/ESC quits. |
-
 ## ASCII art toys
 
-Launched via the `art` zsh function (defined in `zsh/.zshrc`): `art <name>` runs `~/.local/share/art/<name>.py`, defaulting to `hologram` with no args. Current toys: `art hologram`, `art city`, `art ourman` (plus `art watch` for the reactive matrix).
+The pieces live in the terminal-art repo (github.com/gitpancake/terminal-art) — that clone is the working copy; edit and commit there. Launched via the `art` zsh function (defined in `zsh/.zshrc`): `art <name>` runs `~/.local/share/art/<name>.py`, defaulting to `hologram` with no args. Current toys: `art hologram`, `art city`, `art ourman`, `art eminem` (plus `art watch` for the reactive matrix).
 
-**Adding a toy is two steps** — the launcher resolves names from `~/.local/share/art/`, *not* from this `scripts/` dir, and that directory is **hand-managed** (no installer or `rewire-symlinks.sh` touches it):
+**Adding a toy is two steps** — the launcher resolves names from `~/.local/share/art/`, which is **hand-managed** (no installer or `rewire-symlinks.sh` touches it):
 
-1. Drop `scripts/<name>.py` here.
-2. `ln -sf ~/.dotfiles/scripts/<name>.py ~/.local/share/art/<name>.py`
+1. Add `<name>.py` to the terminal-art repo.
+2. `ln -sf $ART_REPO/<name>.py ~/.local/share/art/<name>.py`
 
-Skip step 2 and `art <name>` prints `Unknown art: <name>` — the script exists but the dispatcher can't see it.
+Skip step 2 and `art <name>` prints `Unknown art: <name>` — the script exists but the dispatcher can't see it. Fresh machine: `art` prints the clone + symlink bootstrap when `$ART_REPO` is missing. Watcher configs (`commit-watcher.config.local`, `audio-watcher.config.local`) are machine-local and stay in this dir; the watchers default to these paths (override via `ART_WATCHER_CONFIG` / `ART_AUDIO_CONFIG`).
 
 ## Slack alerts → tmux pane
 

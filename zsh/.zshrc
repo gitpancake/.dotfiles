@@ -99,6 +99,10 @@ g() {
 }
 
 unalias art 2>/dev/null
+# Art pieces + watchers live in the terminal-art repo (the working copy);
+# ~/.local/share/art holds symlinks into it. Machine-local watcher configs
+# (*.config.local) stay in ~/.dotfiles/scripts — the watchers default there.
+export ART_REPO="$HOME/Documents/code/terminal-art"
 # Start (or hand off) the commit-watcher daemon so reactive `art watch`
 # panes pick up new merges to the current repo's main branch. The
 # watcher is a global singleton, but the repo it watches is dynamic: it
@@ -117,7 +121,7 @@ _kill_and_wait() {
   done
 }
 art_ensure_commit_watcher() {
-  local watcher="$HOME/.dotfiles/scripts/commit-watcher.py"
+  local watcher="$ART_REPO/commit-watcher.py"
   local config="$HOME/.dotfiles/scripts/commit-watcher.config.local"
   [[ -f "$watcher" && -f "$config" ]] || return 0
 
@@ -143,7 +147,7 @@ art_ensure_commit_watcher() {
 # tempo state for the renderer. Singleton enforced by flock inside the
 # watcher; this guard just avoids spawning a second one when one is alive.
 art_ensure_audio_watcher() {
-  local watcher="$HOME/.dotfiles/scripts/audio-watcher.py"
+  local watcher="$ART_REPO/audio-watcher.py"
   [[ -f "$watcher" ]] || return 0
 
   local lock="$HOME/.local/share/art/audio-watcher.lock"
@@ -165,6 +169,12 @@ art() {
   [[ $# -gt 0 ]] && shift
   local script="$HOME/.local/share/art/${name}.py"
   if [[ ! -f "$script" ]]; then
+    if [[ ! -d "$ART_REPO" ]]; then
+      echo "art: repo missing — bootstrap with:"
+      echo "  git clone git@github.com:gitpancake/terminal-art.git $ART_REPO"
+      echo "  mkdir -p ~/.local/share/art && ln -sf $ART_REPO/*.py ~/.local/share/art/"
+      return 1
+    fi
     echo "Unknown art: $name"
     echo "Available: $(printf '%s\n' ~/.local/share/art/*.py 2>/dev/null | xargs -n1 basename -s .py | tr '\n' ' ')"
     return 1
