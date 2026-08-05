@@ -37,7 +37,7 @@ Self-describe via Agent/skills schemas — don't list. Org preamble: known org c
 
 ## Tool Routing: Skills First, MCP Fallback
 
-Domain covered by a local skill or script → use it FIRST; MCP is the fallback, never the first reach. Mapping: Axiom → `axiom-api` skill, LangSmith → `langsmith-api` / `/langsmith`, Linear → `linear` skill / `linear-ticket.py`, Slack reads/cleanup → `cartage-bots`, Wilson store → `wilson-memories`, meetings → `granola`/`pocket`, paging → `rootly`. Skills carry the auth quirks, response-shape handling, and cost discipline the raw MCP tools lack; MCP schemas also bloat context via ToolSearch. Only fall back to `mcp__*` when the skill path genuinely fails (missing capability, hard auth error) — and say so when you do. No skill covers the domain (Sentry, Notion, PostHog, Playwright, Trigger, gcloud) → MCP fine directly.
+Domain covered by a local skill or script → use it FIRST; MCP is the fallback, never the first reach. Mapping: Axiom → `axiom-api` skill, LangSmith → `langsmith-api` / `/langsmith`, Linear → `linear` skill / `linear-ticket.py`, Slack reads/cleanup → `cartage-bots`, Wilson store → `wilson-memories`, meetings → `granola`/`pocket`, paging → `rootly`, Sentry → `sentry-api`, PostHog → `posthog-api`, Trigger.dev → `trigger-api`, Attio → `attio-api`, Firestore dev/prod → `prod-firestore`, gcloud → CLI direct via Bash (no MCP). Skills carry the auth quirks, response-shape handling, and cost discipline the raw MCP tools lack; MCP schemas also bloat context via ToolSearch. Only fall back to `mcp__*` when the skill path genuinely fails (missing capability, hard auth error) — and say so when you do. No skill covers the domain (Notion, Playwright) → MCP fine directly.
 
 ## Shell Gotchas (zsh)
 
