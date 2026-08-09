@@ -135,13 +135,14 @@ printf '%s\n' "PR: <pr-url>" | LINEAR_TICKET_CREATE_OK=1 ~/.dotfiles/scripts/lin
 
 ## 5. Review
 
-Chuck (Railway PR reviewer) reviews `cartage-ai/cartage-agent` and `cartage-ai/ai-employees`. For a PR in either:
+Reviews on `cartage-ai/cartage-agent` and `cartage-ai/ai-employees` fire **automatically** on PR open/push — nothing to tag or trigger, and pushing new commits is the re-review request. (Chuck is retired: never tag `@chuck-noland-cartage`, never poll for `chuck-noland[bot]` comments.)
+
+- **Devin** (`devin-ai-integration[bot]`) and **Codex** post normal GitHub Review objects with inline comments (`pulls/<PR>/comments`).
+- Repos with `.github/workflows/arbiter.yml` (e.g. `cartage-agent`) also get a REQUIRED `arbiter` commit status on the head sha (`approve`=success, `block`/`needs-human`=failure). Read it with:
 
 ```bash
-gh pr comment <PR> --body "@chuck-noland-cartage review"
+gh api repos/{owner}/{repo}/commits/<head-sha>/status --jq '.statuses[] | select(.context=="arbiter")'
 ```
-
-Chuck's review lands as a **single issue comment from `chuck-noland[bot]`** ("### Chuck PR Review" in the body) on the PR conversation — he creates no GitHub Review object, no inline review comments, and never sets `reviewDecision`. To read his findings: `gh api repos/{owner}/{repo}/issues/<PR>/comments`, never `reviews`/`reviewDecision`/`pulls/<PR>/comments`.
 
 For other repos, trigger only the repo's current review convention. Inspect recent PR comments or repo docs before assuming a bot name.
 
