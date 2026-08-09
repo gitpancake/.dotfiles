@@ -21,19 +21,16 @@ Devin v3 REST API; auth lives in `~/.claude/.env.local`.)
 1. **Request** — after the PR opens, and after EVERY subsequent push of fixes:
 
    ```bash
-   set -a; . ~/.claude/.env.local; set +a
-   curl -s -X POST "https://api.devin.ai/v3/organizations/$DEVIN_ORG_ID/pr-reviews" \
-     -H "Authorization: Bearer $DEVIN_API_KEY" -H 'Content-Type: application/json' \
-     -d '{"pr_url":"https://github.com/{owner}/{repo}/pull/<PR>"}'
+   ~/.claude/scripts/devin-review.sh trigger "https://github.com/{owner}/{repo}/pull/<PR>"
    ```
 
-   `409` = review already in flight for this sha — fine, just poll.
+   The script handles auth internally — never source `.env.local` or handle the API key
+   yourself. `409` = review already in flight for this sha — fine, just poll.
 2. **Poll** the review status for the current head sha (`status` ∈
    `pending|running|completed|errored|cancelled`):
 
    ```bash
-   curl -s "https://api.devin.ai/v3/organizations/$DEVIN_ORG_ID/pr-reviews?pr_url=https://github.com/{owner}/{repo}/pull/<PR>" \
-     -H "Authorization: Bearer $DEVIN_API_KEY"
+   ~/.claude/scripts/devin-review.sh status "https://github.com/{owner}/{repo}/pull/<PR>"
    ```
 
    `sleep 90` between checks, up to 10 attempts (~15 min) per round. `404` right after a
