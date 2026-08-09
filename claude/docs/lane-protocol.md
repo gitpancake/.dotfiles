@@ -26,6 +26,9 @@ Devin v3 REST API; auth lives in `~/.claude/.env.local`.)
 
    The script handles auth internally — never source `.env.local` or handle the API key
    yourself. `409` = review already in flight for this sha — fine, just poll.
+   **Make the trigger inseparable from the push** — one compound command
+   (`git push && ~/.claude/scripts/devin-review.sh trigger "<pr-url>"`); a poll started
+   before a push never covers the new sha.
 2. **Poll** the review status for the current head sha (`status` ∈
    `pending|running|completed|errored|cancelled`):
 
