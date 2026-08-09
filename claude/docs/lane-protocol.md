@@ -13,41 +13,52 @@ Feedback is NEVER deferred to a separate lane.
 
 ## Review loop (after `/ship`)
 
-Reviews fire **automatically** on PR open/push — nothing to tag or trigger, and pushing new
-commits IS the re-review request (there is no re-review command; `/ship` takes no part in it).
-Chuck is RETIRED (2026-08-04): never tag `@chuck-noland-cartage`, never poll for a
-`chuck-noland[bot]` comment.
+Every lane runs the **Devin loop** on its PR — request, poll, address, repeat:
 
-- **Devin** (`devin-ai-integration[bot]`) + **Codex** post normal GitHub Review objects with
-  inline comments (`pulls/<PR>/comments`).
-- **Arbiter** (`.github/workflows/arbiter.yml`, where present — e.g. `cartage-agent`, ENGH-250)
-  synthesizes reviewer output + diff + CI into a REQUIRED `arbiter` commit status
-  (`approve`=success, `block`/`needs-human`=failure) plus an issue comment from
-  `github-actions[bot]` starting `<!-- arbiter-verdict -->`, stamped with the head sha it
-  judged. A new push resets the verdict to `pending` and re-reviews automatically.
+1. **Request** — after the PR opens, and after EVERY subsequent push of fixes, comment on
+   the PR: `@devin-ai-integration please review this PR`.
+2. **Poll** — Devin (`devin-ai-integration[bot]`) posts a normal GitHub Review object with
+   inline comments (`pulls/<PR>/comments`). Poll its latest review:
 
-Poll the head sha:
+   ```bash
+   gh api repos/{owner}/{repo}/pulls/<PR>/reviews \
+     --jq '[.[] | select(.user.login=="devin-ai-integration[bot]")] | last | "\(.state) @ \(.commit_id)"'
+   ```
+
+   `sleep 90` between checks, up to 10 attempts (~15 min) per round.
+3. **Address** — latest Devin review not APPROVED on the current head sha → fix EVERY
+   finding (inline comments included), commit, push, go to 1.
+4. **Terminal** — the loop ends ONLY on: Devin review state `APPROVED` on the current head
+   sha, or the `needs-human-review` label landing on the PR (→ stop and report; a human
+   must release it).
+
+Codex reviews arrive automatically alongside — fold its inline comments into the same fix
+pass. **Arbiter** (`.github/workflows/arbiter.yml`, where present — e.g. `cartage-agent`,
+ENGH-250) synthesizes reviewer output + diff + CI into a REQUIRED `arbiter` commit status
+(`approve`=success, `block`/`needs-human`=failure) plus an issue comment from
+`github-actions[bot]` starting `<!-- arbiter-verdict -->`; a new push resets it to
+`pending`. Where it exists, `arbiter=success` on the final sha is ALSO required before the
+lane is done:
 
 ```bash
 gh api repos/{owner}/{repo}/commits/<head-sha>/status --jq '.statuses[] | select(.context=="arbiter")'
 ```
 
-- `block` → address the Arbiter blocking findings + Devin/Codex inline comments, commit +
-  push, poll again.
-- `needs-human` → the `needs-human-review` label is applied — stop and report; a human must
-  release it.
+Chuck is RETIRED (2026-08-04): never tag `@chuck-noland-cartage`, never poll for a
+`chuck-noland[bot]` comment.
 
 ## Stop conditions
 
 Finish with `~/.claude/scripts/lane-done.sh` as the FINAL tool call (writes `DONE`, flashes
 the lane's tmux window green). A lane stops ONLY on:
 
-1. Arbiter `approve` on the final sha (repo without `arbiter.yml` → PR opened) +
-   `lane-done.sh` run.
+1. Devin `APPROVED` on the final sha — plus Arbiter `approve` where `arbiter.yml` exists —
+   + `lane-done.sh` run.
 2. Genuine blocker: ambiguity not in the brief, repeated test failure on the same root
    cause, missing credential.
-3. `needs-human` verdict — or verdict still `pending` ~15 min after CI settles →
-   `lane-pause.sh review 'PR #<N> review pending'`, stop without claiming done.
+3. `needs-human-review` label applied — or Devin review still absent ~15 min after a
+   request round → `lane-pause.sh review 'PR #<N> review pending'`, stop without claiming
+   done.
 4. Ctx nudge with a full slice still remaining → handoff (below).
 
 ## Ctx nudge + handoff

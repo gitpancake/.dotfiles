@@ -135,14 +135,20 @@ printf '%s\n' "PR: <pr-url>" | LINEAR_TICKET_CREATE_OK=1 ~/.dotfiles/scripts/lin
 
 ## 5. Review
 
-Reviews on `cartage-ai/cartage-agent` and `cartage-ai/ai-employees` fire **automatically** on PR open/push — nothing to tag or trigger, and pushing new commits is the re-review request. (Chuck is retired: never tag `@chuck-noland-cartage`, never poll for `chuck-noland[bot]` comments.)
-
-- **Devin** (`devin-ai-integration[bot]`) and **Codex** post normal GitHub Review objects with inline comments (`pulls/<PR>/comments`).
-- Repos with `.github/workflows/arbiter.yml` (e.g. `cartage-agent`) also get a REQUIRED `arbiter` commit status on the head sha (`approve`=success, `block`/`needs-human`=failure). Read it with:
+Devin reviews `cartage-ai/cartage-agent` and `cartage-ai/ai-employees`. After opening the PR — and after every subsequent push of fixes — request the review:
 
 ```bash
-gh api repos/{owner}/{repo}/commits/<head-sha>/status --jq '.statuses[] | select(.context=="arbiter")'
+gh pr comment <PR> --body "@devin-ai-integration please review this PR"
 ```
+
+Devin (`devin-ai-integration[bot]`) posts a normal GitHub Review object with inline comments (`pulls/<PR>/comments`). Read its latest verdict:
+
+```bash
+gh api repos/{owner}/{repo}/pulls/<PR>/reviews \
+  --jq '[.[] | select(.user.login=="devin-ai-integration[bot]")] | last | "\(.state) @ \(.commit_id)"'
+```
+
+The review loop runs until Devin's latest review is `APPROVED` on the current head sha, or a `needs-human-review` label lands on the PR (then a human takes over). Repos with `.github/workflows/arbiter.yml` (e.g. `cartage-agent`) also carry a REQUIRED `arbiter` commit status on the head sha (`approve`=success) — where present it must also be green. (Chuck is retired: never tag `@chuck-noland-cartage`, never poll for `chuck-noland[bot]` comments.)
 
 For other repos, trigger only the repo's current review convention. Inspect recent PR comments or repo docs before assuming a bot name.
 
