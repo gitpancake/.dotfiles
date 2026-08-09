@@ -13,24 +13,39 @@ Feedback is NEVER deferred to a separate lane.
 
 ## Review loop (after `/ship`)
 
-Every lane runs the **Devin loop** on its PR — request, poll, address, repeat:
+Every lane runs the **Devin loop** on its PR — request via API, poll, address, repeat.
+(A PR comment tagging `@devin-ai-integration` does NOT trigger a review in this org —
+verified 2026-08-09, all comment-tagged PRs 404'd on the review API. Trigger via the
+Devin v3 REST API; auth lives in `~/.claude/.env.local`.)
 
-1. **Request** — after the PR opens, and after EVERY subsequent push of fixes, comment on
-   the PR: `@devin-ai-integration please review this PR`.
-2. **Poll** — Devin (`devin-ai-integration[bot]`) posts a normal GitHub Review object with
-   inline comments (`pulls/<PR>/comments`). Poll its latest review:
+1. **Request** — after the PR opens, and after EVERY subsequent push of fixes:
 
    ```bash
-   gh api repos/{owner}/{repo}/pulls/<PR>/reviews \
-     --jq '[.[] | select(.user.login=="devin-ai-integration[bot]")] | last | "\(.state) @ \(.commit_id)"'
+   set -a; . ~/.claude/.env.local; set +a
+   curl -s -X POST "https://api.devin.ai/v3/organizations/$DEVIN_ORG_ID/pr-reviews" \
+     -H "Authorization: Bearer $DEVIN_API_KEY" -H 'Content-Type: application/json' \
+     -d '{"pr_url":"https://github.com/{owner}/{repo}/pull/<PR>"}'
    ```
 
-   `sleep 90` between checks, up to 10 attempts (~15 min) per round.
-3. **Address** — latest Devin review not APPROVED on the current head sha → fix EVERY
-   finding (inline comments included), commit, push, go to 1.
-4. **Terminal** — the loop ends ONLY on: Devin review state `APPROVED` on the current head
-   sha, or the `needs-human-review` label landing on the PR (→ stop and report; a human
-   must release it).
+   `409` = review already in flight for this sha — fine, just poll.
+2. **Poll** the review status for the current head sha (`status` ∈
+   `pending|running|completed|errored|cancelled`):
+
+   ```bash
+   curl -s "https://api.devin.ai/v3/organizations/$DEVIN_ORG_ID/pr-reviews?pr_url=https://github.com/{owner}/{repo}/pull/<PR>" \
+     -H "Authorization: Bearer $DEVIN_API_KEY"
+   ```
+
+   `sleep 90` between checks, up to 10 attempts (~15 min) per round. `404` right after a
+   push = not triggered yet — go back to 1.
+3. **Read + address** — on `completed`, the verdict is in the CONTENT, not the API status:
+   Devin (`devin-ai-integration[bot]`) posts a GitHub Review (always state `COMMENTED` —
+   it never emits APPROVED) with inline comments (`pulls/<PR>/comments`). New blocking
+   findings → fix EVERY finding (inline comments included), commit, push, go to 1.
+4. **Terminal** — the loop ends ONLY on: Devin review `completed` on the current head sha
+   with ZERO new blocking findings (plus arbiter `approve` where arbiter.yml exists), or
+   the `needs-human-review` label landing on the PR (→ stop and report; a human must
+   release it). `errored`/`cancelled` → re-trigger once; twice → `lane-pause`.
 
 Codex reviews arrive automatically alongside — fold its inline comments into the same fix
 pass. **Arbiter** (`.github/workflows/arbiter.yml`, where present — e.g. `cartage-agent`,
@@ -52,8 +67,8 @@ Chuck is RETIRED (2026-08-04): never tag `@chuck-noland-cartage`, never poll for
 Finish with `~/.claude/scripts/lane-done.sh` as the FINAL tool call (writes `DONE`, flashes
 the lane's tmux window green). A lane stops ONLY on:
 
-1. Devin `APPROVED` on the final sha — plus Arbiter `approve` where `arbiter.yml` exists —
-   + `lane-done.sh` run.
+1. Devin review `completed` on the final sha with zero unaddressed blocking findings —
+   plus Arbiter `approve` where `arbiter.yml` exists — + `lane-done.sh` run.
 2. Genuine blocker: ambiguity not in the brief, repeated test failure on the same root
    cause, missing credential.
 3. `needs-human-review` label applied — or Devin review still absent ~15 min after a

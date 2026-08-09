@@ -135,20 +135,16 @@ printf '%s\n' "PR: <pr-url>" | LINEAR_TICKET_CREATE_OK=1 ~/.dotfiles/scripts/lin
 
 ## 5. Review
 
-Devin reviews `cartage-ai/cartage-agent` and `cartage-ai/ai-employees`. After opening the PR — and after every subsequent push of fixes — request the review:
+Devin reviews `cartage-ai/cartage-agent` and `cartage-ai/ai-employees`. A PR comment tagging `@devin-ai-integration` does NOT trigger a review — use the Devin v3 REST API (auth in `~/.claude/.env.local`). After opening the PR — and after every subsequent push of fixes:
 
 ```bash
-gh pr comment <PR> --body "@devin-ai-integration please review this PR"
+set -a; . ~/.claude/.env.local; set +a
+curl -s -X POST "https://api.devin.ai/v3/organizations/$DEVIN_ORG_ID/pr-reviews" \
+  -H "Authorization: Bearer $DEVIN_API_KEY" -H 'Content-Type: application/json' \
+  -d '{"pr_url":"https://github.com/<owner>/<repo>/pull/<PR>"}'
 ```
 
-Devin (`devin-ai-integration[bot]`) posts a normal GitHub Review object with inline comments (`pulls/<PR>/comments`). Read its latest verdict:
-
-```bash
-gh api repos/{owner}/{repo}/pulls/<PR>/reviews \
-  --jq '[.[] | select(.user.login=="devin-ai-integration[bot]")] | last | "\(.state) @ \(.commit_id)"'
-```
-
-The review loop runs until Devin's latest review is `APPROVED` on the current head sha, or a `needs-human-review` label lands on the PR (then a human takes over). Repos with `.github/workflows/arbiter.yml` (e.g. `cartage-agent`) also carry a REQUIRED `arbiter` commit status on the head sha (`approve`=success) — where present it must also be green. (Chuck is retired: never tag `@chuck-noland-cartage`, never poll for `chuck-noland[bot]` comments.)
+Poll the same endpoint (GET with `?pr_url=...`) until `status` is `completed` (`404` = not triggered for this sha, `409` on POST = already in flight). The verdict is in the content: Devin (`devin-ai-integration[bot]`) posts a GitHub Review — always state `COMMENTED`, never `APPROVED` — with inline comments in `pulls/<PR>/comments`. The loop runs until a `completed` review on the current head sha carries zero new blocking findings, or a `needs-human-review` label lands on the PR (then a human takes over). Repos with `.github/workflows/arbiter.yml` (e.g. `cartage-agent`) also carry a REQUIRED `arbiter` commit status on the head sha (`approve`=success) — where present it must also be green. (Chuck is retired: never tag `@chuck-noland-cartage`, never poll for `chuck-noland[bot]` comments.)
 
 For other repos, trigger only the repo's current review convention. Inspect recent PR comments or repo docs before assuming a bot name.
 
