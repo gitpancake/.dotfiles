@@ -59,7 +59,7 @@ The Bash tool runs zsh. zsh `echo` expands backslash escapes — `echo "$json" |
 - Bools as assertions: `isValid`, `hasChildren`. Ranges: `first`/`last`.
 - Complex conditions → named bools.
 - `const` default. Declare near first use.
-- No code comments — per Bob Martin (Clean Code ch.4): every comment is a failure to express intent in code. Tempted to comment → rename/extract until the code says it. Exceptions (his list, adapted): license headers, tooling pragmas (`eslint-disable`, `ts-expect-error`, `@ts-ignore`), public-API doc blocks (JSDoc/docstring) where the toolchain consumes them, and warning-of-consequences a name can't carry (irreversible op, ordering constraint).
+- No code comments — per Bob Martin (Clean Code ch.4): every comment is a failure to express intent in code. Tempted to comment → rename/extract until the code says it. Exceptions (his list, adapted): license headers, tooling pragmas (`eslint-disable`, `ts-expect-error`, `@ts-ignore`), public-API doc blocks (JSDoc/docstring) where the toolchain consumes them, and warning-of-consequences a name can't carry (irreversible op, ordering constraint). Any surviving comment explains why, never what. Touching a file → delete comments that restate readable code.
 - Composition > inheritance. Narrow interfaces.
 
 ## Design Principles
@@ -102,4 +102,12 @@ Need API key, token, or env var (for a tool call or otherwise) → check `.env.l
 ## Project CLAUDE.md
 
 After each chunk: update project `CLAUDE.md` (conventions, decisions, gotchas). Update `README.md` if user-facing behavior changes. ≤150 lines. Cut anything derivable from code.
+
+**Clean instructions** (Clean Code transposed — applies to any CLAUDE.md, prompt, or agent brief you write):
+
+- Don't hedge a vague rule — rewrite it. Three caveats = the rule isn't clear.
+- State intent + constraints, never implementation steps. The worker can read the code.
+- A footnote/exception is a failure of the main instruction — fold it in.
+- Every line must change what gets produced. Cut what the model already knows.
+- One rule per bullet, one concern per section.
 
