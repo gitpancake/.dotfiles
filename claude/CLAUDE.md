@@ -59,7 +59,7 @@ The Bash tool runs zsh. zsh `echo` expands backslash escapes — `echo "$json" |
 - Bools as assertions: `isValid`, `hasChildren`. Ranges: `first`/`last`.
 - Complex conditions → named bools.
 - `const` default. Declare near first use.
-- No code comments. Names + structure carry intent. Exceptions: license headers, tooling pragmas (`eslint-disable`, `ts-expect-error`, `@ts-ignore`), and public-API doc blocks (JSDoc/docstring) where the toolchain consumes them.
+- No code comments — per Bob Martin (Clean Code ch.4): every comment is a failure to express intent in code. Tempted to comment → rename/extract until the code says it. Exceptions (his list, adapted): license headers, tooling pragmas (`eslint-disable`, `ts-expect-error`, `@ts-ignore`), public-API doc blocks (JSDoc/docstring) where the toolchain consumes them, and warning-of-consequences a name can't carry (irreversible op, ordering constraint).
 - Composition > inheritance. Narrow interfaces.
 
 ## Design Principles
