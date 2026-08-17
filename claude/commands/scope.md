@@ -19,6 +19,31 @@ If `$ARGUMENTS` is empty, infer the problem from conversation context — what w
 discussed, debugged, or decided. Summarize your interpretation in 1–2 sentences and proceed.
 No relevant context either → ask for a problem statement and stop.
 
+## 0. Evidence pass — before the grill
+
+The brief's slots (Requirement / Context / Limitations / AC / Proof) get filled from
+evidence, not the user's recollection. If the request traces to a meeting, a Slack thread,
+or a support ticket — or the user names one — pull it first:
+
+- **Granola** (`granola` skill): the meeting's note + action items.
+- **Pocket** (`pocket` skill): the verbatim transcript — the throwaway constraints
+  ("oh, and it has to…") live here, not in the summary.
+- **Slack** (`cartage-bots` skill): the originating thread. Support-originated → add the
+  Plain thread (`plain-api` skill).
+
+Distill an evidence pack:
+
+- Candidate requirements — verbatim quote + speaker.
+- Constraints + success criteria mentioned.
+- **Explicitly-deferred items** — who deferred, when.
+- Contradictions: source vs source, or source vs `$ARGUMENTS`.
+
+No traceable source → skip silently; §1 grills from scratch as before. Never fabricate a
+citation — an uncited AC line is honest, a fake quote is not.
+
+PII: transcripts are raw customer conversation. The pack stays cockpit-side; only
+distilled quotes reach the Linear body, contact details (emails, phones) stripped.
+
 ## 1. Clarify before exploring — grill cadence
 
 If `$ARGUMENTS` is under ~15 words **or** missing any of the below, grill.
@@ -27,6 +52,17 @@ If `$ARGUMENTS` is under ~15 words **or** missing any of the below, grill.
 clarification + glossary pass — it owns Design-it-twice cues, `CONTEXT.md` term-pinning, and
 domain-vocab discipline. Lanes do not re-grill: this skill is /scope-owned, not lane-owned,
 so the brief that ships into `wt` is already sharp.
+
+**Evidence inverts the grill.** When §0 produced a pack, present extractions for
+confirm/override instead of interviewing the user's memory:
+
+> Q: Transcript 8/14 — Ben: "needs to work for the Connect channels too." In scope?
+> Recommended: yes. Affirm or override.
+
+One Q per candidate requirement, deferred item, and contradiction (batch the
+uncontroversial ones). The user validates, they don't recall — this is what catches the
+requirement they forgot they agreed to, before it becomes review round 2. The four
+standing questions below still apply; ask only the ones the pack doesn't answer.
 
 **One question at a time. Each Q ships w/ your recommended answer.** User affirms → next Q.
 User overrides → record + next. Skip what you can already answer from context.
@@ -118,6 +154,12 @@ Branch/lane slugs derive from the title at `/pickup` time (slug rule: global CLA
 - `## Out of scope` — what this deliberately doesn't touch.
 - `## Reversibility` — only when §2e produced one.
 
+**Provenance rule** (single issue and epic children alike): an AC line or out-of-scope
+item sourced from §0 carries its citation inline — `(per Ben, 8/14 call: "…")`. Out-of-scope
+items name who deferred it and when, so a later review finding that relitigates it gets an
+evidence-backed dismissal instead of a judgment call. Uncited lines are fine; fake
+citations are not.
+
 **Epic** — a Linear **project** plus one child issue per story:
 
 - Project description follows the spec template: problem → before/after → north star →
@@ -138,7 +180,8 @@ DAG. **Stop.** Wait for "go" or edits. Do not write yet.
 
 Via the `linear` skill: `issueCreate` (single), or `projectCreate` + `issueCreate` per child
 + `issueRelationCreate` per DAG edge (epic). Set state Backlog, assignee the user, labels
-per repo conventions. Bodies via `--variables-file` — never echo markdown through the shell.
+per repo conventions. §0 fed the brief → also add the `evidence-grounded` label (create
+once per team if missing) so review-rounds-per-PR can be compared against uncited briefs. Bodies via `--variables-file` — never echo markdown through the shell.
 Verify `success: true` on every mutation and re-read the project/issue after save (Linear
 silently drops some markdown — tables/checkboxes — on bad input). Return:
 
