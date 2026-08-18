@@ -143,35 +143,58 @@ Branch/lane slugs derive from the title at `/pickup` time (slug rule: global CLA
 
 ## 4. Brief — house style
 
-**Single issue** — description sections, in order:
+**Prose style: Write Simply** (paulgraham.com/simply.html). The brief is read by a lane
+mid-task and by reviewers months later; reading friction compounds. Short sentences. Plain
+words. One idea per sentence. Decode internal shorthand in place ("a tombstone revision,
+so history survives"); keep exact technical names (paths, workflows, flags, env vars)
+verbatim. Simple words are not less information — every concrete fact the lane needs
+(file paths, mirror names, gotcha quotes, prerequisites, citations) stays. Cut only what
+doesn't change what gets built. A sentence that needs rereading gets rewritten; a section
+with nothing to say gets deleted, not padded. Fancy words that could be plain ones are
+clumsy, not precise.
 
-- `## Requirement` — what's needed, one short paragraph.
-- `## Context` — the refined problem: mirror reference, decisions from the grill, gotchas
-  quoted from project CLAUDE.md.
+**Single issue** — the house template (global CLAUDE.md §Ticket Lifecycle) plus the two
+/scope-only sections, in order:
+
+- `## Requirement` — the user-facing outcome, 2–3 sentences.
+- `## Context` — why: the refined problem, mirror reference, decisions from the grill,
+  gotchas quoted from project CLAUDE.md.
 - `## Surface area` — mirror / ≤8 starting files with one-line reasons / prerequisites +
-  unconfirmed mechanisms from §2d.
-- `## Acceptance criteria` — checkboxes, each a testable outcome.
-- `## Out of scope` — what this deliberately doesn't touch.
-- `## Reversibility` — only when §2e produced one.
+  unconfirmed mechanisms from §2d. (/scope-only.)
+- `## Acceptance Criteria` — checkboxes, each a testable yes/no. Never "works correctly".
+- `## Limitations` — out of scope, each item with its why (the why kills scope creep and
+  relitigating).
+- `## Proof` — defined now, before work starts. **Manual Tests**: concrete steps + the
+  evidence each produces. **Automated Tests**: the tests the lane will add. If you can't
+  name what would prove it works, the AC aren't done — go back to §1.
+- `## Signatures` — `@product` approves AC/Limitations/Proof, `@owner` confirms manual
+  tests local+prod, `@eng` final. Real names when known, placeholder roles otherwise.
+- `## Reversibility` — only when §2e produced one. (/scope-only.)
 
-**Provenance rule** (single issue and epic children alike): an AC line or out-of-scope
-item sourced from §0 carries its citation inline — `(per Ben, 8/14 call: "…")`. Out-of-scope
+**Provenance rule** (single issue and epic children alike): an AC line or Limitations
+item sourced from §0 carries its citation inline — `(per Ben, 8/14 call: "…")`. Limitations
 items name who deferred it and when, so a later review finding that relitigates it gets an
 evidence-backed dismissal instead of a judgment call. Uncited lines are fine; fake
 citations are not.
 
 **Epic** — a Linear **project** plus one child issue per story:
 
-- Project description follows the spec template: problem → before/after → north star →
-  design decisions → execution order (phases, issue-linked) → acceptance criteria →
-  hazards → reversibility → appendix (story table + working docs). Exemplars:
-  script-retirement `04c92e7d0001`, off-git `c9bdadb3cdfc`.
+- Project description = the same template at project level: Requirement / Context /
+  Acceptance Criteria / Limitations / Size & Order (phases, issue-linked, fib estimates
+  summing to the stated time budget). Design decisions, hazards, and reversibility fold
+  into Context and Limitations — no extra sections. Exemplar: off-git `c9bdadb3cdfc`
+  (ENGH-335..343).
 - Children carry the deep per-story detail (same section shape as a single issue), sized to
   one context window each.
 - **Blocking relations ARE the dependency DAG** — `issueRelationCreate` per `needs` edge.
   `/epic` reads them to pick the next story, so they must be complete before any lane spawns.
 
-## 5. Show the draft. Stop.
+## 5. Edit, then show the draft. Stop.
+
+Draft fast, then make one cutting pass before rendering — this is where Write Simply
+actually happens. Per sentence: can a plain word replace a fancy one? Can it be shorter
+with nothing lost? Does it change what the lane builds? No → cut. Then check the other
+direction: could a lane pick this up without asking a question? Missing fact → add it.
 
 Render the full draft(s) — title, team, description(s), and for an epic the story list +
 DAG. **Stop.** Wait for "go" or edits. Do not write yet.
