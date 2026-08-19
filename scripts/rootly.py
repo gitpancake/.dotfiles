@@ -11,10 +11,10 @@ then ~/.pi/.env. Bearer auth. Base: https://api.rootly.com/v1 (JSON:API).
      and default to a modest page size.
 
 Subcommands
-  pages                On-call pages (alerts where label source_name ==
-                       'REDACTED-ALERT-SOURCE-NAME' — i.e. RootlyService.createAlert).
-                       Flattened + newest-first. This is the go-to: "what has
-                       Wilson paged on-call for?". --since YYYY-MM-DD --status s
+  pages                On-call pages (alerts where label source_name matches
+                       ROOTLY_ALERT_SOURCE_NAME — i.e. RootlyService.createAlert).
+                       Flattened + newest-first. This is the go-to: "what's
+                       paged on-call for?". --since YYYY-MM-DD --status s
                        --limit N.
   alerts               ALL alerts (every source: generic_webhook, sentry, api,
                        workflow, web, slack), flattened. Same filters, plus
@@ -47,18 +47,11 @@ import urllib.request
 from datetime import datetime
 
 BASE_URL = "https://api.rootly.com/v1"
-WILSON_SOURCE_NAME = "REDACTED-ALERT-SOURCE-NAME"
-HEADERS_BASE = {
-    "Content-Type": "application/vnd.api+json",
-    "Accept": "application/vnd.api+json",
-    # Required: Rootly's WAF blocks the default python-urllib UA with a 403.
-    "User-Agent": "rootly-cli/1.0 (+cartage)",
-}
 
 
-def load_api_key():
-    if os.environ.get("ROOTLY_API_KEY"):
-        return os.environ["ROOTLY_API_KEY"]
+def _load(var, default=None):
+    if os.environ.get(var):
+        return os.environ[var]
     for path in (
         os.path.expanduser("~/.claude/.env"),
         os.path.expanduser("~/.pi/.env"),
@@ -67,10 +60,26 @@ def load_api_key():
             with open(path) as fh:
                 for line in fh:
                     line = line.strip()
-                    if line.startswith("ROOTLY_API_KEY="):
+                    if line.startswith(f"{var}="):
                         return line.split("=", 1)[1].strip().strip("'\"")
         except FileNotFoundError:
             continue
+    return default
+
+
+WILSON_SOURCE_NAME = _load("ROOTLY_ALERT_SOURCE_NAME")
+HEADERS_BASE = {
+    "Content-Type": "application/vnd.api+json",
+    "Accept": "application/vnd.api+json",
+    # Required: Rootly's WAF blocks the default python-urllib UA with a 403.
+    "User-Agent": _load("ROOTLY_USER_AGENT", "rootly-cli/1.0"),
+}
+
+
+def load_api_key():
+    key = _load("ROOTLY_API_KEY")
+    if key:
+        return key
     print(
         "ROOTLY_API_KEY not found (env, ~/.claude/.env, ~/.pi/.env)",
         file=sys.stderr,
@@ -185,7 +194,7 @@ def main():
         p.add_argument("--status", help="triggered|acknowledged|resolved")
         p.add_argument("--limit", type=int, default=None)
 
-    p_pages = sub.add_parser("pages", help="Wilson on-call pages (newest first)")
+    p_pages = sub.add_parser("pages", help="On-call pages (newest first)")
     add_filters(p_pages)
 
     p_alerts = sub.add_parser("alerts", help="all alerts (any source)")
@@ -233,6 +242,8 @@ def main():
         print(json.dumps(out, indent=2, default=str))
         return
 
+    if args.cmd in ("pages", "digest") and not WILSON_SOURCE_NAME:
+        sys.exit("ROOTLY_ALERT_SOURCE_NAME not set (env, ~/.claude/.env, ~/.pi/.env) — required for pages/digest")
     source_name = WILSON_SOURCE_NAME if args.cmd in ("pages", "digest") else getattr(args, "source_name", None)
     alerts = get_alerts(
         key,
@@ -251,7 +262,7 @@ def main():
         by_org = {}
         for a in alerts:
             by_org.setdefault(a["org"] or "(no org)", []).append(a)
-        print(f"# Wilson on-call pages — {len(alerts)} total\n")
+        print(f"# On-call pages — {len(alerts)} total\n")
         for org in sorted(by_org, key=lambda o: -len(by_org[o])):
             items = by_org[org]
             print(f"\n## {org} — {len(items)} page(s)")

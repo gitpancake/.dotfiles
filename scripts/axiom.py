@@ -8,7 +8,7 @@ are required or the API 403s. Base: https://api.axiom.co.
 Subcommands
   datasets                 List datasets (name + description) [GET /v1/datasets].
   query <apl>              Run an APL query [POST /v1/datasets/_apl?format=legacy].
-                           Dataset goes INSIDE the APL: ["REDACTED-DATASET-NAME"] | ...
+                           Dataset goes INSIDE the APL: ["<dataset>"] | ...
                            Flattens matches -> {_time, ...data} and aggregation
                            buckets.totals -> {group..., op: value}. --start/--end
                            ISO passthrough (or just use ago(1h) in the APL itself).

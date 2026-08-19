@@ -23,9 +23,11 @@ runs/query gotchas baked in:
   - errors live on llm/chain/tool child runs (e.g. AbortError on llm/chain), NOT
     on the root agent run — so `--error` deliberately does not force run_type=tool.
 
-Known Cartage prod tracer session:
-  agent-production  =  REDACTED-LANGSMITH-PROJECT-ID
-  (plain `production` 438c68fe-... is empty)
+The two known prod tracer sessions (`prod`/`agent`/`agent-production` and
+`employees`/`employees-production` aliases) resolve from LANGSMITH_PROJECT_AGENT_PROD
+and LANGSMITH_PROJECT_EMPLOYEES_PROD — env, then ~/.claude/.env, then ~/.pi/.env.
+Unset -> those aliases fail with a clear error; a bare session id or a session
+name (looked up via `sessions --match`) still works either way.
 """
 
 import argparse
@@ -36,20 +38,6 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
-
-# The two Cartage prod tracer sessions we actually fetch from.
-AGENT_PROD = "REDACTED-LANGSMITH-PROJECT-ID"  # Wilson (cartage-agent)
-EMPLOYEES_PROD = "REDACTED-LANGSMITH-PROJECT-ID"  # Chuck/Kelly/Jerry (ai-employees)
-
-SESSION_ALIASES = {
-    "prod": AGENT_PROD,
-    "production": AGENT_PROD,
-    "agent": AGENT_PROD,
-    "agent-production": AGENT_PROD,
-    "employees": EMPLOYEES_PROD,
-    "employees-production": EMPLOYEES_PROD,
-}
-BOTH_PROD = ("agent-production", "employees-production")
 
 
 def _endpoint():
@@ -69,6 +57,21 @@ def _load(var):
         except FileNotFoundError:
             continue
     return None
+
+
+# The two prod tracer sessions we actually fetch from, if configured.
+AGENT_PROD = _load("LANGSMITH_PROJECT_AGENT_PROD")
+EMPLOYEES_PROD = _load("LANGSMITH_PROJECT_EMPLOYEES_PROD")
+
+SESSION_ALIASES = {
+    "prod": AGENT_PROD,
+    "production": AGENT_PROD,
+    "agent": AGENT_PROD,
+    "agent-production": AGENT_PROD,
+    "employees": EMPLOYEES_PROD,
+    "employees-production": EMPLOYEES_PROD,
+}
+BOTH_PROD = ("agent-production", "employees-production")
 
 
 def _headers():
@@ -117,7 +120,13 @@ def resolve_session(ref):
     if re.fullmatch(r"[0-9a-f-]{36}", ref):
         return ref
     if ref in SESSION_ALIASES:
-        return SESSION_ALIASES[ref]
+        sid = SESSION_ALIASES[ref]
+        if not sid:
+            sys.exit(
+                f"{ref!r} needs LANGSMITH_PROJECT_AGENT_PROD/LANGSMITH_PROJECT_EMPLOYEES_PROD "
+                "set (env, ~/.claude/.env, ~/.pi/.env)"
+            )
+        return sid
     for s in call("sessions", {"limit": 100}):
         if s.get("name") == ref:
             return s["id"]
