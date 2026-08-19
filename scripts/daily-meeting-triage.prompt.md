@@ -12,16 +12,16 @@ From yesterday's meetings (across Granola and Pocket), file genuinely new produc
 
 2. **Derive candidates.** Extract concrete, buildable **product feature requests** and concrete **bugs**. For each, note the source meeting title + date. EXCLUDE: personal/non-work recordings, pure strategy/status/FYI, org/staffing/scheduling chatter, and anything that is already an owned engineering project (config-table / scripts→primitives / OOTB-workflows / benchmarking / payments / monitoring, etc.). When unsure something is a real, distinct product ask — skip it.
 
-3. **Dedup against existing AO issues.** Fetch current AO issues once:
+3. **Dedup against existing AO issues.** Fetch current AO issues once (use `LINEAR_AO_TEAM_ID` from RUN CONTEXT above):
    ```
-   ~/.dotfiles/scripts/linear-gql.py --variables '{"id":"REDACTED-LINEAR-TEAM-ID"}' --query 'query($id:String!){team(id:$id){issues(first:250,orderBy:updatedAt){nodes{identifier title state{name}}}}}'
+   ~/.dotfiles/scripts/linear-gql.py --variables '{"id":"<LINEAR_AO_TEAM_ID>"}' --query 'query($id:String!){team(id:$id){issues(first:250,orderBy:updatedAt){nodes{identifier title state{name}}}}}'
    ```
    Compare each candidate semantically (not just string match) against those titles. If a candidate matches an existing issue (same feature/bug), SKIP it. Bias toward skipping — under-filing is far better than creating duplicates.
 
-4. **File the genuinely new ones** on AO via `linear-gql.py` `issueCreate`. Pass variables with `--variables-file` (write JSON to a temp file); NEVER round-trip JSON through `echo`.
-   - **Feature request** → `stateId` `REDACTED-LINEAR-STATE-ID`, `labelIds` `["REDACTED-LINEAR-LABEL-ID"]` (add `"REDACTED-LINEAR-LABEL-ID"` when UI-related), no priority. Title `Feature: <…>`.
-   - **Bug** → `stateId` `REDACTED-LINEAR-STATE-ID` (Backlog), `priority` `1` (Urgent), `labelIds` `["REDACTED-LINEAR-LABEL-ID"]` (add the UI label when UI-related). Title `Bug: <…>`.
-   - `teamId` for all: `REDACTED-LINEAR-TEAM-ID`.
+4. **File the genuinely new ones** on AO via `linear-gql.py` `issueCreate`. Pass variables with `--variables-file` (write JSON to a temp file); NEVER round-trip JSON through `echo`. Use the ids from RUN CONTEXT:
+   - **Feature request** → `stateId` = `LINEAR_AO_FEATURE_STATE_ID`, `labelIds` `[LINEAR_AO_FEATURE_LABEL_ID]` (add `LINEAR_AO_UI_LABEL_ID` when UI-related), no priority. Title `Feature: <…>`.
+   - **Bug** → `stateId` = `LINEAR_AO_BUG_STATE_ID` (Backlog), `priority` `1` (Urgent), `labelIds` `[LINEAR_AO_BUG_LABEL_ID]` (add the UI label when UI-related). Title `Bug: <…>`.
+   - `teamId` for all: `LINEAR_AO_TEAM_ID`.
    - Description = `## Requirement` / `## Context` (cite the meeting title + date) / `## Acceptance Criteria` (checkboxes). Append a final line: `_Auto-filed by daily meeting-triage for <WINDOW_END>._`
    - Mutation: `mutation($i:IssueCreateInput!){issueCreate(input:$i){success issue{identifier url}}}` — check `success`.
 
