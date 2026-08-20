@@ -1,6 +1,6 @@
 ---
 description: Pickup Linear ticket — materialize brief, sync base, fold context, spawn wt lane.
-argument-hint: <TICKET> <BASE-BRANCH> [--fork] [extra context...]
+argument-hint: <TICKET> [BASE-BRANCH] [--fork] [extra context...]
 ---
 
 # /pickup $ARGUMENTS
@@ -11,11 +11,15 @@ truth), sync the cockpit to a base branch, fold in any extra context, spawn the 
 
 ## 1. Parse
 
-`$ARGUMENTS` = `<TICKET> <BASE> [--fork] [context...]`:
+`$ARGUMENTS` = `<TICKET> [BASE] [--fork] [context...]`:
 - **token 1** — `TICKET` (required). A Linear id (`ENGH-123` — the normal case) or the slug
   of an already-materialized brief. Empty → ask, stop.
-- **token 2** — `BASE` (required). Base branch to spawn off (or land onto — see §4).
-  `.` = use the cockpit's current branch as-is.
+- **token 2** — `BASE` (optional, default `main`). Base branch to spawn off (or land onto —
+  see §4). `.` = use the cockpit's current branch as-is. Token 2 is BASE only when it's `.`
+  or names a real branch (`git rev-parse --verify --quiet "origin/<token2>" ||
+  git show-ref --verify --quiet "refs/heads/<token2>"`); anything else means BASE was
+  omitted → `BASE=main`, and token 2 onward is context. `/pickup ENGH-600` → `BASE=main`,
+  synced to latest `origin/main` in §4.
 - **`--fork`** (optional flag, anywhere after token 2) — force fork-off mode even when BASE
   is already checked out elsewhere. See §4.
 - **rest** — `CONTEXT` (optional). Free-text notes for the lane.
@@ -41,6 +45,21 @@ changes go through `/rescope` (which refreshes it).
 - **The Linear issue belongs to a project being driven as an epic** (has a project + sibling
   blocking relations) and the user seems to be working the epic → mention `/epic <project>
   <BASE>` confirms story order; proceed here only if they explicitly want this one child.
+
+## 2.5. Move the ticket to its started state
+
+Picking up = work starts now. Move the Linear issue (skip for a bare slug with no
+`linear:` id):
+
+```bash
+~/.dotfiles/scripts/linear-ticket.py state --id "<TICKET>" --state "<STARTED>"
+```
+
+`STARTED` by team prefix: `ENGH-*` → `Execution` (that team has no "In Progress");
+everything else → `In Progress`. Unknown name → the script dies listing the team's
+states; rerun with its started-type name. Already started → script no-ops. Any failure
+(network, key) → log one line and continue — never block the spawn on a state move.
+(`In Review` comes later: `/ship` moves the ticket when the PR opens.)
 
 ## 3. Fold in context — only if `CONTEXT` non-empty
 
@@ -123,7 +142,7 @@ Report, then stop:
 
 ## Stop conditions
 
-- Missing `TICKET` / `BASE` — ask, stop.
+- Missing `TICKET` — ask, stop. (Missing `BASE` is not a stop — defaults to `main`.)
 - Ticket not found in Linear (and no materialized brief for a bare slug) — report, stop and
   point at `/scope`. A Linear id that *does* resolve is materialized in §2, not a stop.
 - ff-merge failure (fork-off mode) — surface, stop.

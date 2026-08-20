@@ -93,6 +93,18 @@ Then `gh pr create`:
 
 Capture URL.
 
+## 3.5. Ticket → In Review
+
+`$TICKET_ID` non-empty → the PR now exists, so move the ticket:
+
+```bash
+~/.dotfiles/scripts/linear-ticket.py state --id "$TICKET_ID" --state "In Review"
+```
+
+The team may not have that state — the script dies listing available ones (ENGH has none;
+its tickets stay in `Execution`). That, or any other failure → log one line, continue.
+Never block ship on a state move.
+
 ## 4. Review — automatic, nothing to trigger
 
 Reviews fire automatically on PR open/push (Arbiter/Devin/Codex — mechanics + poll command:

@@ -83,8 +83,13 @@ After "go", `CONTEXT` rides with the child: post it as a comment on NEXT's Linea
 
 ```bash
 BRIEF=$(~/.dotfiles/scripts/linear-brief.sh "<NEXT-ID>")
+~/.dotfiles/scripts/linear-ticket.py state --id "<NEXT-ID>" --state "<STARTED>"
 wt <NEXT-ID>
 ```
+
+`STARTED`: `ENGH-*` → `Execution`, else `In Progress` (same rule as `/pickup` §2.5). This
+is what marks the child in flight — §3's classification and the one-story-at-a-time stop
+condition read it. State-move failure → log one line, still spawn.
 
 `linear-brief.sh` materializes the child's description as the lane's local cache brief; `wt`
 resolves it by the `linear:` frontmatter. Normal single lane off the now-current `BASE`: the
