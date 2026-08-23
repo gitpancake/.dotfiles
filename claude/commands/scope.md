@@ -186,6 +186,11 @@ citations are not.
   (ENGH-335..343).
 - Children carry the deep per-story detail (same section shape as a single issue), sized to
   one context window each.
+- **Sweep rule**: a brief whose work is "do X across N orgs / N files / N skills" with N > ~5
+  is NOT a single ticket — it's an epic with children batched to one context window each
+  (proof: ENGH-863 burned 15 lane sessions, ENGH-866 burned 8, both fleet-wide sweeps that
+  exhausted context and respawned on a handoff chain). Slice by org/file batch at scope
+  time; never rely on the lane's respawn cap to absorb an oversized brief.
 - **Blocking relations ARE the dependency DAG** — `issueRelationCreate` per `needs` edge.
   `/epic` reads them to pick the next story, so they must be complete before any lane spawns.
 

@@ -11,53 +11,66 @@ done/handoff. Referenced by global CLAUDE.md and `/ship`, `/address-feedback`,
 `/tdd` for behavior-changing slices, commit per layer, `/ship`, then the review loop below.
 Feedback is NEVER deferred to a separate lane.
 
+## Testing discipline
+
+Test runs are SCOPED to the files your slice touches — never repo-wide. Never run a full
+suite or suite-level script: `bun run test:wilson`, bare `bun test` with no path,
+`test:all`, or equivalents. In cartage-agent the Wilson suite is live-LLM tests — a full
+run burns real API spend and wall-clock for coverage CI already owns. Run only targeted
+paths (`NUM_RUNS=1 NODE_ENV=test bun test <path/to/file>`); pre-existing failures outside
+your slice are not yours to chase.
+
+## Payload discipline
+
+Context exhaustion — not difficulty — is why lanes hand off, and each handoff costs a full
+respawn (brief + handoff re-read, ~20 min). Any command output that can exceed ~200 lines
+goes to a FILE first (`> /tmp/<name>` or the scratchpad), then grep/head the file. Never
+cat a store snapshot, fingerprint sweep, JSON dump, prod query result, or full test log
+into context. `Read` big files with `offset`/`limit` after a grep, never whole.
+
 ## Review loop (after `/ship`)
 
-Every lane runs the **Devin loop** on its PR — request via API, poll, address, repeat.
-(A PR comment tagging `@devin-ai-integration` does NOT trigger a review in this org —
-verified 2026-08-09, all comment-tagged PRs 404'd on the review API. Trigger via the
-Devin v3 REST API; auth lives in `~/.claude/.env.local`.)
+Roster state (verified 2026-08-10 late): **Devin's billing 402 outage is OVER** — the
+trigger works again (proof: PR #6810, trigger → review in 3 min, arbiter consumed it).
+**Macroscope is deprecated** (ENGH-509 / PR #6807 removes its config; it no longer reviews
+new PRs — do not wait on `macroscopeapp[bot]`). Post-#6807, Greptile joins the roster and
+Devin becomes mention-gated to high-blast-radius paths; the arbiter reads whatever
+reviewers are present. The `arbiter` commit status remains the required gate throughout —
+`pending — "waiting for reviewer output"` means no reviewer has posted on the head sha
+yet, so make one fire.
 
-1. **Request** — after the PR opens, and after EVERY subsequent push of fixes:
+1. **Request + wait — ONE tool call per round.** After the PR opens, and after EVERY
+   subsequent push of fixes:
 
    ```bash
-   ~/.claude/scripts/devin-review.sh trigger "https://github.com/{owner}/{repo}/pull/<PR>"
+   git push && ~/.claude/scripts/devin-review.sh gate "https://github.com/{owner}/{repo}/pull/<PR>"
    ```
 
+   `gate` does the whole round internally: triggers a Devin review if none covers the
+   current head sha, polls to a terminal Devin status, then polls the arbiter commit
+   status — sleeping inside the script, NOT across model turns. Exit 0 = arbiter
+   `success`; 4 = timed out still pending (call `gate` once more, then `lane-pause.sh
+   review` per stop condition 3); 5 = arbiter failure (read + address findings); 6 =
+   needs-human-review (stop and report). NEVER hand-roll `status` + `sleep` as separate
+   tool calls — every such poll is a full-context model turn spent reading "pending".
    The script handles auth internally — never source `.env.local` or handle the API key
-   yourself. `409` = review already in flight for this sha — fine, just poll.
-   **Make the trigger inseparable from the push** — one compound command
-   (`git push && ~/.claude/scripts/devin-review.sh trigger "<pr-url>"`); a poll started
-   before a push never covers the new sha.
-2. **Poll** the review status for the current head sha (`status` ∈
-   `pending|running|completed|errored|cancelled`):
+   yourself. `402` from a bare `trigger` = billing relapse — never loop-retry;
+   `lane-pause.sh review`, report. Making the gate inseparable from the push matters:
+   a poll started before a push never covers the new sha.
+2. **Read + address** — repo `REVIEW.md` is authoritative for severity markers: 🔴 (bug)
+   and 🟨 (security) findings are blocking → fix EVERY one, inline comments included;
+   🟡 = non-blocking, fix the ones that are cheap and clearly right. Fold Codex, Greptile,
+   and any other bot reviews on the PR into the same fix pass. Commit, push, back to 1.
+3. **Terminal** — the loop ends ONLY on: required `arbiter` commit status `success` on the
+   final head sha with ZERO unaddressed blocking findings across all present reviewers —
+   or the `needs-human-review` label / a `NEEDS-HUMAN-REVIEW` verdict landing (→ stop and
+   report; a human must release it). A new push resets arbiter to `pending`; check it on
+   the FINAL sha:
 
    ```bash
-   ~/.claude/scripts/devin-review.sh status "https://github.com/{owner}/{repo}/pull/<PR>"
+   gh api repos/{owner}/{repo}/commits/<head-sha>/status \
+     --jq '.statuses[] | select(.context=="arbiter")'
    ```
-
-   `sleep 90` between checks, up to 10 attempts (~15 min) per round. `404` right after a
-   push = not triggered yet — go back to 1.
-3. **Read + address** — on `completed`, the verdict is in the CONTENT, not the API status:
-   Devin (`devin-ai-integration[bot]`) posts a GitHub Review (always state `COMMENTED` —
-   it never emits APPROVED) with inline comments (`pulls/<PR>/comments`). New blocking
-   findings → fix EVERY finding (inline comments included), commit, push, go to 1.
-4. **Terminal** — the loop ends ONLY on: Devin review `completed` on the current head sha
-   with ZERO new blocking findings (plus arbiter `approve` where arbiter.yml exists), or
-   the `needs-human-review` label landing on the PR (→ stop and report; a human must
-   release it). `errored`/`cancelled` → re-trigger once; twice → `lane-pause`.
-
-Codex reviews arrive automatically alongside — fold its inline comments into the same fix
-pass. **Arbiter** (`.github/workflows/arbiter.yml`, where present — e.g. `cartage-agent`,
-ENGH-250) synthesizes reviewer output + diff + CI into a REQUIRED `arbiter` commit status
-(`approve`=success, `block`/`needs-human`=failure) plus an issue comment from
-`github-actions[bot]` starting `<!-- arbiter-verdict -->`; a new push resets it to
-`pending`. Where it exists, `arbiter=success` on the final sha is ALSO required before the
-lane is done:
-
-```bash
-gh api repos/{owner}/{repo}/commits/<head-sha>/status --jq '.statuses[] | select(.context=="arbiter")'
-```
 
 Chuck is RETIRED (2026-08-04): never tag `@chuck-noland-cartage`, never poll for a
 `chuck-noland[bot]` comment.
@@ -67,13 +80,12 @@ Chuck is RETIRED (2026-08-04): never tag `@chuck-noland-cartage`, never poll for
 Finish with `~/.claude/scripts/lane-done.sh` as the FINAL tool call (writes `DONE`, flashes
 the lane's tmux window green). A lane stops ONLY on:
 
-1. Devin review `completed` on the final sha with zero unaddressed blocking findings —
-   plus Arbiter `approve` where `arbiter.yml` exists — + `lane-done.sh` run.
+1. Zero unaddressed blocking findings from all present reviewers on the final sha — plus
+   Arbiter `success` on that sha — + `lane-done.sh` run.
 2. Genuine blocker: ambiguity not in the brief, repeated test failure on the same root
    cause, missing credential.
-3. `needs-human-review` label applied — or Devin review still absent ~15 min after a
-   request round → `lane-pause.sh review 'PR #<N> review pending'`, stop without claiming
-   done.
+3. `needs-human-review` label applied — or no reviewer output ~15 min after a trigger
+   round → `lane-pause.sh review 'PR #<N> review pending'`, stop without claiming done.
 4. Ctx nudge with a full slice still remaining → handoff (below).
 
 ## Ctx nudge + handoff
