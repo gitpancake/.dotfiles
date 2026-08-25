@@ -135,7 +135,6 @@ Used by `/address-feedback` and `/why-failing` after their plan is written:
 [[ "$PWD" == */.claude/worktrees/* ]] && IN_LANE=1 || IN_LANE=0
 # cockpit (IN_LANE=0): plan already at ~/.claude/plans/PR-<N>-<purpose>.md, then:
 wt --branch <headRefName> PR-<N>-<purpose>
-tmux rename-window "<purpose>:PR-<N>"
 ```
 
 `wt`'s pre-spawn `git fetch origin` makes `origin/<headRefName>` available; `--branch`
@@ -143,5 +142,21 @@ checks out the real PR branch (and reuses a worktree that already holds it — n
 double-checkout error). The `PR-<N>-*` pseudo-ticket plan filename is what makes `wt`
 auto-kick-off the autonomous loop. Already in a lane (`IN_LANE=1`) → don't recurse;
 continue inline.
+
+## tmux: `wt` owns lane windows, and every call names its target
+
+`wt` is the only thing that creates a lane window. Never hand-roll `tmux new-window` for a
+lane, and never `nohup` one — a detached process has no pane and loses its scrollback.
+
+`wt` spawns the window into the dedicated `wt` session and links it into whatever session
+the user is attached to, so it appears in their cockpit without anyone asking. The window
+lives in both at once, so `wt:<label>` stays its stable address. Opt out with `WT_NO_LINK=1`.
+Do not move a lane window between sessions: `tmux move-window` breaks that address.
+
+Every tmux call from an agent takes an explicit `-t <session>:<window-name>` target. The
+Bash tool runs outside tmux, where an untargeted command resolves to the *user's* active
+window — `tmux rename-window "x"` renames the window they are sitting in. Address windows
+by name, never by index: closing a window renumbers the rest, so a stale index can land on
+a live lane.
 
 Slice protocol + parallel gotchas: `~/.dotfiles/CLAUDE.md`.
