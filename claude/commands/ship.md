@@ -22,6 +22,11 @@ Run in parallel and cache outputs — §2.5 + §3 reuse, never re-run:
 - On `main`/`master` → refuse.
 - No commits ahead AND clean AND no PR → ask what was meant.
 
+**Lane gate**: in a `wt` lane (cwd under `.claude/worktrees/`), /ship requires a clean
+pre-ship self-review — the fresh-context Opus reviewer pass from
+`~/.claude/docs/lane-protocol.md` §Pre-ship self-review. Not run yet on the current work →
+run it now (fix + re-pass until clean), then continue. Cockpit sessions skip this.
+
 ## 1. Commit (only if dirty)
 
 Conventional-commit subject ≤50 chars (`feat:`/`fix:`/`refactor:`/`chore:`/etc.). Body only

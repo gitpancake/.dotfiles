@@ -1,7 +1,7 @@
 # Lane Protocol — autonomous `wt` lanes
 
-Single source of truth for the lane lifecycle: spawn → slices → `/ship` → review loop →
-done/handoff. Referenced by global CLAUDE.md and `/ship`, `/address-feedback`,
+Single source of truth for the lane lifecycle: spawn → slices → pre-ship self-review →
+`/ship` → review loop → done/handoff. Referenced by global CLAUDE.md and `/ship`, `/address-feedback`,
 `/why-failing`, `/resume`. Read this when working in a lane (cwd under
 `<repo>/.claude/worktrees/`) or spawning one.
 
@@ -27,6 +27,30 @@ respawn (brief + handoff re-read, ~20 min). Any command output that can exceed ~
 goes to a FILE first (`> /tmp/<name>` or the scratchpad), then grep/head the file. Never
 cat a store snapshot, fingerprint sweep, JSON dump, prod query result, or full test log
 into context. `Read` big files with `offset`/`limit` after a grep, never whole.
+
+## Pre-ship self-review (Opus gate)
+
+Every lane runs this after its last slice is committed and BEFORE `/ship`. Why: external
+reviewers hunt hardest on the first push, then anchor on verifying their own prior
+findings — on PR #7448 a bug introduced by a fix commit (`selectedColumns` silent
+narrowing) sailed past Devin, Greptile, and the arbiter, and a fresh-context "review this
+diff for bugs" caught it. This gate is that fresh read, before the bots ever see the code.
+
+1. Spawn ONE fresh-context reviewer: Agent tool, `subagent_type: "general-purpose"`,
+   `model: "opus"` — never let it inherit the lane's sonnet. Give it NO lane history or
+   justification of your choices. Prompt: run `git diff origin/main...HEAD` (plus bare
+   `git diff` for anything uncommitted) and adversarially hunt for bugs — logic errors,
+   silent-failure paths, unvalidated model/user input, races, wrong-but-plausible edge
+   cases. Report only real bugs, each with `file:line` and a concrete failure scenario
+   (inputs → wrong outcome). No style, naming, or test-coverage feedback. Read-only —
+   it must not edit or commit.
+2. Fix every confirmed finding, commit, spawn a fresh pass. Exit when a pass returns
+   zero confirmed bugs. Rejecting a finding → one-line why in `## Local notes`.
+3. Then `/ship`.
+
+Fix rounds are the same blind spot: a fix commit is NEW surface the bots won't re-hunt.
+During the review loop below, before pushing any fix round, run one gate pass scoped to
+the unpushed work (`git diff @{u}`), fix what it confirms, then push.
 
 ## Review loop (after `/ship`)
 
@@ -60,7 +84,8 @@ yet, so make one fire.
 2. **Read + address** — repo `REVIEW.md` is authoritative for severity markers: 🔴 (bug)
    and 🟨 (security) findings are blocking → fix EVERY one, inline comments included;
    🟡 = non-blocking, fix the ones that are cheap and clearly right. Fold Codex, Greptile,
-   and any other bot reviews on the PR into the same fix pass. Commit, push, back to 1.
+   and any other bot reviews on the PR into the same fix pass. Commit, run one self-review
+   gate pass on the unpushed fix (§Pre-ship self-review), push, back to 1.
 3. **Terminal** — the loop ends ONLY on: required `arbiter` commit status `success` on the
    final head sha with ZERO unaddressed blocking findings across all present reviewers —
    or the `needs-human-review` label / a `NEEDS-HUMAN-REVIEW` verdict landing (→ stop and
