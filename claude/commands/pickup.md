@@ -107,7 +107,10 @@ git checkout "<BASE>"
 git merge --ff-only "origin/<BASE>"
 ```
 
-ff-merge fails (dirty tree / diverged) → stop, surface it. Never force.
+ff-merge fails because BASE has local-only commits (diverged, clean tree) →
+`git rebase "origin/<BASE>"` and continue; report the rebased commits in the final
+message. Rebase hits conflicts → `git rebase --abort`, stop, surface. Dirty tree →
+stop, surface. Never force-push, never discard local commits.
 
 ### Onto: skip cockpit sync
 
@@ -145,5 +148,6 @@ Report, then stop:
 - Missing `TICKET` — ask, stop. (Missing `BASE` is not a stop — defaults to `main`.)
 - Ticket not found in Linear (and no materialized brief for a bare slug) — report, stop and
   point at `/scope`. A Linear id that *does* resolve is materialized in §2, not a stop.
-- ff-merge failure (fork-off mode) — surface, stop.
+- Cockpit sync unrecoverable (fork-off mode): dirty tree, or rebase conflict after
+  abort — surface, stop. (Clean divergence auto-rebases, not a stop.)
 - After spawn — done. Don't follow the lane.
