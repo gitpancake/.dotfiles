@@ -25,11 +25,14 @@ The `vercel-build` check runs on draft PRs and owns that verdict. A local Next b
 at 12GB resident on 2026-08-27, exhausted swap, and starved every sibling lane. `bun
 type-check` is the local compile gate: cheap, required before ship, and sufficient.
 
-Checks run FOREGROUND. `bun type-check` (~35s, warm or cold — measured 2026-09-01) and
+Checks run FOREGROUND. `bun type-check` (~15s warm, ~45s cold — measured 2026-09-01) and
 scoped tests run as one plain foreground Bash command. Never `run_in_background`, never
 `cmd | tail -N` — the backgrounded pipe can hang forever after the check finishes
 (observed on this machine), and the spawn/poll scaffolding costs more wall-clock than the
 check itself. Output too big → redirect to a file, then grep the file.
+
+Never kill build tools by a pattern match — one lane's `pkill -f "tsc --noEmit"` reaped its
+siblings' in-flight checks on 2026-09-01 and forced their re-runs; kill only PIDs you spawned.
 
 A rebase that replays cleanly with no new lane-authored code since your last green check
 needs NO local re-verify — push immediately; CI's `pr-checks` runs the same type-check on
