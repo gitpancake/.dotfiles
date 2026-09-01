@@ -20,6 +20,21 @@ run burns real API spend and wall-clock for coverage CI already owns. Run only t
 paths (`NUM_RUNS=1 NODE_ENV=test bun test <path/to/file>`); pre-existing failures outside
 your slice are not yours to chase.
 
+Never run a production build — `bun run build`, `next build`, or a `vercel-build` stand-in.
+The `vercel-build` check runs on draft PRs and owns that verdict. A local Next build peaked
+at 12GB resident on 2026-08-27, exhausted swap, and starved every sibling lane. `bun
+type-check` is the local compile gate: cheap, required before ship, and sufficient.
+
+Checks run FOREGROUND. `bun type-check` (~35s, warm or cold — measured 2026-09-01) and
+scoped tests run as one plain foreground Bash command. Never `run_in_background`, never
+`cmd | tail -N` — the backgrounded pipe can hang forever after the check finishes
+(observed on this machine), and the spawn/poll scaffolding costs more wall-clock than the
+check itself. Output too big → redirect to a file, then grep the file.
+
+A rebase that replays cleanly with no new lane-authored code since your last green check
+needs NO local re-verify — push immediately; CI's `pr-checks` runs the same type-check on
+every push.
+
 ## Payload discipline
 
 Context exhaustion — not difficulty — is why lanes hand off, and each handoff costs a full
@@ -36,21 +51,56 @@ findings — on PR #7448 a bug introduced by a fix commit (`selectedColumns` sil
 narrowing) sailed past Devin, Greptile, and the arbiter, and a fresh-context "review this
 diff for bugs" caught it. This gate is that fresh read, before the bots ever see the code.
 
-1. Spawn ONE fresh-context reviewer: Agent tool, `subagent_type: "general-purpose"`,
-   `model: "opus"` — never let it inherit the lane's sonnet. Give it NO lane history or
-   justification of your choices. Prompt: run `git diff origin/main...HEAD` (plus bare
-   `git diff` for anything uncommitted) and adversarially hunt for bugs — logic errors,
-   silent-failure paths, unvalidated model/user input, races, wrong-but-plausible edge
-   cases. Report only real bugs, each with `file:line` and a concrete failure scenario
-   (inputs → wrong outcome). No style, naming, or test-coverage feedback. Read-only —
-   it must not edit or commit.
-2. Fix every confirmed finding, commit, spawn a fresh pass. Exit when a pass returns
-   zero confirmed bugs. Rejecting a finding → one-line why in `## Local notes`.
-3. Then `/ship`.
+The gate is bounded. PR #7619 ran 14 rounds (27 commits) because "exit on zero findings"
+never terminates against a reviewer told to hunt: every fix is new surface, rounds 10–14
+churned one defensive date-parsing branch, round 11 regressed, and the arbiter still
+blocked on hygiene the loop never touched. Rounds measure patience, not quality.
 
-Fix rounds are the same blind spot: a fix commit is NEW surface the bots won't re-hunt.
-During the review loop below, before pushing any fix round, run one gate pass scoped to
-the unpushed work (`git diff @{u}`), fix what it confirms, then push.
+**Hard cap: 3 rounds.** Round 1 reviews the whole branch; rounds 2–3 review only the fix
+diff since the last reviewed sha. Anything still open after round 3 is recorded, not
+fixed.
+
+1. **Hygiene pre-check (before any reviewer).** Run the arbiter's own gates from
+   `REVIEW.md` §PR hygiene against the diff: does it touch `src/schemas/**` or another
+   persisted shape (→ `needs-human` is guaranteed; the PR body must tell the migration
+   story)? Does it change a user-facing surface (→ screenshots required, which a lane
+   cannot produce)? Either answer yes → write the finding into `## Local notes`, and
+   `lane-pause.sh` with `WAITING:input:<what the human must supply>` right after the PR
+   opens — do not spend review rounds polishing code that is blocked on evidence.
+2. **Spawn ONE fresh-context reviewer:** Agent tool, `subagent_type: "general-purpose"`,
+   `model: "opus"` — never let it inherit the lane's sonnet. Give it NO lane history or
+   justification of your choices. DO give it the ticket's **Acceptance Criteria** and
+   **Limitations** verbatim — scope is not justification, and without it the reviewer
+   hunts defensive paths the ticket excludes. Prompt: run `git diff <base>...HEAD`
+   (round 1: `origin/main`; later rounds: the last reviewed sha; plus bare `git diff`
+   for anything uncommitted) and adversarially hunt for bugs — logic errors,
+   silent-failure paths, unvalidated model/user input, races, wrong-but-plausible edge
+   cases. Report only real bugs, each with `file:line`, a concrete failure scenario
+   (inputs → wrong outcome), and one tag: `in-scope-blocking` (an AC fails or data is
+   corrupted/lost), `in-scope-minor` (wrong but no AC fails), `out-of-scope` (Limitations
+   exclude it, or the path is defensive fallback the ticket never asked for). No style,
+   naming, or test-coverage feedback. Read-only — it must not edit or commit.
+3. **Fix only `in-scope-blocking`.** Each fix starts with a failing test that reproduces
+   the reviewer's scenario, then the change (`/tdd` applies to fix rounds exactly as to
+   slices — round 11 of #7619 regressed two working date shapes because it skipped this).
+   `in-scope-minor` and `out-of-scope` go to `## Local notes` as one line each and into
+   the PR body's Known limitations. Rejecting a blocking finding → one-line why in
+   `## Local notes`.
+4. Record the round number in `<worktree>/.claude/preship-rounds` (a single integer,
+   overwritten each round) and, at exit, a `Pre-ship review: N round(s)` line in the PR
+   body Summary. Exit when a round returns zero `in-scope-blocking`, or after round 3.
+5. Squash every fix commit into the slice commit it corrects before `/ship` (`git rebase
+   -i` is unavailable; use `git reset --soft <slice-parent>` + recommit, or
+   `git commit --fixup` + `GIT_SEQUENCE_EDITOR=true git rebase --autosquash`). A PR of
+   27 "round N" commits gives Devin/Greptile a worse diff to review, not a better one.
+   Never squash after the PR is open.
+6. Then `/ship`.
+
+Fix rounds during the review loop are the same blind spot: a fix commit is NEW surface
+the bots won't re-hunt. Before pushing any fix round, run ONE gate pass scoped to the
+unpushed work (`git diff @{u}`) under the same tagging rule, fix what it confirms as
+`in-scope-blocking`, then push. That single pass does not count toward the cap, and it
+never spawns a second pass.
 
 ## Review loop (after `/ship`)
 
