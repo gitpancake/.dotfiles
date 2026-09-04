@@ -17,8 +17,9 @@ Subcommands
                        "mine my day's meetings".
   actions              Extract action items (v2.actionItems.actions) across the
                        window as JSON — assignee/label/context/dueDate/completed.
-  raw <path>           GET an arbitrary API path (escape hatch, e.g. semantic
-                       search once you've confirmed its POST body separately).
+  search <query>       Semantic search over recordings (POST /public/search).
+                       --limit N (1-20, default 8), --filters '<json>' passthrough.
+  raw <path>           GET an arbitrary API path (escape hatch).
 
 List response: {data:[...], pagination:{page,limit,total,total_pages,has_more},
 success, error}. Page-based: increment `page` until has_more is false.
@@ -28,11 +29,14 @@ import argparse
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 
 BASE_URL = "https://public.heypocketai.com/api/v1"
+MAX_RETRIES = 6
+REQUEST_SPACING_SECONDS = 0.5
 
 
 def load_api_key():
@@ -56,13 +60,48 @@ def api_get(path, key):
     req = urllib.request.Request(
         url, headers={"authorization": f"Bearer {key}", "accept": "application/json"}
     )
-    try:
-        with urllib.request.urlopen(req, timeout=45) as resp:
-            return json.loads(resp.read())
-    except urllib.error.HTTPError as err:
-        body = err.read()[:400].decode("utf-8", "replace")
-        print(f"HTTP {err.code} on {url}: {body}", file=sys.stderr)
-        raise
+    for attempt in range(MAX_RETRIES):
+        try:
+            with urllib.request.urlopen(req, timeout=45) as resp:
+                return json.loads(resp.read())
+        except urllib.error.HTTPError as err:
+            body = err.read()[:400].decode("utf-8", "replace")
+            retryable = err.code == 429 or err.code >= 500
+            if not retryable or attempt == MAX_RETRIES - 1:
+                print(f"HTTP {err.code} on {url}: {body}", file=sys.stderr)
+                raise
+            retry_after = err.headers.get("Retry-After")
+            wait = float(retry_after) if retry_after else min(2**attempt * 2, 60)
+            print(f"HTTP {err.code} on {url}, retrying in {wait:.0f}s", file=sys.stderr)
+            time.sleep(wait)
+
+
+def api_post(path, key, body):
+    url = path if path.startswith("http") else f"{BASE_URL}{path}"
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(body).encode(),
+        headers={
+            "authorization": f"Bearer {key}",
+            "accept": "application/json",
+            "content-type": "application/json",
+        },
+        method="POST",
+    )
+    for attempt in range(MAX_RETRIES):
+        try:
+            with urllib.request.urlopen(req, timeout=45) as resp:
+                return json.loads(resp.read())
+        except urllib.error.HTTPError as err:
+            body_text = err.read()[:400].decode("utf-8", "replace")
+            retryable = err.code == 429 or err.code >= 500
+            if not retryable or attempt == MAX_RETRIES - 1:
+                print(f"HTTP {err.code} on {url}: {body_text}", file=sys.stderr)
+                raise
+            retry_after = err.headers.get("Retry-After")
+            wait = float(retry_after) if retry_after else min(2**attempt * 2, 60)
+            print(f"HTTP {err.code} on {url}, retrying in {wait:.0f}s", file=sys.stderr)
+            time.sleep(wait)
 
 
 def list_recordings(key, start=None, end=None, tag_ids=None, limit=None):
@@ -87,6 +126,17 @@ def list_recordings(key, start=None, end=None, tag_ids=None, limit=None):
             break
         page += 1
     return recordings
+
+
+def fetch_details(recs, key, completed_only=False):
+    if completed_only:
+        recs = [r for r in recs if r.get("state") == "completed"]
+    details = []
+    for r in recs:
+        if details:
+            time.sleep(REQUEST_SPACING_SECONDS)
+        details.append(api_get(f"/public/recordings/{r['id']}", key).get("data", {}))
+    return details
 
 
 def summary_markdown(detail):
@@ -138,11 +188,23 @@ def main():
     p_act = sub.add_parser("actions", help="extract action items across the window")
     add_window(p_act)
 
+    p_search = sub.add_parser("search", help="semantic search over recordings")
+    p_search.add_argument("query")
+    p_search.add_argument("--limit", type=int, default=8, help="1-20, default 8")
+    p_search.add_argument("--filters", help="JSON object passed as the filters field")
+
     p_raw = sub.add_parser("raw", help="GET an arbitrary API path")
     p_raw.add_argument("path")
 
     args = parser.parse_args()
     key = load_api_key()
+
+    if args.cmd == "search":
+        body = {"query": args.query, "limit": max(1, min(args.limit, 20))}
+        if args.filters:
+            body["filters"] = json.loads(args.filters)
+        print(json.dumps(api_post("/public/search", key, body), indent=2, default=str))
+        return
 
     if args.cmd == "recording":
         print(json.dumps(api_get(f"/public/recordings/{args.id}", key), indent=2, default=str))
@@ -158,12 +220,11 @@ def main():
 
     if args.cmd == "recordings":
         if args.detail:
-            recs = [api_get(f"/public/recordings/{r['id']}", key).get("data", {}) for r in recs]
+            recs = fetch_details(recs, key)
         print(json.dumps(recs, indent=2, default=str))
         return
 
-    details = [api_get(f"/public/recordings/{r['id']}", key).get("data", {}) for r in recs]
-    details = [d for d in details if d.get("state") == "completed"]
+    details = fetch_details(recs, key, completed_only=True)
     details.sort(key=lambda d: d.get("recording_at") or "")
 
     if args.cmd == "digest":

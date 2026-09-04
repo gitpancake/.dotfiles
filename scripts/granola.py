@@ -10,6 +10,11 @@ Subcommands
                    --limit N caps note count. Prints a JSON array of list-shaped
                    notes (id/title/created_at) unless --detail is passed.
   note <id>        Fetch full detail for one note (GET /notes/{id}).
+  transcript <id>  Fetch the note's full transcript (GET /notes/{id}/transcript,
+                   cursor-paginated to exhaustion). Segments carry
+                   speaker.attribution — "me"/"them", or a name once Granola
+                   speaker tags (Meet/Zoom) are set up. --text renders
+                   "[attribution] text" lines instead of JSON.
   digest           notes --detail, but emits a compact markdown digest
                    (title + created + summary_markdown per note) to stdout.
   raw <path>       GET an arbitrary API path (e.g. "/notes?cursor=abc").
@@ -24,6 +29,7 @@ import json
 import os
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
@@ -96,6 +102,34 @@ def list_notes(key, since_days=None, limit=None):
     return notes
 
 
+def fetch_transcript(key, note_id):
+    segments = []
+    cursor = None
+    while True:
+        path = f"/notes/{note_id}/transcript"
+        if cursor:
+            path += f"?cursor={urllib.parse.quote(cursor)}"
+        page = api_get(path, key)
+        segments.extend(page.get("transcript") or [])
+        cursor = page.get("cursor")
+        if not page.get("hasMore") or not cursor:
+            return segments
+
+
+def speaker_label(segment):
+    speaker = segment.get("speaker") or {}
+    return speaker.get("name") or speaker.get("attribution") or "unknown"
+
+
+def render_transcript_text(segments):
+    lines = []
+    for seg in segments:
+        text = (seg.get("text") or "").strip()
+        if text:
+            lines.append(f"[{speaker_label(seg)}] {text}")
+    return "\n".join(lines)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Granola Public API client")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -107,6 +141,10 @@ def main():
 
     p_note = sub.add_parser("note", help="fetch one note detail")
     p_note.add_argument("id")
+
+    p_tr = sub.add_parser("transcript", help="fetch a note's transcript (paginated)")
+    p_tr.add_argument("id")
+    p_tr.add_argument("--text", action="store_true", help="render [speaker] text lines")
 
     p_digest = sub.add_parser("digest", help="markdown digest of note summaries")
     p_digest.add_argument("--since-days", type=int, default=14)
@@ -120,6 +158,14 @@ def main():
 
     if args.cmd == "note":
         print(json.dumps(api_get(f"/notes/{args.id}", key), indent=2, default=str))
+        return
+
+    if args.cmd == "transcript":
+        segments = fetch_transcript(key, args.id)
+        if args.text:
+            print(render_transcript_text(segments))
+        else:
+            print(json.dumps(segments, indent=2, default=str))
         return
 
     if args.cmd == "raw":

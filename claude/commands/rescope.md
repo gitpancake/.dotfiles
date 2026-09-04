@@ -27,6 +27,23 @@ Fetch via the `linear` skill: `issue(id:){ id title description state { name } u
 
 Unsure → treat as structural.
 
+## 2.5. Evidence refresh (on request, or when /pickup's staleness check sent you here)
+
+When the user asks to refresh from meetings ("--evidence", "check the calls", or arriving
+via /pickup §2.3), pull the delta since the brief was last edited:
+
+```bash
+~/.dotfiles/scripts/pocket.py search "<ticket title key terms>" --limit 8
+~/.dotfiles/scripts/granola.py notes --since-days <days-since-updatedAt> --limit 20
+```
+
+For each relevant hit newer than the issue's `updatedAt`, extract candidate scope changes
+and present them /scope §1-style — one per Q, verbatim quote + speaker + recommended
+disposition (add to AC / add to Limitations / ignore), affirm or override. Confirmed items
+fold into §4's rewrite with inline citations per /scope's provenance rule (`(per Ben, 8/14
+call: "…")`; inferred speakers marked `(speaker inferred)`). No relevant hits → say so and
+continue with the user's adjustments alone.
+
 ## 3. Codebase exploration (only if structural)
 
 Run `/scope` §2's exploration pass (mirror search, surface area ≤8 files, mechanism honesty,

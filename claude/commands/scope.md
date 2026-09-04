@@ -12,7 +12,7 @@ gotchas. Refine the request, don't restate it.
 
 Linear is the source of truth (global CLAUDE.md §Ticket Lifecycle); write via the `linear`
 skill (`linear-gql.py`). This command writes to Linear only — plus the one `CONTEXT.md`
-docs-commit in §7. Lanes get the brief via `linear-brief.sh` materialization at `/pickup`
+docs-PR in §7 (a throwaway-worktree branch, never a commit on the cockpit checkout). Lanes get the brief via `linear-brief.sh` materialization at `/pickup`
 time, not from anything /scope leaves on disk.
 
 If `$ARGUMENTS` is empty, infer the problem from conversation context — what was just
@@ -22,24 +22,42 @@ No relevant context either → ask for a problem statement and stop.
 ## 0. Evidence pass — before the grill
 
 The brief's slots (Requirement / Context / Limitations / AC / Proof) get filled from
-evidence, not the user's recollection. If the request traces to a meeting, a Slack thread,
-or a support ticket — or the user names one — pull it first:
+evidence, not the user's recollection.
 
-- **Granola** (`granola` skill): the meeting's note + action items.
+**Discovery is automatic, not user-prompted.** Always run one semantic search of the
+transcript corpus on the distilled problem statement — this catches the meeting the user
+forgot discussed it:
+
+```bash
+~/.dotfiles/scripts/pocket.py search "<problem statement key terms>" --limit 8
+```
+
+Results carry `recordingId`/`recordingTitle`/`relevanceScore` + speaker-labelled excerpts.
+A relevant hit → pull that recording's detail. Then pull anything the user named or the
+request traces to:
+
+- **Granola** (`granola` skill): the meeting's note + action items. For who-said-what, use
+  `granola.py transcript <id> --text` — the note detail's `transcript` field is null in
+  practice; the transcript endpoint attributes each line (`me`/`them`, real names once
+  speaker tags are set up).
 - **Pocket** (`pocket` skill): the verbatim transcript — the throwaway constraints
-  ("oh, and it has to…") live here, not in the summary.
+  ("oh, and it has to…") live here, not in the summary. Also sweep
+  `pocket.py actions` across the topic's window: items shaped "not doing / later / v2"
+  are pre-cited Limitations candidates.
 - **Slack** (`cartage-bots` skill): the originating thread. Support-originated → add the
   Plain thread (`plain-api` skill).
 
 Distill an evidence pack:
 
-- Candidate requirements — verbatim quote + speaker.
+- Candidate requirements — verbatim quote + speaker. Speaker attribution: named where the
+  source names them; an anonymous diarized turn (`SPEAKER_NN`, Granola `them`) may be
+  name-inferred from attendees/self-intros but the citation must say `(speaker inferred)`.
 - Constraints + success criteria mentioned.
-- **Explicitly-deferred items** — who deferred, when.
+- **Explicitly-deferred items** — who deferred, when (the `actions` sweep feeds this).
 - Contradictions: source vs source, or source vs `$ARGUMENTS`.
 
-No traceable source → skip silently; §1 grills from scratch as before. Never fabricate a
-citation — an uncited AC line is honest, a fake quote is not.
+Search misses and no traceable source → skip silently; §1 grills from scratch as before.
+Never fabricate a citation — an uncited AC line is honest, a fake quote is not.
 
 PII: transcripts are raw customer conversation. The pack stays cockpit-side; only
 distilled quotes reach the Linear body, contact details (emails, phones) stripped.
@@ -220,20 +238,42 @@ For an epic:
 > Project `<name>` + `<N>` children created. Run `/epic <project> <base>` to review
 > story order and spawn the first child lane.
 
-## 7. Commit the glossary edit — if §2c touched `CONTEXT.md`
+## 7. Ship the glossary edit — if §2c touched `CONTEXT.md`
 
-`CONTEXT.md` is a **project-repo file** — left uncommitted in the cockpit it orphans (lanes
-branch off `origin/main` and never see it) and stalls every `wt`/`/pickup` fast-forward.
-In the **project repo**, if §2c changed `CONTEXT.md`:
+`CONTEXT.md` is a **project-repo file**, and cartage repos gate `main` behind required
+status checks — a commit on the cockpit's local `main` can never be pushed, so it strands
+as unpushable noise that lanes (branched off `origin/main`) never see and that wedges every
+`wt`/`/pickup` fast-forward. **Never commit to the cockpit's checkout.** Land the pin on
+origin via a docs-only PR from a throwaway worktree:
 
 ```bash
-git -C "$REPO" diff --quiet -- CONTEXT.md || \
-  { git -C "$REPO" add CONTEXT.md; \
-    git -C "$REPO" commit -q -m "docs: pin <terms> in CONTEXT.md glossary"; }
+[ -n "$(git -C "$REPO" diff --name-only -- CONTEXT.md)" ] && {
+  git -C "$REPO" fetch -q origin main
+  BR="docs/pin-<first-term-slug>"   # slug from the pinned term, no ids
+  TMP=$(mktemp -d)
+  git -C "$REPO" worktree add -q "$TMP" -b "$BR" origin/main
+  cp "$REPO/CONTEXT.md" "$TMP/CONTEXT.md"
+  git -C "$TMP" add CONTEXT.md
+  git -C "$TMP" commit -q -m "docs: pin <terms> in CONTEXT.md glossary"
+  git -C "$TMP" push -qu origin "$BR"
+  gh pr create -R <owner/repo> --head "$BR" \
+    --title "docs: pin <terms> in CONTEXT.md glossary" \
+    --body "Glossary-only: pins <terms> from a /scope grill. No code changes."
+  gh pr merge -R <owner/repo> "$BR" --auto --squash
+  git -C "$REPO" worktree remove -f "$TMP" && git -C "$REPO" branch -D "$BR"
+  git -C "$REPO" checkout -- CONTEXT.md
+}
 ```
 
-- Stage **`CONTEXT.md` only** — never `git add -A`/`.`; the cockpit may hold unrelated dirty work.
-- This is the one project-repo write `/scope` makes (docs-only). Commit only; **never push**.
+- Copy the **whole file** — `CONTEXT.md` is glossary-only by contract, so every uncommitted
+  line in it is a pin that belongs in the PR. Never stage anything else.
+- The final `checkout -- CONTEXT.md` restores the cockpit tree clean (a dirty tracked file
+  blocks the next fast-forward); the pin returns on the next `git pull` after the PR merges.
+- Auto-merge is enabled on both cartage repos and repo checks are docs-tolerant; if
+  `--auto` errors, report the PR link and leave it — never bypass checks, never commit to
+  `main` as a fallback.
+- This docs-only PR is exempt from `/ship`'s Linear-ticket rule — a glossary pin needs no
+  team-reference ticket.
 - No `CONTEXT.md` change this run → skip silently.
 
 ## Stop conditions
@@ -241,4 +281,4 @@ git -C "$REPO" diff --quiet -- CONTEXT.md || \
 - After §1 clarifying questions — wait for answers.
 - After §5 draft — wait for "go".
 - After §6 write — done. The user runs `/pickup <id>` (or `/epic <project>`) next. The §7
-  `CONTEXT.md` docs-commit is the only project-repo write; never edit code from this command.
+  `CONTEXT.md` docs-PR is the only project-repo write; never edit code from this command.

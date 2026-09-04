@@ -46,6 +46,28 @@ changes go through `/rescope` (which refreshes it).
   blocking relations) and the user seems to be working the epic → mention `/epic <project>
   <BASE>` confirms story order; proceed here only if they explicitly want this one child.
 
+## 2.3. Staleness check — only when scope may have drifted
+
+Scope drifts in meetings between /scope and /pickup. Fetch the gate inputs in one query
+via the `linear` skill — `issue(id:){ updatedAt labels { nodes { name } } }` — and run the
+check only when the issue carries the `evidence-grounded` label OR its `updatedAt` is older
+than 5 days. Otherwise skip (the common fresh-ticket path stays one cheap Linear read).
+
+When gated in:
+
+```bash
+~/.dotfiles/scripts/pocket.py search "<ticket title key terms>" --limit 5
+```
+
+A hit whose `recordingDate` postdates the issue's `updatedAt` and plausibly touches this
+scope → surface it and ask:
+
+> `<recordingTitle>` (`<date>`) discussed this after the brief was last edited —
+> `/rescope <TICKET>` first, or proceed as scoped?
+
+Wait for the answer. Misses, older hits, or gate not met → continue silently. This check
+never edits the brief — that's `/rescope`'s job.
+
 ## 2.5. Move the ticket to its started state
 
 Picking up = work starts now. Move the Linear issue (skip for a bare slug with no
