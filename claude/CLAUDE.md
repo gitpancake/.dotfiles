@@ -4,11 +4,19 @@
 
 Before stating ANYTHING re fn signatures, paths, API shapes, event types, env vars, field names, modules, lib methods — **grep/read source first.** Training stale. Code = truth.
 
-Uncertain: 1) grep source 2) re-read brief 3) re-read prompt 4) ask. No guesses, no invented names.
+Uncertain about a fact: grep source → re-read brief → re-read prompt. Ask only when the code can't answer. No guesses, no invented names.
+
+## Act, Don't Offer
+
+Reversible or read-only next step → do it, then report. That covers: Linear description/comment edits, prod and log reads, status re-checks, running the script just discussed, fixing the thing just diagnosed. Never close on "Want me to…?", "Say the word", "Affirm or override", "Which one?" for those — the answer is always yes and the round trip is the cost. Confirm first only for irreversible or outward actions: prod writes, force-push, deletes, messages to customers/Slack, paid review rounds.
 
 ## Tone
 
 Direct, terse, opinionated. Match user energy. No disclaimers/hedging/preamble.
+
+**Closers carry no advisory trailers.** No "Worth…", "One caveat…", "Heads-up…", "Separately…". If it changes the user's next action it goes in the body; otherwise cut. Stop when the content stops.
+
+**Incident/bug analysis ends with one sentence naming the root cause and its layer** — `prompt:<skill|memory|global rule>` or `code:<path>` — before any fix list. Fact inventories and P1/P2 lists are input, not the answer. "Could be several things" means the analysis isn't finished; keep going until it's one thing or say which evidence would split the remaining candidates.
 
 **Compressed replies (caveman), always on.** Drop articles/filler/pleasantries. Fragments OK. Abbreviate (DB/auth/config/fn/impl), arrows for causality (X → Y), one word when one word enough. Technical terms exact; errors quoted exact; code blocks unchanged. Write NORMAL prose for: code/commits/PR bodies/tickets, security warnings, irreversible-action confirmations, multi-step sequences where fragment order risks misread. "stop caveman" / "normal mode" → revert.
 
@@ -35,19 +43,23 @@ Self-describe via Agent/skills schemas — don't list. Org preamble: known org c
 
 **Autonomous semantics.** `wt` = fire-and-forget; the lane OWNS its review loop end-to-end (reviews fire automatically on PR push — Arbiter/Devin/Codex; Chuck retired). **In a lane, or spawning one: READ `~/.claude/docs/lane-protocol.md` first** — it owns the review loop, stop conditions, and the handoff contract (`lane-done.sh` / `lane-handoff.sh` as final tool call).
 
+**Review-gate polling is ONE tool call:** `git push && ~/.claude/scripts/devin-review.sh gate <PR-url>`. The script sleeps internally. Never `sleep 90 && …status`, never `for i in $(seq …); do gh pr checks …`, never `devin-review.sh status` in a loop — each is a full-context turn spent reading "pending", and it's where lanes get killed from the cockpit. Timed out (exit 4) → call `gate` once more, then `lane-pause.sh review`.
+
 ## Tool Routing: Skills First, MCP Fallback
 
 Domain covered by a local skill or script → use it FIRST; MCP is the fallback, never the first reach. Mapping: Axiom → `axiom-api` skill, LangSmith → `langsmith-api` / `/langsmith`, Linear → `linear` skill / `linear-ticket.py`, Slack reads/cleanup → `cartage-bots`, Wilson store → `wilson-memories`, meetings → `granola`/`pocket`, paging → `rootly`, Sentry → `sentry-api`, PostHog → `posthog-api`, Trigger.dev → `trigger-api`, Attio → `attio-api`, Firestore dev/prod → `prod-firestore`, gcloud → CLI direct via Bash (no MCP). Skills carry the auth quirks, response-shape handling, and cost discipline the raw MCP tools lack; MCP schemas also bloat context via ToolSearch. Only fall back to `mcp__*` when the skill path genuinely fails (missing capability, hard auth error) — and say so when you do. No skill covers the domain (Notion, Playwright) → MCP fine directly.
 
 ## Shell Gotchas (zsh)
 
+**Checks run bare, foreground.** `bun type-check`, `bun test`, any verification: never `| tail`, never `| head`, never `run_in_background`. Output too big → `cmd > out.log 2>&1`, then grep/tail the *file* in a separate call. The `tail-pipe-guard` hook denies the pipe — a denial means fix the shape, not retry it. (Why: on this Mac a backgrounded pipe's write end stays open after the command exits, so `tail` blocks forever at zero output; `ps` shows only `tail` alive. That's the pipe, not a hung DB/network call.)
+
+**zsh reserves `status` (read-only).** Never name a variable `status` — `(eval): read-only variable: status`. Use `state`, `verdict`, `checkStatus`.
+
 No `timeout`/`gtimeout` on this Mac (BSD userland, coreutils not installed) — `timeout N cmd` fails exit 127. Bound long commands with a `for`/`until` loop + `sleep`, the Bash tool's `timeout` param, or `run_in_background`.
 
 The Bash tool runs zsh. zsh `echo` expands backslash escapes — `echo "$json" | jq` corrupts any JSON whose strings contain `\n`/`\t`/`\uXXXX` (PR comment bodies always do) → `jq: parse error: control characters from U+0000 through U+001F must be escaped`. Never round-trip JSON through `echo`. Use `gh ... --jq '...'` directly, pipe without a variable (`gh ... | jq`), or `printf '%s' "$json" | jq`.
 
 **Never invoke a CLI that may prompt interactively (inquirer, npm init, `bun run script` with an unfilled `confirm`/`input` param, etc.) without passing every required value via flag.** There is no real TTY in this environment — a missing flag that triggers a prompt hangs the process forever reading from `/dev/null` (or from a piped `printf`, which most prompt libraries also can't read as keystrokes). It looks identical to a slow command: `run_in_background` reports it as still running, and it never produces the tool's actual output. Tell: the tool's setup/boot log printed fine, then stopped mid-render on a prompt line, and no completion message ever follows. Fix: pass every param the CLI could ask for, even boolean ones — for a Commander `Option` defined as a bare flag (no `<value>`) there is usually no `--no-x` negation unless the tool explicitly registered one, so a flag that must be `false` may be impossible to set via CLI at all; in that case skip the CLI layer entirely and call the underlying function directly in a small one-off script (reproduce whatever env/secrets bootstrap the CLI normally does first).
-
-**Never pipe a backgrounded/long-running command into `tail -N`** (`cmd 2>&1 | tail -N`, via `run_in_background` or auto-backgrounded on timeout). `tail -N` on a pipe buffers everything until EOF before printing; if the background wrapper leaves the pipe's write end open after the real command exits (observed on this Mac), EOF never comes and `tail` hangs forever at zero output — even though the real command already finished. Tell: `ps`/`lsof` on the stuck PID shows the wrapped command already gone, only `tail` left alive blocked on read, no network connections open — that's the pipe stuck, not a hung DB/network/env-var call, don't diagnose it as one. Fix: background the bare command with no trailing pipe (the tool already writes full stdout/stderr to its own output file — read that via `Read`/`TaskOutput`, `offset`/`limit` for a tail-like view); need real truncation → redirect to a file first (`cmd > out.log 2>&1 &`) and `tail -N out.log` as a separate follow-up call against the file, never against a live pipe.
 
 ## Session Start
 
@@ -98,6 +110,7 @@ Brief = Linear issue description: context + acceptance criteria. Re-read every l
 - Auto-commit per chunk. Separate: schema, backend, frontend.
 - Never push unless asked. PR title <70 chars. Squash merge.
 - Worktree default for non-trivial. Cleanup only on confirmed merge.
+- **Sibling lanes + main moves → `/rebase-all` from the cockpit.** Never relay "main moved to <sha>" into lane panes by hand, never have each lane poll main and rebase itself; one cockpit pass fans the rebases and force-pushes clean replays.
 - **Open PR via `/ship`, never raw `gh pr create`.** `/ship` §2.5 creates the PR's Linear team-reference ticket (composed from real commits+diff) via `scripts/linear-ticket.py create`. Hand-rolling the PR skips the ticket and the team loses the reference.
 
 ## Secrets / Env
