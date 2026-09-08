@@ -45,6 +45,10 @@ No `timeout`/`gtimeout` on this Mac (BSD userland, coreutils not installed) — 
 
 The Bash tool runs zsh. zsh `echo` expands backslash escapes — `echo "$json" | jq` corrupts any JSON whose strings contain `\n`/`\t`/`\uXXXX` (PR comment bodies always do) → `jq: parse error: control characters from U+0000 through U+001F must be escaped`. Never round-trip JSON through `echo`. Use `gh ... --jq '...'` directly, pipe without a variable (`gh ... | jq`), or `printf '%s' "$json" | jq`.
 
+**Never invoke a CLI that may prompt interactively (inquirer, npm init, `bun run script` with an unfilled `confirm`/`input` param, etc.) without passing every required value via flag.** There is no real TTY in this environment — a missing flag that triggers a prompt hangs the process forever reading from `/dev/null` (or from a piped `printf`, which most prompt libraries also can't read as keystrokes). It looks identical to a slow command: `run_in_background` reports it as still running, and it never produces the tool's actual output. Tell: the tool's setup/boot log printed fine, then stopped mid-render on a prompt line, and no completion message ever follows. Fix: pass every param the CLI could ask for, even boolean ones — for a Commander `Option` defined as a bare flag (no `<value>`) there is usually no `--no-x` negation unless the tool explicitly registered one, so a flag that must be `false` may be impossible to set via CLI at all; in that case skip the CLI layer entirely and call the underlying function directly in a small one-off script (reproduce whatever env/secrets bootstrap the CLI normally does first).
+
+**Never pipe a backgrounded/long-running command into `tail -N`** (`cmd 2>&1 | tail -N`, via `run_in_background` or auto-backgrounded on timeout). `tail -N` on a pipe buffers everything until EOF before printing; if the background wrapper leaves the pipe's write end open after the real command exits (observed on this Mac), EOF never comes and `tail` hangs forever at zero output — even though the real command already finished. Tell: `ps`/`lsof` on the stuck PID shows the wrapped command already gone, only `tail` left alive blocked on read, no network connections open — that's the pipe stuck, not a hung DB/network/env-var call, don't diagnose it as one. Fix: background the bare command with no trailing pipe (the tool already writes full stdout/stderr to its own output file — read that via `Read`/`TaskOutput`, `offset`/`limit` for a tail-like view); need real truncation → redirect to a file first (`cmd > out.log 2>&1 &`) and `tail -N out.log` as a separate follow-up call against the file, never against a live pipe.
+
 ## Session Start
 
 1. Read project CLAUDE.md. None → scan repo, create.
@@ -53,13 +57,13 @@ The Bash tool runs zsh. zsh `echo` expands backslash escapes — `echo "$json" |
 
 ## Code Quality
 
+- **NO comments — code explains itself.** Never introduce a comment; never keep one you can delete. Tempted to comment → rename/extract until the code says it (per Bob Martin, Clean Code ch.4: every comment is a failure to express intent in code). Only exceptions: license headers, tooling pragmas (`eslint-disable`, `ts-expect-error`, `@ts-ignore`), public-API doc blocks (JSDoc/docstring) the toolchain consumes, and warning-of-consequences a name can't carry (irreversible op, ordering constraint). Any surviving comment explains why, never what. Touching a file → delete comments that restate readable code.
 - Guard clauses, early return. Max 2 levels deep.
 - One task/fn. Parses+computes+formats → split.
 - Specific names: `fetchUserProfile` not `getData`. No `tmp`/`data`/`result`.
 - Bools as assertions: `isValid`, `hasChildren`. Ranges: `first`/`last`.
 - Complex conditions → named bools.
 - `const` default. Declare near first use.
-- No code comments — per Bob Martin (Clean Code ch.4): every comment is a failure to express intent in code. Tempted to comment → rename/extract until the code says it. Exceptions (his list, adapted): license headers, tooling pragmas (`eslint-disable`, `ts-expect-error`, `@ts-ignore`), public-API doc blocks (JSDoc/docstring) where the toolchain consumes them, and warning-of-consequences a name can't carry (irreversible op, ordering constraint). Any surviving comment explains why, never what. Touching a file → delete comments that restate readable code.
 - Composition > inheritance. Narrow interfaces.
 
 ## Design Principles
@@ -89,6 +93,7 @@ Brief = Linear issue description: context + acceptance criteria. Re-read every l
 
 ## Git Workflow
 
+- **Local `main` is read-only — never commit to it, in any cartage repo.** Both ai-employees and cartage-agent gate `main` behind required status checks (verified 2026-09-01), so a direct push is always rejected: a local-main commit strands as unpushable noise lanes never see (they branch off `origin/main`) and wedges `wt` fast-forwards. Everything lands branch → PR — docs included (`CONTEXT.md` pins ride `/scope` §7's throwaway-worktree docs-PR, exempt from `/ship`'s ticket). Local main found ahead of origin → lift the commits onto a branch, PR + merge, then `git reset --hard origin/main`.
 - Branches: `feature/`, `fix/`, `refactor/`. Never `user/`. Main deployable.
 - Auto-commit per chunk. Separate: schema, backend, frontend.
 - Never push unless asked. PR title <70 chars. Squash merge.

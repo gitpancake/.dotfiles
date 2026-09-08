@@ -31,6 +31,11 @@ scoped tests run as one plain foreground Bash command. Never `run_in_background`
 (observed on this machine), and the spawn/poll scaffolding costs more wall-clock than the
 check itself. Output too big → redirect to a file, then grep the file.
 
+Enforced mechanically since 2026-09-01: lanes run with background Bash tasks disabled and
+a 10-minute foreground timeout (`claude-lane` env), and the `tail-pipe-guard` PreToolUse
+hook denies check commands piped into tail/head or backgrounded. A denied call means fix
+the shape, not retry it.
+
 Never kill build tools by a pattern match — one lane's `pkill -f "tsc --noEmit"` reaped its
 siblings' in-flight checks on 2026-09-01 and forced their re-runs; kill only PIDs you spawned.
 
