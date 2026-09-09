@@ -57,14 +57,28 @@ if [[ "$*" == *type-check* || "$*" == *tsc* ]]; then
   fi
 fi
 
-# `timeout` GNU vs macOS: prefer gtimeout (coreutils) when available,
-# fall back to /usr/bin/timeout (Sequoia ships it), then bare run. No exec —
+# 5-minute wall-clock cap, dependency-free: this Mac has neither gtimeout
+# (no coreutils) nor /usr/bin/timeout, so a bash watchdog does it. No exec —
 # the shim must outlive bun to release the typecheck lock via its EXIT trap.
-if command -v gtimeout >/dev/null 2>&1; then
-  gtimeout --kill-after=10 300 "$real_bun" "$@"
-elif command -v timeout >/dev/null 2>&1; then
-  timeout --kill-after=10 300 "$real_bun" "$@"
+"$real_bun" "$@" &
+bun_pid=$!
+if [[ -n "$lock" ]]; then
+  trap 'kill -TERM "$bun_pid" 2>/dev/null; rm -rf "$lock"' EXIT INT TERM
 else
-  "$real_bun" "$@"
+  trap 'kill -TERM "$bun_pid" 2>/dev/null' INT TERM
 fi
-exit $?
+(
+  sleep 300
+  if kill -0 "$bun_pid" 2>/dev/null; then
+    echo "lane-bin/bun: 5-minute cap hit — killing bun (pid $bun_pid)" >&2
+    kill -TERM "$bun_pid" 2>/dev/null
+    sleep 10
+    kill -KILL "$bun_pid" 2>/dev/null
+  fi
+) &
+watchdog_pid=$!
+wait "$bun_pid"
+rc=$?
+kill "$watchdog_pid" 2>/dev/null
+pkill -P "$watchdog_pid" 2>/dev/null
+exit $rc

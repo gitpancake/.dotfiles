@@ -68,8 +68,10 @@
       "Bash(git push origin main:*)",
       "Bash(git push origin master:*)",
       "Bash(git reset --hard:*)",
-      "Bash(gh pr merge:*)",
       "Bash(bun run src/server/scripts/deleteDocsByOrgId*)"
+    ],
+    "ask": [
+      "Bash(gh pr merge:*)"
     ],
     "defaultMode": "auto"
   },
@@ -150,6 +152,10 @@
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/prod-db-guard.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/tail-pipe-guard.sh"
           }
         ]
       }

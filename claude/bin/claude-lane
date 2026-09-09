@@ -12,6 +12,11 @@
 #      posthog, figma, trigger, axiom) cost ~5 node procs * 50–100MB per
 #      lane; HTTP ones (linear, sentry) showed 0 lane calls in 7d and Linear
 #      is doctrine-banned in lanes (write-only via linear-ticket.py).
+#   4. No background Bash tasks + 10min foreground timeout. A per-call
+#      `timeout` doesn't keep a command foreground — the timeout firing is
+#      what auto-backgrounds it, and the backgrounded pipe is the tail-hang
+#      recipe (lane-protocol.md:30). Checks fit in 10min; past that the
+#      command fails loud instead of backgrounding silently.
 #
 # Set as $WT_CLAUDE in zshenv so `wt` picks it up.
 
@@ -20,6 +25,8 @@ set -u
 ulimit -t 1800 2>/dev/null || true
 
 export PATH="$HOME/.claude/lane-bin:$PATH"
+export CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
+export BASH_DEFAULT_TIMEOUT_MS=600000
 
 # NOTE: --mcp-config is variadic (`<configs...>`) — any positional that follows
 # gets eaten as another MCP config path. Keep it BEFORE a non-variadic flag
