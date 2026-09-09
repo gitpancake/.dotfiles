@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
-"""Thin Slack Web API client for the Cartage employee bots (Chuck, Kelly, Jerry).
+"""Thin Slack Web API client for the Cartage employee bots (Chuck, Kelly, Jerry, David).
 
 Mirrors rootly.py / pocket.py: no MCP, no per-session tool-schema tax. Each bot
 acts with its OWN xoxb- token, so "read from #channel" or "delete some of Chuck's
 messages" maps to one bot's identity.
 
-Auth: for bot NAME in {chuck,kelly,jerry}, resolves <NAME>_SLACK_BOT_TOKEN from
+Auth: for bot NAME in {chuck,kelly,jerry,david}, resolves <NAME>_SLACK_BOT_TOKEN from
 env, then ~/.claude/.env, then ~/.pi/.env. Bearer auth. Never echoes the token.
 
 Bots (Cartage workspace, team T05KE9YT8HG):
   chuck  -> chuck_noland  U0B9CPT4BAN
   kelly  -> kelly_frears  U0B1MMDTC87
   jerry  -> jerry         U0B8AM7GB1S
+  david  -> david         U0BTGGWQ1RC
 
 Key constraints:
   - conversations.history needs the bot to be a MEMBER of the channel
@@ -34,6 +35,7 @@ BOTS = {
     "chuck": {"env": "CHUCK_SLACK_BOT_TOKEN", "user_id": "U0B9CPT4BAN", "user": "chuck_noland"},
     "kelly": {"env": "KELLY_SLACK_BOT_TOKEN", "user_id": "U0B1MMDTC87", "user": "kelly_frears"},
     "jerry": {"env": "JERRY_SLACK_BOT_TOKEN", "user_id": "U0B8AM7GB1S", "user": "jerry"},
+    "david": {"env": "DAVID_SLACK_BOT_TOKEN", "user_id": "U0BTGGWQ1RC", "user": "david"},
 }
 
 
@@ -185,7 +187,7 @@ def cmd_raw(a):
 
 
 def main():
-    p = argparse.ArgumentParser(description="Cartage employee-bot Slack client (chuck/kelly/jerry)")
+    p = argparse.ArgumentParser(description="Cartage employee-bot Slack client (chuck/kelly/jerry/david)")
     p.add_argument("bot", choices=sorted(BOTS), help="which bot's identity to act as")
     sub = p.add_subparsers(dest="cmd", required=True)
 
