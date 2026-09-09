@@ -183,8 +183,13 @@ clumsy, not precise.
 - `## Limitations` — out of scope, each item with its why (the why kills scope creep and
   relitigating).
 - `## Proof` — defined now, before work starts. **Manual Tests**: concrete steps + the
-  evidence each produces. **Automated Tests**: the tests the lane will add. If you can't
-  name what would prove it works, the AC aren't done — go back to §1.
+  evidence each produces. A step that needs the running app runs on the hosted dev env
+  (`/host-dev`, per-branch VM at a stable URL) — write "on the dev env", never "local":
+  a lane reads "local" as an order to boot a dev server on the cockpit machine. The lane
+  produces the screenshots itself (repo `docs/testing/playwright.md`), so name the screen
+  and the state each one must show.
+  **Automated Tests**: the tests the lane will add. If you can't name what would prove
+  it works, the AC aren't done — go back to §1.
 - `## Signatures` — `@product` approves AC/Limitations/Proof, `@owner` confirms manual
   tests local+prod, `@eng` final. Real names when known, placeholder roles otherwise.
 - `## Reversibility` — only when §2e produced one. (/scope-only.)

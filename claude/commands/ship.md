@@ -24,7 +24,7 @@ Run in parallel and cache outputs — §2.5 + §3 reuse, never re-run:
 
 **Lane gate**: in a `wt` lane (cwd under `.claude/worktrees/`), /ship requires the
 pre-ship self-review from `~/.claude/docs/lane-protocol.md` §Pre-ship self-review to have
-run: hygiene pre-check done, ≤3 reviewer rounds, only `in-scope-blocking` findings fixed
+run: hygiene pre-check done, ≤3 `/code-review` rounds, only `in-scope-blocking` findings fixed
 (each with a failing test first), the rest logged, fix commits squashed into their slice.
 Not run yet → run it now, then continue. `.claude/preship-rounds` > 3 → stop and report;
 that is a protocol breach, not a reason to keep fixing. Cockpit sessions skip this.

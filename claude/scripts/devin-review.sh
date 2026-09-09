@@ -14,7 +14,8 @@
 #                                                    0 = arbiter success on head sha
 #                                                    4 = timed out still pending/running
 #                                                    5 = arbiter failure/error
-#                                                    6 = needs-human-review (label or verdict)
+#                                                    6 = arbiter needs-human verdict on head sha
+#                                                        (the label is sticky and is never the signal)
 # Lanes: use `gate` after every push instead of hand-rolled status/sleep loops —
 # each hand-rolled poll is a full-context model turn spent reading "pending".
 # Output: raw JSON (trigger/status/wait) or summary JSON (gate).
@@ -109,13 +110,15 @@ devin_gate() {
     arb_state=${arb_line%%$'\t'*}
     labels=$(gh pr view "$pr_url" --json labels --jq '[.labels[].name] | join(",")')
 
-    case ",$labels," in *,needs-human-review,*)
-      emit_summary; echo "devin-review.sh: needs-human-review label — stop and report" >&2; return 6 ;;
-    esac
     if [[ "$arb_state" == "success" || "$arb_state" == "failure" || "$arb_state" == "error" ]]; then
       case "$devin_st" in completed|errored|cancelled|"")
         emit_summary
-        [[ "$arb_state" == "success" ]] && return 0 || return 5 ;;
+        [[ "$arb_state" == "success" ]] && return 0
+        case "${arb_line#*$'\t'}" in needs-human*)
+          echo "devin-review.sh: arbiter needs-human on $head_sha — address every reviewer finding, push, gate once more, then report" >&2
+          return 6 ;;
+        esac
+        return 5 ;;
       esac
     fi
     (( i < attempts )) && sleep "$interval"
