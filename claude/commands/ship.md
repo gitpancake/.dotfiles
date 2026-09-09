@@ -22,10 +22,12 @@ Run in parallel and cache outputs — §2.5 + §3 reuse, never re-run:
 - On `main`/`master` → refuse.
 - No commits ahead AND clean AND no PR → ask what was meant.
 
-**Lane gate**: in a `wt` lane (cwd under `.claude/worktrees/`), /ship requires a clean
-pre-ship self-review — the fresh-context Opus reviewer pass from
-`~/.claude/docs/lane-protocol.md` §Pre-ship self-review. Not run yet on the current work →
-run it now (fix + re-pass until clean), then continue. Cockpit sessions skip this.
+**Lane gate**: in a `wt` lane (cwd under `.claude/worktrees/`), /ship requires the
+pre-ship self-review from `~/.claude/docs/lane-protocol.md` §Pre-ship self-review to have
+run: hygiene pre-check done, ≤3 reviewer rounds, only `in-scope-blocking` findings fixed
+(each with a failing test first), the rest logged, fix commits squashed into their slice.
+Not run yet → run it now, then continue. `.claude/preship-rounds` > 3 → stop and report;
+that is a protocol breach, not a reason to keep fixing. Cockpit sessions skip this.
 
 ## 1. Commit (only if dirty)
 
@@ -34,6 +36,10 @@ when "why" isn't obvious from the diff. Stage explicitly — never `git add -A` 
 → ask. Never bypass hooks. Pre-commit fails → fix root cause, new commit, no `--amend`.
 
 Clean + commits ahead → skip to §2.
+
+Branch has commits titled `Fix pre-ship review findings round N` (or any fix-of-a-fix
+aimed at an unpushed slice) → squash them into the slice they correct first
+(lane-protocol §Pre-ship step 5). Never squash commits that are already on the remote.
 
 ## 2. Push
 
@@ -87,6 +93,29 @@ sections for ad-hoc headings (learned on PR #6490). Org-specific section notes:
 non-trivial diffs). Scale depth to the diff — a platform/integration PR earns full
 test/manual-steps detail; a small fix doesn't. Derive bullets from the **cached**
 `LOG_LINES` + `DIFF_STAT` from §0 — don't re-run git. Abstract, don't restate.
+
+**Prose style: Write Simply** (paulgraham.com/simply.html) — same doctrine as Linear
+content. Ordinary words, short sentences. The reviewer's energy should go to your
+reasoning, not your prose. Keep exact technical names verbatim (paths, flags, table and
+column names). Write it long, then cut: a first draft is mostly redundancy, and length
+reads as thoroughness only to the person who wrote it.
+
+**Cut repetition, never evidence.** Template headings, the counts a persisted-schema
+change owes, and pasted output proving a manual test all survive any trim — evidence does
+not compress into a claim. What goes: scaffolding, restatement of the diff, and the same
+point made three times.
+
+**Lead with the decision the reviewer must make, not with what you built.** State the
+change's downside in full and in plain words, at the top. Shortening is never a reason to
+soften the paragraph a reviewer most needs, and never write to talk an automated gate into
+passing — a gate exists because someone should look.
+
+**Closing magic word (required whenever `$TICKET_ID` is non-empty):** the body's LAST line
+must be `Fixes <TICKET_ID>` (bare line, outside any code fence, after the Claude Code
+footer if present). A `[<ID>]` title prefix only *links* the ticket in Linear — it never
+closes it on merge; branch slugs carry no id (slug rule), so this line is the ONLY thing
+that flips the ticket Done when the PR merges. Applies on both body paths (repo template
+and composed). Learned 2026-08-27: every prior /ship ticket stayed In Review forever.
 
 Then `gh pr create`:
 - `--title`: `$TICKET_ID` non-empty → `[<TICKET_ID>] <desc>` (≤70 chars total).
