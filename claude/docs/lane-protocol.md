@@ -51,6 +51,30 @@ goes to a FILE first (`> /tmp/<name>` or the scratchpad), then grep/head the fil
 cat a store snapshot, fingerprint sweep, JSON dump, prod query result, or full test log
 into context. `Read` big files with `offset`/`limit` after a grep, never whole.
 
+## Subagents in a lane: never `fork`
+
+A `fork` inherits the lane's entire context. On the AOA-4554 lane (2026-09-10) nine
+parallel forks each started at 259K and ran to 484K–672K; one hit the 200-turn cap
+mid-`git rebase` on the shared worktree, one ran the PR review loop the parent already
+owned, and a nested fork was refused so that fork spawned 20 background agents instead.
+Dispatch `general-purpose` / `Explore` / a layer specialist with a WRITTEN prompt that
+carries the values it needs — never `subagent_type: "fork"`, never a `Workflow`. Parallel
+agents on one worktree must own disjoint files; a shared file gets one agent, in sequence.
+`WT_ULTRACODE` is off by default for the same reason: its "run a workflow for every task"
+reminder is what licensed the fan-out, and its xhigh thinking is retained across the
+lane's single mega-turn (~35% of context growth in the 3-day audit).
+
+An Agent result reading `[Request interrupted by user for tool use]` or `The user doesn't
+want to proceed with this tool use` means the subagent was KILLED, not that it declined:
+Esc in the lane pane ends every in-flight subagent at once, and a subagent that calls
+`TaskStop` on itself gets the same text. Its edits are already on disk in the shared
+worktree with no summary. Run `git status` + `git diff --stat`, read what landed, and
+continue from there — never re-dispatch the same work blind, and never `TaskStop` your own
+id. `Agent terminated early due to an API error … session limit / weekly limit` is a 429:
+`lane-pause.sh review 'rate limited until <reset time>'` and stop; retrying burns the
+budget the limit exists to protect. A `NOTE: this agent stopped at its 200-turn limit`
+result is PARTIAL — the task was too big for one agent; split it, do not resume it.
+
 ## Manual testing: the lane produces the evidence
 
 The arbiter blocks any user-facing change without dev screenshots, and the lane makes them
@@ -260,5 +284,9 @@ Bash tool runs outside tmux, where an untargeted command resolves to the *user's
 window — `tmux rename-window "x"` renames the window they are sitting in. Address windows
 by name, never by index: closing a window renumbers the rest, so a stale index can land on
 a live lane.
+
+Never send Esc, Ctrl-C, or a keystroke into a lane pane while the lane is mid-turn: Esc
+kills every in-flight subagent and hands the lane a bare `[Request interrupted…]` result
+in place of each one's summary. Read the pane; if the lane must stop, `lane-pause.sh` it.
 
 Slice protocol + parallel gotchas: `~/.dotfiles/CLAUDE.md`.
