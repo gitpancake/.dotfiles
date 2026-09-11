@@ -47,13 +47,15 @@ continue with the user's adjustments alone.
 ## 3. Codebase exploration (only if structural)
 
 Run `/scope` §2's exploration pass (mirror search, surface area ≤8 files, mechanism honesty,
-vendor docs via context7); deeper stress-testing → the `grill-with-docs` skill. Never invent
+vendor docs via context7) and its §2e design pass — two sketches, pattern-or-none with the
+force named, the maintainability gate; deeper stress-testing → the `grill-with-docs` skill. Never invent
 paths/symbols/env vars — "TBD — needs investigation" beats a guess.
 
 ## 4. Compose the refined brief
 
 Rewrite the `## Context` and `## Acceptance criteria` sections of the description. If
-structural, add or update a `## Surface area` section (Mirror / Files to start in / Gotchas).
+structural, add or update `## Surface area` (Mirror / Files to start in / Gotchas) and
+`## Design` (shape, pattern + force, rejected alternative, gate answers — per `/scope` §4).
 Apply the org's risk callouts where they apply — `~/.claude/org/<org>/preamble.md`.
 
 ## 5. Show the diff. Stop.

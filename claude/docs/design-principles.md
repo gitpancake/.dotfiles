@@ -55,6 +55,57 @@ Reference for tags cited across slash commands / agents / skills. Sources: **POS
 - **Names should be precise + consistent** (POSD §14). Generic name = red flag. `fetchUserProfile` not `getData`; `delayMs` not `delay`.
 - **Consistency** (POSD §17). Similar things done similar ways. Reading one place predicts another. Don't change convention without reason.
 
+## Design Patterns
+
+Source: **GoF** = the Gang of Four catalog as written up at refactoring.guru/design-patterns/catalog. Tag form: `GoF:<Pattern>`. Name the pattern only by its **force** — the thing that varies, arrives, or must be hidden. No force → no pattern → plain function.
+
+**A pattern must pay for itself.** It earns its place when it removes a named smell at ≥2 sites or gives the next variant a home that needs no edit to the existing ones. "Could use a pattern" is decoration. A pattern the reader has to look up loses to code they can read. This is a TypeScript codebase: most GoF class diagrams collapse to a function type, a discriminated union, or a record keyed by variant — reach for that shape first.
+
+### Creational
+
+- **Factory Method** — construction varies by kind, callers must not know which. Shape: `create<Thing>({ kind, … })` returning the interface; a `Record<Kind, Ctor>` beats a subclass tree. Force: ≥2 kinds today, not "someday".
+- **Abstract Factory** — a *family* of things must match (carrier client + rate parser + label renderer). Shape: one object with the family's fns. Rare; one mismatched family is the signal.
+- **Builder** — construction has stages with ordering rules or many optional parts. Shape: a chained builder or staged fns. Force: telescoping params that an object param (house rule) can't fix because order matters.
+- **Prototype** — new instance from an existing one. Shape: spread / `structuredClone`; never a `clone()` class method.
+- **Singleton** — one instance, global access. Shape: a module-scope `const`. Never a class with `getInstance`; hidden global state is the smell this pattern usually *causes*.
+
+### Structural
+
+- **Adapter** — an interface we don't own must fit one we do (`freightProvider/` is the standing example). Shape: one fn or object per vendor mapping their shape to ours. Force: the foreign shape is fixed.
+- **Bridge** — two axes vary independently (document type × render target). Shape: abstraction holds an implementation interface. Force: N×M classes otherwise.
+- **Composite** — tree of parts and wholes handled uniformly (nested address-book groups). Shape: recursive union type + one walk fn.
+- **Decorator** — add behavior around an unchanged core (retry, logging, caching around a service call). Shape: `withRetry(fn)` higher-order fn. Force: the core must not learn about the wrapper.
+- **Facade** — one call hides a subsystem's choreography. Shape: a workflow. This is what `Router → Workflow → Service` already is; a new facade over a workflow is a pass-through (POSD §7).
+- **Flyweight** — many instances share heavy intrinsic state. Rare here; measure first (POSD §20).
+- **Proxy** — control access to a thing: lazy, cached, guarded. Shape: same interface, wrapping fn. Distinguish from Decorator by intent: Proxy gates, Decorator adds.
+
+### Behavioral
+
+- **Chain of Responsibility** — an ordered set of handlers, first match wins or each may pass (referee rules, ingress guardrails). Shape: array of `(input) => Verdict | undefined`, one loop.
+- **Command** — an action reified as data: queued, logged, undone, replayed (async tasks, activityLog entries). Shape: a discriminated union + one dispatcher.
+- **Iterator** — sequence traversal decoupled from storage. Shape: generator / `AsyncIterable`. Force: paging, streaming.
+- **Mediator** — N components talk through one hub instead of N². Force: a web of cross-references. A workflow is usually the mediator already.
+- **Memento** — snapshot + restore without exposing internals (checkpoints, handoffs). Shape: immutable snapshot value; the owner alone reads it back.
+- **Observer** — one event, many listeners that the emitter must not know (webhook fan-out, deadline events). Shape: typed emitter or a task per subscriber. Force: subscribers change without touching the emitter.
+- **State** — behavior differs by a lifecycle state that transitions (shipment status, task status). Shape: `Record<State, Handlers>` + one transition table. Force: the same `switch (state)` at ≥2 sites.
+- **Strategy** — one operation, interchangeable algorithms chosen at runtime (rate selection, dedupe policy). Shape: fn type + `Record<Kind, Strategy>`. Force: the same `if (kind === …)` ladder at ≥2 sites. One variant → a function, not a Strategy.
+- **Template Method** — fixed skeleton, variable steps. Prefer Strategy or composition: pass the steps in. Inheritance-based template = anti-pattern here (composition > inheritance).
+- **Visitor** — new operations over a closed set of node types. Shape: discriminated union + exhaustive `switch` with `satisfies never`. Force: the node set is closed and the operation set grows.
+
+### Smell → move
+
+Canonical refactoring.guru smell names; cite them in briefs, reviews, and audits.
+
+- **Switch on type** repeated across sites → Strategy / State / Visitor (which one: does the variant *do* something, *transition*, or get *operated on*?).
+- **Telescoping params / long parameter list** → object param (house rule); ordering rules → Builder.
+- **Shotgun surgery** (one change, many files) → a decision is leaking; hide it in one module (POSD §5).
+- **Divergent change** (one file, many reasons to change) → split by reason.
+- **Feature envy** → move the fn to the data it reads.
+- **Middle man** → inline the pass-through (POSD §7).
+- **Primitive obsession** → branded type or small value object; parse once at the boundary (Zod).
+- **Speculative generality** → delete the unused extension point; a pattern with one variant is this smell.
+- **Comments** → the code failed to say it; rename or extract until the comment is redundant, then delete it (POSD §13).
+
 ## Comments
 
 - **No code comments for what** (POSD §13). Names + structure carry intent. Keep only non-obvious *why* — hidden constraint, workaround, subtle invariant.

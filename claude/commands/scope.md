@@ -129,13 +129,45 @@ Env vars / secrets, external setup (vendor account, webhook, OAuth app), new inf
 task, endpoint, collection) — list as prerequisites, flag anything unconfirmed. Never invent
 paths, symbols, or env vars. "TBD — needs investigation" beats a guess.
 
-### 2e. Design it twice (POSD §11) — only for structural choices
+### 2e. Design pass (POSD §11 + GoF) — only for structural choices
 
-If the brief introduces a structural decision (new data model, new routing-key shape, new
-service boundary, vendor adapter, error-propagation strategy) — sketch ≥2 alternatives before
-writing the brief. Two bullets each: shape, cost, what it makes easy/hard. Pick one and say
-why. **Even when the answer feels obvious, force a second sketch.** First idea is rarely best
-for hard problems.
+A structural decision — new data model, routing-key shape, service boundary, vendor
+adapter, error-propagation strategy, a second variant of something that exists once — is
+designed here, not in the lane. The lane builds a shape; it does not choose one. The
+reference is `~/.claude/docs/design-principles.md` (§Design Patterns for the catalog).
+
+1. **Design it twice.** Sketch ≥2 alternatives before writing the brief. Two bullets each:
+   shape, cost, what it makes easy/hard. Pick one and say why. **Even when the answer
+   feels obvious, force a second sketch.** First idea is rarely best for hard problems.
+2. **Name the pattern, or name "none".** For each alternative, the catalog pattern it is
+   (`GoF:Strategy`, `GoF:Adapter`, …) and the **force** that earns it: an axis that varies
+   at ≥2 sites (Strategy / State), a construction with ordering rules (Builder), an
+   interface we don't own (Adapter), a behavior layered on an unchanged core (Decorator),
+   one emitter with listeners it must not know (Observer), a subsystem behind one call
+   (Facade — usually the workflow that already exists). No force → no pattern → a plain
+   function wins. A pattern the reader has to look up loses to code they can read. Most
+   GoF shapes collapse in TypeScript to a function type, a discriminated union, or a
+   `Record<Kind, …>` — the brief names that concrete shape, not the diagram.
+3. **Maintainability gate** on the chosen shape. One line per item; the answers are the
+   `## Design` section. An item you can't answer is a hole in the design, not in the brief.
+   - **Reads without comments** (POSD §13 / §18). Every new module, fn, and type is named
+     so its intent is the name. A spot where you'd want a comment is a rename or an
+     extract, and the brief names it now. A comment is a failure of this gate, not a fix.
+   - **Layer** (repo `Router → Workflow → Service` architecture). Which layer owns the
+     logic, and what each hands the next. Business logic only in a workflow; a router or
+     service that computes is a finding waiting to happen.
+   - **Deep, not shallow** (POSD §4 / §5). The new surface's public interface in ≤3 lines,
+     and the decision it hides so callers stop repeating it. A wide interface over a thin
+     body is the wrong cut.
+   - **One canonical home** (PP §11). The knowledge this introduces — a mapping, a rule, a
+     format — lives in exactly one named place. Two places is a future drift bug.
+   - **Extension point.** Where the next variant goes without editing the existing ones.
+     No answer → the abstraction is wrong or premature; say which and pick the plain shape.
+   - **Test seam** (PP §48). The unit the automated test drives through its public surface,
+     and what it stubs at the edge. Needs a mock of an internal → the boundary is wrong.
+   - **Smell sweep.** Adjacent code already showing the smell this shape fixes — the same
+     `switch` on kind elsewhere, telescoping params, shotgun surgery across the mirror. In
+     scope → cite the refactoring by its catalog name. Out of scope → Limitations, with why.
 
 For reversibility (PP §14): if the chosen approach is hard to back out of (DB column we'd
 have to migrate off, vendor we'd have to swap, public type shape), add a `## Reversibility`
@@ -143,8 +175,9 @@ section. State: what locks us in, what would force a change, rough escape cost. 
 deserves an ADR (hard to reverse + surprising + a real trade-off), say so — `/grill-with-docs`
 will offer to write it.
 
-Routine choices (which existing helper to call, which existing table to extend) — skip §2e.
-Reserve for decisions that survive past the PR.
+Routine choices (which existing helper to call, which existing table to extend) — one line
+in `## Surface area`: `Shape: extends <helper>; no new abstraction.` Skip the rest of §2e.
+Reserve the pass for decisions that survive past the PR.
 
 Apply the org's risk callouts where they fit — `~/.claude/org/<org>/preamble.md`.
 
@@ -171,14 +204,19 @@ doesn't change what gets built. A sentence that needs rereading gets rewritten; 
 with nothing to say gets deleted, not padded. Fancy words that could be plain ones are
 clumsy, not precise.
 
-**Single issue** — the house template (global CLAUDE.md §Ticket Lifecycle) plus the two
+**Single issue** — the house template (global CLAUDE.md §Ticket Lifecycle) plus the three
 /scope-only sections, in order:
 
 - `## Requirement` — the user-facing outcome, 2–3 sentences.
 - `## Context` — why: the refined problem, mirror reference, decisions from the grill,
   gotchas quoted from project CLAUDE.md.
 - `## Surface area` — mirror / ≤8 starting files with one-line reasons / prerequisites +
-  unconfirmed mechanisms from §2d. (/scope-only.)
+  unconfirmed mechanisms from §2d. Routine shape → the one `Shape:` line. (/scope-only.)
+- `## Design` — only when §2e ran. The chosen shape as concrete TypeScript (the fn type,
+  the union, the `Record<Kind, …>`), its pattern name and the force that earns it, the
+  rejected alternative and what was worse about it, and the seven gate answers. Name the
+  modules and fns the lane will create, so the names are decided before the code. The
+  lane builds this shape; `/code-review` holds the diff to it. (/scope-only.)
 - `## Acceptance Criteria` — checkboxes, each a testable yes/no. Never "works correctly".
 - `## Limitations` — out of scope, each item with its why (the why kills scope creep and
   relitigating).
@@ -208,7 +246,9 @@ citations are not.
   into Context and Limitations — no extra sections. Exemplar: off-git `c9bdadb3cdfc`
   (ENGH-335..343).
 - Children carry the deep per-story detail (same section shape as a single issue), sized to
-  one context window each.
+  one context window each. A structural story carries its own `## Design`; a shape shared
+  by several stories is decided once in the project Context and each child cites it, so no
+  lane re-decides it.
 - **Sweep rule**: a brief whose work is "do X across N orgs / N files / N skills" with N > ~5
   is NOT a single ticket — it's an epic with children batched to one context window each
   (proof: ENGH-863 burned 15 lane sessions, ENGH-866 burned 8, both fleet-wide sweeps that
@@ -223,6 +263,9 @@ Draft fast, then make one cutting pass before rendering — this is where Write 
 actually happens. Per sentence: can a plain word replace a fancy one? Can it be shorter
 with nothing lost? Does it change what the lane builds? No → cut. Then check the other
 direction: could a lane pick this up without asking a question? Missing fact → add it.
+Then `## Design`: every pattern named points at its force and a site count; a pattern
+named because it is familiar gets cut and the shape becomes a function. Every new name
+in it is one a reader understands without a comment.
 
 Render the full draft(s) — title, team, description(s), and for an epic the story list +
 DAG. **Stop.** Wait for "go" or edits. Do not write yet.

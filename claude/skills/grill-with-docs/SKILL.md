@@ -11,7 +11,7 @@ Ask the questions one at a time, waiting for feedback on each question before co
 
 If a question can be answered by exploring the codebase, explore the codebase instead.
 
-For any structural decision (data model, layer boundary, vendor adapter, error-propagation strategy), apply **Design it twice** (POSD §11): sketch ≥2 alternatives before agreeing on one. Even when the answer feels obvious, force a second sketch — first instinct is rarely best for hard problems.
+For any structural decision (data model, layer boundary, vendor adapter, error-propagation strategy), apply **Design it twice** (POSD §11): sketch ≥2 alternatives before agreeing on one. Even when the answer feels obvious, force a second sketch — first instinct is rarely best for hard problems. Name each sketch's catalog pattern or "none" (`~/.claude/docs/design-principles.md` §Design Patterns) and the force that earns it; a pattern with no named force is decoration, and the plain-function sketch is the one to beat. Ask the maintainability questions the pattern raises — what the reader sees without a comment, which layer owns it, where the next variant goes, what the test drives.
 
 Abstractions outlast details (PP §53). When pinning a term, capture the *concept* in the glossary, not its current implementation. The implementation will move; the concept (Order, Customer, Shipment) is the durable surface.
 
