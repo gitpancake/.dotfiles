@@ -37,6 +37,18 @@ Then read every PNG back with the Read tool. A screenshot is evidence only when 
 
 `app.page` is the raw Playwright page for anything the helpers don't cover.
 
+Typing into an input: `app.topmost(selector)` returns the match that is actually on top at its own center. Every window's composer has an invisible twin under the desktop canvas; `.first()`/`.last()` can pick the twin, and then `click()` times out with "…canvas-cursor-default… intercepts pointer events". Wilson chat:
+
+```ts
+await app.open("wilson")
+const composer = await app.topmost('textarea[name="message"]')
+await composer.fill(`check ${marker}`)
+await composer.press("Enter")
+await app.waitForText(marker, { exact: false, timeoutMs: 60000 })
+```
+
+`waitForText` / `click` default to `exact: true`. Pass `exact: false` to match a substring such as a marker inside a longer message.
+
 ### Deep-link contract (`useWindowManager.ts` → `parseWindowsFromUrl`)
 
 `?w=<type>` opens a window; comma-separate for several. Params by type: `mail` → `threadId`; `document` → `docId`; `setup` → `section` or `cap`; `report` → `ref`; `template` → `kind=pdf&docType=…` or `kind=email&templateKey=…`; `explorer` → `path`. Types: setup, explorer, tables, reports, wilson, mail, messages, phone, tasks, warehouseScheduling (Docks), freightDashboard (Dashboard), cartagePay (Wallet), settings. The lib adds `restore=false` and drops the `desktop-store-<orgId>` localStorage entry before each `open`, so last session's windows never appear in a shot. Other localStorage keys (the active Wilson chat thread among them) survive.
@@ -61,4 +73,9 @@ gh pr edit <n> --body-file <file>
 - Several hidden `<input type=file>` exist at once; `app.page.locator("input[type=file]").last()` was the one a dialog used.
 - Every VM shares the dev Firestore. Anything the scenario creates is real for everyone on dev.
 - Raw `app.page.getBy…` locators need `.first()`: an invisible duplicate composer persists across window switches and trips strict mode. The lib's `waitForText` / `click` already do this.
+- A PR with a Postgres migration: the VM writes to the shared dev app DB, which only gets migrations on merge. Apply the branch's migration to dev first (README allows dev only): `APP_DATABASE_URL_UNPOOLED=<APP_DATABASE_URL_DEV from ~/.claude/.env.local with "-pooler." → "."> bun run pg:migrate`. Check `drizzle.__drizzle_migrations` against the journal first, so you apply only your own migration.
+- Backend-only proof (rows, logs) goes in the PR body as pasted `psql` output and VM log lines, next to the screenshots. VM logs: `gcloud compute ssh <vm> --zone us-central1-a --project agent-database-development --command 'sudo journalctl --since "-5min" --no-pager | grep …'` (service `cartage-nextjs`).
+- Webhook channels on dev: only Nylas (all dev VMs) and Slack (blocked until `dev-env slack-channel <id>`) fan out through Hookdeck. Teams, Google Chat and Twilio never reach a dev VM. Hookdeck's `requests/{id}/retry` will not target a connection created after the request arrived. To replay a real Nylas event, fetch its body from Hookdeck (`HOOKDECK_API_KEY` in dev Secret Manager), scp it to the VM, and POST it to `localhost:3000/api/webhooks/nylas`. Sign it there with `openssl dgst -sha256 -hmac "$NYLAS_WEBHOOK_SECRET"` read from the VM's `.env`, so the secret never leaves the VM. Sending the same payload twice is a genuine redelivery.
+- To prove "a failed write doesn't block the channel", make only that write fail (e.g. rename the table on dev, run the scenario, rename it back). A bad connection string also breaks every other model on the same client.
+- `gh pr edit --body-file` from a fetched body: Devin appends a badge after your last line, so re-append `Fixes <ID>` so it stays last.
 - `?w=mail&threadId=<id>` showed "No messages" for a thread whose `folder` and `isArchived` were both null (lane ENGH-1629, 2026-09-18). Open Mail and click into the thread until that is understood.

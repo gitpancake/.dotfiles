@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process"
 import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { homedir } from "node:os"
-import type { Browser, BrowserContext, Page } from "playwright"
+import type { Browser, BrowserContext, Locator, Page } from "playwright"
 
 export type WindowType =
     | "setup"
@@ -92,6 +92,8 @@ export interface CartageApp {
     open: (windowType: WindowType, params?: Record<string, string>) => Promise<void>
     waitForText: (text: string, opts?: { exact?: boolean; timeoutMs?: number }) => Promise<void>
     click: (text: string, opts?: { exact?: boolean; timeoutMs?: number }) => Promise<void>
+    /** The one match of `selector` that is actually on top at its own center — skips duplicates hidden under the desktop canvas. */
+    topmost: (selector: string, opts?: { timeoutMs?: number }) => Promise<Locator>
     shot: (name: string) => Promise<string>
     bodyText: () => Promise<string>
     close: () => Promise<void>
@@ -168,6 +170,23 @@ export async function openCartageApp(options: OpenCartageAppOptions): Promise<Ca
             .click({ timeout: opts.timeoutMs ?? WINDOW_OPEN_TIMEOUT_MS })
     }
 
+    async function topmost(selector: string, opts: { timeoutMs?: number } = {}): Promise<Locator> {
+        const deadline = Date.now() + (opts.timeoutMs ?? WINDOW_OPEN_TIMEOUT_MS)
+        while (Date.now() < deadline) {
+            const index = await page.evaluate(sel => {
+                return Array.from(document.querySelectorAll(sel)).findIndex(el => {
+                    const box = el.getBoundingClientRect()
+                    if (box.width === 0 || box.height === 0) return false
+                    const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)
+                    return !!hit && (hit === el || el.contains(hit))
+                })
+            }, selector)
+            if (index >= 0) return page.locator(selector).nth(index)
+            await page.waitForTimeout(250)
+        }
+        throw new Error(`topmost: no hit-testable match for ${selector}`)
+    }
+
     async function shot(name: string): Promise<string> {
         const path = join(options.outDir, name.endsWith(".png") ? name : `${name}.png`)
         await page.screenshot({ path })
@@ -182,7 +201,7 @@ export async function openCartageApp(options: OpenCartageAppOptions): Promise<Ca
         await browser.close()
     }
 
-    return { page, context, browser, baseUrl, open, waitForText, click, shot, bodyText, close }
+    return { page, context, browser, baseUrl, open, waitForText, click, topmost, shot, bodyText, close }
 }
 
 export function mintToken(options: { userId: string; orgId: string; cwd?: string }): string {
