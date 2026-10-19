@@ -63,8 +63,9 @@ Report: failing checks → classified cause → `file:line` → proposed fix (co
 # cockpit: write plan to ~/.claude/plans/PR-<PR_NUM>-ci-fix.md (cause + fix slices,
 # branch = headRefName), then:
 wt --branch <headRefName> PR-<PR_NUM>-ci-fix
-tmux rename-window "cifix:PR-<PR_NUM>"
 ```
+
+`wt` names the new window after the slug. Never follow it with an untargeted `tmux rename-window`: when `wt` refuses (lane cap, dirty tree) the rename lands on the window the user is sitting in.
 
 Then stop: "Fix lane spawned on #<PR_NUM>'s branch. This pane is done."
 

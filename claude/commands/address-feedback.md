@@ -84,8 +84,9 @@ Detect lane:
 
 ```bash
 wt --branch <headRefName> PR-<PR_NUM>-feedback
-tmux rename-window "feedback:PR-<PR_NUM>"
 ```
+
+`wt` names the new window after the slug. Never follow it with an untargeted `tmux rename-window`: when `wt` refuses (lane cap, dirty tree) the rename lands on the window the user is sitting in.
 
 (Spawn semantics — branch checkout, worktree reuse, plan auto-kickoff: `~/.claude/docs/lane-protocol.md` §Spawning.) Then stop:
 
