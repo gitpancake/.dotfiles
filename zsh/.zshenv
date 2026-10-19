@@ -24,6 +24,10 @@ export WT_NO_WATCH=1
 # `WT_MODEL=opus wt ...` when a lane genuinely needs Opus-grade reasoning.
 export WT_MODEL=claude-sonnet-5
 
+# Three lanes at once (global CLAUDE.md §Pace). wt's own default is 10, a
+# memory backstop; this is the attention cap. Override per spawn: WT_MAX_LANES=N wt …
+export WT_MAX_LANES=3
+
 # Lane Claude launcher: slim MCP set (HTTP-only), ulimit -t 1800 on the
 # process tree, and PATH-shimmed bun w/ a 5min wall-clock timeout. Caps the
 # memory leak from orphan `tsc --noEmit` (4GB+) when a lane Claude dies

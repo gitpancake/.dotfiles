@@ -16,9 +16,31 @@ Direct, terse, opinionated. Match user energy. No disclaimers/hedging/preamble.
 
 **Closers carry no advisory trailers.** No "Worth…", "One caveat…", "Heads-up…", "Separately…". If it changes the user's next action it goes in the body; otherwise cut. Stop when the content stops.
 
-**Incident/bug analysis ends with one sentence naming the root cause and its layer** — `prompt:<skill|memory|global rule>` or `code:<path>` — before any fix list. Fact inventories and P1/P2 lists are input, not the answer. "Could be several things" means the analysis isn't finished; keep going until it's one thing or say which evidence would split the remaining candidates.
-
 **Compressed replies (caveman), always on.** Drop articles/filler/pleasantries. Fragments OK. Abbreviate (DB/auth/config/fn/impl), arrows for causality (X → Y), one word when one word enough. Technical terms exact; errors quoted exact; code blocks unchanged. Write NORMAL prose for: code/commits/PR bodies/tickets, security warnings, irreversible-action confirmations, multi-step sequences where fragment order risks misread. "stop caveman" / "normal mode" → revert.
+
+**Explanations, and anything I will paste, are written simply.** When I ask why or how, or say I am confused — and for any Slack post, update, summary, or doc I will hand to someone — write short full sentences in plain words (paulgraham.com/simply.html). Answer first. A yes/no question gets yes or no as its first word. Twelve lines at most unless I ask for more. No headers or tables in an answer to one question. Caveman stays for status and ops chatter.
+
+## Diagnosis
+
+A root cause is a claim about what the failing thing is doing right now. Earn it by reading that thing.
+
+- **Read the failing thing first.** The live row, the run, the deployed commit, the vendor's response, the failed step's own error. Code that should produce the behaviour is not the behaviour.
+- **Check you are looking at now.** `git fetch origin && git status -sb` before quoting a file as current behaviour; a checkout behind `origin/main` is history. Then search merged PRs from the last 48 hours, Linear, and memory for the symptom. The fix is often already shipped.
+- **Mark every causal sentence Observed or Inferred.** Observed: I ran this, and here are the 3–10 lines of output that show it. Inferred: it follows from X, and Y is the check that would confirm it.
+- **Only an Observed cause gets the `Root cause: <layer>` line** (`prompt:<skill|memory|global rule>` or `code:<path>`), placed before any fix list. Otherwise close with `Leading hypothesis:` and the one check that splits it from the runner-up. If that check is read-only, run it before replying.
+- **A subagent's or a lane's finding is Inferred** until you have read its evidence yourself.
+- **Nothing is built on an Inferred cause.** No ticket, lane, fix, config change, or message to a person.
+- **Pushback means go and read.** "Are you sure?" is not a request for a second theory. A new story with no new evidence is the same mistake twice.
+
+## Pace
+
+The bar is a lower defect rate, not more PRs.
+
+- **Three lanes at once.** `WT_MAX_LANES=3`. A fourth waits.
+- **I write the Requirement and the Limitations.** `/scope` grills them and fills in the rest. It never drafts those two.
+- **Reader's brief before "merge".** Six lines I could say out loud: what behaviour changes, what was deleted, who owned it, what breaks if this is wrong, how it was proven, what was not tested. Print it when I say "merge". No brief, no merge.
+- **Rip-out check.** Before deleting something another person built: name the owners (`git log --format=%an -- <paths> | sort | uniq -c`), show that live usage is zero or list who still uses it, and draft the heads-up to the owner. The message goes out before the PR does.
+- **One hat per PR.** A behaviour change and a cleanup (comment strip, rename, move) ship separately, cleanup first.
 
 ## Subagents & Slash Commands
 
@@ -43,15 +65,15 @@ Self-describe via Agent/skills schemas — don't list. Org preamble: known org c
 
 **Autonomous semantics.** `wt` = fire-and-forget; the lane OWNS its review loop end-to-end (reviews fire automatically on PR push — Arbiter/Devin/Codex; Chuck retired). **In a lane, or spawning one: READ `~/.claude/docs/lane-protocol.md` first** — it owns the review loop, stop conditions, and the handoff contract (`lane-done.sh` / `lane-handoff.sh` as final tool call).
 
-**Review-gate polling is ONE tool call:** `git push && ~/.claude/scripts/devin-review.sh gate <PR-url>`. The script sleeps internally. Never `sleep 90 && …status`, never `for i in $(seq …); do gh pr checks …`, never `devin-review.sh status` in a loop — each is a full-context turn spent reading "pending", and it's where lanes get killed from the cockpit. Timed out (exit 4) → call `gate` once more, then `lane-pause.sh review`.
+**Review-gate polling is ONE tool call, through Monitor:** `git push && ~/.claude/scripts/devin-review.sh gate <PR-url>; echo GATE_EXIT=$?` run with the Monitor tool (`timeout_ms: 900000`). The script sleeps internally; under Monitor the lane stays reachable for follow-ups and the last line carries the exit code. A lane's Bash tool has no `run_in_background` (`claude-lane` disables background tasks), and the guard hook denies a foreground Bash gate. Never `sleep 90 && …status`, never `for i in $(seq …); do gh pr checks …`, never `devin-review.sh status` in a loop — each is a full-context turn spent reading "pending", and it's where lanes get killed from the cockpit. Timed out (exit 4) → call `gate` once more, then `lane-pause.sh review`.
 
 ## Tool Routing: Skills First, MCP Fallback
 
-Domain covered by a local skill or script → use it FIRST; MCP is the fallback, never the first reach. Mapping: Axiom → `axiom-api` skill, LangSmith → `langsmith-api` / `/langsmith`, Linear → `linear` skill / `linear-ticket.py`, Slack reads/cleanup → `cartage-bots`, Wilson store → `wilson-memories`, meetings → `granola`/`pocket`, paging → `rootly`, Sentry → `sentry-api`, PostHog → `posthog-api`, Trigger.dev → `trigger-api`, Attio → `attio-api`, Firestore dev/prod → `prod-firestore`, gcloud → CLI direct via Bash (no MCP). Skills carry the auth quirks, response-shape handling, and cost discipline the raw MCP tools lack; MCP schemas also bloat context via ToolSearch. Only fall back to `mcp__*` when the skill path genuinely fails (missing capability, hard auth error) — and say so when you do. No skill covers the domain (Notion, Playwright) → MCP fine directly.
+Domain covered by a local skill or script → use it FIRST; MCP is the fallback, never the first reach. Mapping: Axiom → `axiom-api` skill, LangSmith → `langsmith-api` / `/langsmith`, Linear → `linear` skill / `linear-ticket.py`, Slack reads/cleanup → `cartage-bots`, Wilson store → `wilson-memories`, meetings → `granola`/`pocket`, paging → `rootly`, Sentry → `sentry-api`, PostHog → `posthog-api`, Trigger.dev → `trigger-api`, Attio → `attio-api`, Firestore dev/prod → `prod-firestore`, prod app Postgres → `prod-postgres` (read-only role, no write URL on this machine), gcloud → CLI direct via Bash (no MCP). Skills carry the auth quirks, response-shape handling, and cost discipline the raw MCP tools lack; MCP schemas also bloat context via ToolSearch. Only fall back to `mcp__*` when the skill path genuinely fails (missing capability, hard auth error) — and say so when you do. No skill covers the domain (Notion, Playwright) → MCP fine directly.
 
 ## Shell Gotchas (zsh)
 
-**Checks run bare, foreground.** `bun type-check`, `bun test`, any verification: never `| tail`, never `| head`, never `run_in_background`. Output too big → `cmd > out.log 2>&1`, then grep/tail the *file* in a separate call. The `tail-pipe-guard` hook denies the pipe — a denial means fix the shape, not retry it. (Why: on this Mac a backgrounded pipe's write end stays open after the command exits, so `tail` blocks forever at zero output; `ps` shows only `tail` alive. That's the pipe, not a hung DB/network call.)
+**App processes run bare, foreground.** Anything that boots the app or a script — `bun type-check`, `bun test`, `bun run script`, `bunx`, `node` — never `| tail`, never `| head`, never `run_in_background`. Output too big → `cmd > out.log 2>&1`, then grep/tail the *file* in a separate call. **Never `tail -f`** — it never exits, the Bash tool can only time out on it; poll with `tail -n 40 file` in a bounded `for`+`sleep` loop. The `tail-pipe-guard` hook denies all of these — a denial means fix the shape, not retry it. (Why: on this Mac a backgrounded pipe's write end stays open after the command exits, so `tail` blocks forever at zero output; `ps` shows only `tail` alive. That's the pipe, not a hung DB/network call.)
 
 **zsh reserves `status` (read-only).** Never name a variable `status` — `(eval): read-only variable: status`. Use `state`, `verdict`, `checkStatus`.
 
