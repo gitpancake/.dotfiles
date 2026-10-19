@@ -123,7 +123,9 @@ Then `gh pr create`:
 - `--body` from shape above via heredoc.
 - `--base` usually `main`; for `*/slice-N` branches infer parent from `git log`, confirm
   if ambiguous.
-- `--draft` only if obviously incomplete (TODO commits, failing local checks).
+- `--draft` only if obviously incomplete (TODO commits, failing local checks, or a
+  manual test from the brief's Proof not yet run — a lane runs those itself, per
+  `lane-protocol.md` §Manual testing, and never writes "needs a human" in the body).
 
 Capture URL.
 
