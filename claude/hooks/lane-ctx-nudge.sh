@@ -16,7 +16,9 @@
 # 130K/160K/190K on the 200K window):
 #   260K — review-only remainder: finish it; full slice left: handoff
 #   320K — handoff overdue
-#   380K — quality degrades, stop now
+#   380K — quality degrades, stop now; re-fires every 60K past it, because a
+#          lane that ignores one reminder (review-only remainder, resumed
+#          session) otherwise hears nothing again (one ran to 760K, 2026-10-15)
 #
 # Handoff = /handoff + lane-handoff.sh <doc> as the FINAL tool call: the
 # state write is what wt-lanes' lane-run.sh keys on to respawn a fresh
@@ -52,7 +54,7 @@ ctx=$(tail -c 524288 "$transcriptPath" | sed '1d' \
 
 ctxK=$((ctx / 1000))
 if (( ctx >= 380000 )); then
-  tier="tier380"
+  tier="tier380-$((ctx / 60000))"
   visible="🔴 LANE CTX ${ctxK}K — quality degrades past this point. Commit + /handoff + lane-handoff.sh + stop."
   directive="Lane context is ${ctxK}K tokens — past 380K, output quality measurably degrades and every remaining message is bought at maximum cache-read cost. Commit whatever is safe RIGHT NOW (git add -A && git commit), run /handoff, then run ~/.claude/scripts/lane-handoff.sh <handoff-doc-path> as your FINAL tool call and stop — the lane runner respawns a fresh session that /resumes the doc and continues the brief, including any pending review loop. Without the lane-handoff.sh call nothing respawns and the lane dies mid-brief. Do not compact, do not start anything new."
 elif (( ctx >= 320000 )); then
