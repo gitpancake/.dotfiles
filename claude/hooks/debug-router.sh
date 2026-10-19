@@ -37,10 +37,15 @@ fi
 
 promptLower=$(printf '%s' "$prompt" | tr '[:upper:]' '[:lower:]')
 
-# Debug-intent signal. Kept tight to avoid firing on incidental "error" mentions.
-debugRe='(why (is|are|does|did|won.?t).*(fail|break|broke|error|crash))'
-debugRe+='|(tests?.*(fail|break|red|skip))'
-debugRe+='|((ci|build|pipeline|check).*(fail|red|broke))'
+# Debug-intent signal. Subject and symptom must both be whole words and sit
+# within 40 chars of each other: the unanchored form fired on "test … required"
+# and "misclassifying … readable" (2026-10-01, an environment-review prompt).
+wordStart='(^|[^a-z])'
+wordEnd='([^a-z]|$)'
+nearGap='[^a-z]+(.{0,40}[^a-z])?'
+debugRe="(why (is|are|does|did|won.?t).{0,80}${wordStart}(fail|break|broke|error|crash))"
+debugRe+="|(${wordStart}tests?${nearGap}(fail(s|ing|ed)?|break(s|ing)?|broken?|red|skip(s|ped|ping)?)${wordEnd})"
+debugRe+="|(${wordStart}(ci|build|pipeline|checks?)${nearGap}(fail(s|ing|ed)?|red|broken?)${wordEnd})"
 debugRe+='|(failing (test|ci|build|pr|check))'
 debugRe+='|(not working|won.?t (build|compile|run|start))'
 debugRe+='|(is broken|keeps (failing|crashing)|throwing|stack ?trace)'
