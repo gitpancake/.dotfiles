@@ -75,7 +75,7 @@ Source: **GoF** = the Gang of Four catalog as written up at refactoring.guru/des
 - **Bridge** — two axes vary independently (document type × render target). Shape: abstraction holds an implementation interface. Force: N×M classes otherwise.
 - **Composite** — tree of parts and wholes handled uniformly (nested address-book groups). Shape: recursive union type + one walk fn.
 - **Decorator** — add behavior around an unchanged core (retry, logging, caching around a service call). Shape: `withRetry(fn)` higher-order fn. Force: the core must not learn about the wrapper.
-- **Facade** — one call hides a subsystem's choreography. Shape: a workflow. This is what `Router → Workflow → Service` already is; a new facade over a workflow is a pass-through (POSD §7).
+- **Facade** — one call hides a subsystem's choreography. Shape: a use case. This is what a use case behind its ports already is; a new facade over one is a pass-through (POSD §7).
 - **Flyweight** — many instances share heavy intrinsic state. Rare here; measure first (POSD §20).
 - **Proxy** — control access to a thing: lazy, cached, guarded. Shape: same interface, wrapping fn. Distinguish from Decorator by intent: Proxy gates, Decorator adds.
 

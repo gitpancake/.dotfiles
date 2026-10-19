@@ -19,6 +19,12 @@ If `$ARGUMENTS` is empty, infer the problem from conversation context — what w
 discussed, debugged, or decided. Summarize your interpretation in 1–2 sentences and proceed.
 No relevant context either → ask for a problem statement and stop.
 
+**The user writes the Requirement and the Limitations** (global CLAUDE.md §Pace). Those two
+sections carry the judgment — what we are building and what we are not — and a brief whose
+judgment was drafted by the model gets a reflexive "go". /scope never drafts either one.
+It grills them (§1), fills in every other section, and puts the user's words into the
+brief with typos fixed and nothing else changed.
+
 ## 0. Evidence pass — before the grill
 
 The brief's slots (Requirement / Context / Limitations / AC / Proof) get filled from
@@ -97,6 +103,19 @@ Format per Q:
 Walk decision tree — resolve dependencies one branch at a time. Codebase-answerable Q → grep
 instead of asking. Stop when above four resolved + no fuzzy terms remain.
 
+**Then collect the two sections the user owns.** Ask for them once the grill is done, in
+one message, and stop:
+
+> Write the **Requirement** (the outcome, 2–3 sentences) and the **Limitations** (what is
+> out of scope, each with its why). Your words — I will not draft them.
+
+Offer raw material, never a draft: the §0 quotes that bear on the outcome, and the
+deferred items as a plain list of candidates the user may adopt, reword, or drop. A
+Requirement already written out in `$ARGUMENTS` in the user's own sentences counts —
+quote it back and ask only for the Limitations. If what comes back is vague ("works
+correctly", a Limitation with no why), say which sentence and why, and ask again; do not
+repair it yourself.
+
 ## 2. Codebase exploration — the refinement
 
 This is the part that makes the brief pickable rather than a wishlist.
@@ -153,9 +172,11 @@ reference is `~/.claude/docs/design-principles.md` (§Design Patterns for the ca
    - **Reads without comments** (POSD §13 / §18). Every new module, fn, and type is named
      so its intent is the name. A spot where you'd want a comment is a rename or an
      extract, and the brief names it now. A comment is a failure of this gate, not a fix.
-   - **Layer** (repo `Router → Workflow → Service` architecture). Which layer owns the
-     logic, and what each hands the next. Business logic only in a workflow; a router or
-     service that computes is a finding waiting to happen.
+   - **Layer.** Read the `## Architecture` section of the repo's root `CLAUDE.md` now and
+     quote the line that places this work — never recite a layering from memory. Which
+     layer owns the logic, and what each hands the next. In cartage-agent new business
+     logic lives in a use case behind its ports; a legacy workflow is where code moves
+     from, not where new code goes.
    - **Deep, not shallow** (POSD §4 / §5). The new surface's public interface in ≤3 lines,
      and the decision it hides so callers stop repeating it. A wide interface over a thin
      body is the wrong cut.
@@ -207,7 +228,8 @@ clumsy, not precise.
 **Single issue** — the house template (global CLAUDE.md §Ticket Lifecycle) plus the three
 /scope-only sections, in order:
 
-- `## Requirement` — the user-facing outcome, 2–3 sentences.
+- `## Requirement` — the user-facing outcome, 2–3 sentences. **The user's text from §1**,
+  typos fixed, nothing else changed.
 - `## Context` — why: the refined problem, mirror reference, decisions from the grill,
   gotchas quoted from project CLAUDE.md.
 - `## Surface area` — mirror / ≤8 starting files with one-line reasons / prerequisites +
@@ -219,7 +241,8 @@ clumsy, not precise.
   lane builds this shape; `/code-review` holds the diff to it. (/scope-only.)
 - `## Acceptance Criteria` — checkboxes, each a testable yes/no. Never "works correctly".
 - `## Limitations` — out of scope, each item with its why (the why kills scope creep and
-  relitigating).
+  relitigating). **The user's text from §1.** A limit that exploration turns up later
+  (§2) is put to the user as a question; it enters the brief only in the words they give.
 - `## Proof` — defined now, before work starts. **Manual Tests**: concrete steps + the
   evidence each produces. A step that needs the running app runs on the hosted dev env
   (`/host-dev`, per-branch VM at a stable URL) — write "on the dev env", never "local":
@@ -245,6 +268,10 @@ citations are not.
   summing to the stated time budget). Design decisions, hazards, and reversibility fold
   into Context and Limitations — no extra sections. Exemplar: off-git `c9bdadb3cdfc`
   (ENGH-335..343).
+- The user writes the project's Requirement and Limitations. A child's Requirement and
+  Limitations quote the part of the project's that the story delivers; no new judgment
+  enters at child level, and a limit that only one story needs goes to the user as a
+  question.
 - Children carry the deep per-story detail (same section shape as a single issue), sized to
   one context window each. A structural story carries its own `## Design`; a shape shared
   by several stories is decided once in the project Context and each child cites it, so no
@@ -327,6 +354,8 @@ origin via a docs-only PR from a throwaway worktree:
 ## Stop conditions
 
 - After §1 clarifying questions — wait for answers.
+- After the §1 ask for the Requirement and the Limitations — wait for the user's text.
+  Never proceed on a version you wrote.
 - After §5 draft — wait for "go".
 - After §6 write — done. The user runs `/pickup <id>` (or `/epic <project>`) next. The §7
   `CONTEXT.md` docs-PR is the only project-repo write; never edit code from this command.
