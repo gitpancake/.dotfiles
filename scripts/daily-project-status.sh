@@ -1,21 +1,20 @@
 #!/bin/zsh
-# Daily meeting-triage v2: pull Granola + Pocket, enrich existing ENGH/AO Linear work
-# (comments, project updates, bugs routed into active projects). Never creates feature
-# tickets. Invoked by launchd (ai.cartage.meeting-triage) every weekday at 12:00.
 set -u
 
 export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
-LOGDIR="$HOME/.claude/meeting-triage-logs"
+LOGDIR="$HOME/.claude/project-status-logs"
 mkdir -p "$LOGDIR"
 
 TODAY=$(date +%F)
-DOW=$(date +%u)                       # 1=Mon .. 7=Sun
-if [ "$DOW" = "1" ]; then LOOKBACK=3; else LOOKBACK=1; fi   # Monday covers Fri+weekend
+DOW=$(date +%u)
+if [ "$DOW" = "1" ]; then LOOKBACK=3; else LOOKBACK=1; fi
 WINDOW_START=$(date -v-${LOOKBACK}d +%F)
 WINDOW_END=$(date -v-1d +%F)
+ACTIVITY_FLOOR=$(date -u -v-7d +%Y-%m-%dT%H:%M:%SZ)
+DRY_RUN="${DRY_RUN:-0}"
 
-PROMPT_FILE="$HOME/.dotfiles/scripts/daily-meeting-triage.prompt.md"
+PROMPT_FILE="$HOME/.dotfiles/scripts/daily-project-status.prompt.md"
 LOG="$LOGDIR/run-$TODAY.log"
 
 if [ ! -f "$PROMPT_FILE" ]; then
@@ -32,11 +31,14 @@ HEADER="RUN CONTEXT (auto-computed, do not recompute):
 - GRANOLA_SINCE_DAYS=$LOOKBACK
 - WINDOW_START=$WINDOW_START
 - WINDOW_END=$WINDOW_END
+- ACTIVITY_FLOOR=$ACTIVITY_FLOOR
+- LOGDIR=$LOGDIR
+- DRY_RUN=$DRY_RUN
 
 "
 FULL_PROMPT="$HEADER$(cat "$PROMPT_FILE")"
 
-echo "=== $(date) starting triage: window $WINDOW_START..$WINDOW_END (since-days $LOOKBACK) ===" >> "$LOG"
+echo "=== $(date) starting project status: window $WINDOW_START..$WINDOW_END dry_run=$DRY_RUN ===" >> "$LOG"
 
 cd "$HOME"
 claude -p "$FULL_PROMPT" \
