@@ -42,9 +42,9 @@ in a bounded loop). A denied call means fix the shape, not retry it.
 Never kill build tools by a pattern match — one lane's `pkill -f "tsc --noEmit"` reaped its
 siblings' in-flight checks on 2026-09-01 and forced their re-runs; kill only PIDs you spawned.
 
-A rebase that replays cleanly with no new lane-authored code since your last green check
-needs NO local re-verify — push immediately; CI's `pr-checks` runs the same type-check on
-every push.
+A rebase or merge of main, conflicts resolved or not, needs NO local re-verify before the
+push — push immediately with `--force-with-lease` (plain `git push` after a merge); CI's
+`pr-checks` runs the same type-check on every push.
 
 ## Payload discipline
 
@@ -100,14 +100,19 @@ arbiter's manual-testing gate with no human in the loop. The full procedure is t
 3. Throwaway `_tmpScreenshot.mjs` at the worktree root, `import { chromium } from
    "playwright"`, cookie on the VM hostname, headless, screenshots into the scratchpad.
    Read every screenshot back. Delete the script; never commit it.
-4. Evidence goes in the PR body itself. NEVER an `evidence/*` branch, never a blob link
-   into the repo, never an image in the PR diff — the arbiter blocks all three, and a
-   lane that pushed one cannot recover (PR #9118 ended in a self-override that paged a
-   maintainer). Every observable outcome is pasted as text a reader can check: the API
-   response, the dev Postgres row, the rendered message, the DOM text the screenshot
-   would have shown. A screenshot is a bonus only when it can be attached to the
-   description through GitHub's own upload; without that, the pasted outcome is the
-   evidence and the step is still done.
+4. Evidence goes in the PR body itself, uploaded with GitHub's own attach: the repo's
+   `/manual-test` §5. `pr-body.md` sits in the same folder as the PNGs, each step
+   references its screenshot as `![alt](01-step.png)`, and `--body-file` plus every
+   `--attach` go in ONE `gh pr edit` call. `--attach` rewires only a reference whose
+   path resolves to the attached file; anything else stays a broken image and the upload
+   lands as an orphan at the bottom (PRs #10142–#10178, 2026-10-27), and the hook and the
+   arbiter now count that as missing evidence. NEVER an `evidence/*` branch, never a
+   blob link into the repo, never an image in the PR diff — the arbiter blocks all
+   three, and a lane that pushed one cannot recover (PR #9118 ended in a self-override
+   that paged a maintainer). Next to each screenshot, paste the outcome as text a reader
+   can check: the API response, the dev Postgres row, the rendered message. Without a
+   `gh` that has `--attach` (≥ 2.99.0), the pasted outcome is the evidence, the PNGs are
+   handed to a session or person who can upload them, and the PR is not marked ready.
 5. `gh pr edit --body-file` → the arbiter re-runs on `edited`; poll with one
    `devin-review.sh gate` call.
 
@@ -139,6 +144,16 @@ blocked on hygiene the loop never touched. Rounds measure patience, not quality.
 diff since the last reviewed sha. Anything still open after round 3 is recorded, not
 fixed.
 
+0. **Mechanical gates (before any reviewer, and again before every push).** Run the same
+   deterministic checks CI runs, foreground, and fix every red before round 1 starts. In
+   cartage-agent that is `bun run gates/prChecks/runGuards.ts` (every `check:*` guard —
+   boolean-naming, prettier, ring violations, pr-body-claims, migration rules — each falls
+   back to the merge-base with `origin/main` when its `*_BASE_SHA` env is unset), then
+   `bun type-check`, `bun run lint`, and the unit tests scoped to the touched paths. Another
+   repo → whatever its `.github/workflows/` runs under `pr-checks`. On 2026-10-27 all seven
+   open lane PRs were red on first push, every failure a guard that would have failed
+   locally in under five minutes; each push re-fires Arbiter, Devin and Greptile, so a
+   red first push costs a full review round, not a retry.
 1. **Hygiene pre-check (before any reviewer).** Run the arbiter's own gates from
    `REVIEW.md` §PR hygiene against the diff: does it touch `src/schemas/**` or another
    persisted shape (→ `needs-human` is guaranteed; the PR body must tell the migration
@@ -183,9 +198,9 @@ fixed.
 6. Then `/ship`.
 
 Fix rounds during the review loop are the same blind spot: a fix commit is NEW surface
-the bots won't re-hunt. Before pushing any fix round, run ONE gate pass scoped to the
-unpushed work (`/code-review --since @{u}`) under the same tagging rule, fix what it
-confirms as `in-scope-blocking`, then push. That single pass does not count toward the cap, and it
+the bots won't re-hunt. Before pushing any fix round, run the mechanical gates (step 0)
+and then ONE gate pass scoped to the unpushed work (`/code-review --since @{u}`) under the
+same tagging rule, fix what it confirms as `in-scope-blocking`, then push. That single pass does not count toward the cap, and it
 never spawns a second pass.
 
 ## Review loop (after `/ship`)
@@ -198,6 +213,16 @@ Devin becomes mention-gated to high-blast-radius paths; the arbiter reads whatev
 reviewers are present. The `arbiter` commit status remains the required gate throughout —
 `pending — "waiting for reviewer output"` means no reviewer has posted on the head sha
 yet, so make one fire.
+
+0. **Gate check — repo has `arbiter.yml`? Check BEFORE triggering anything.** Run
+   `test -f .github/workflows/arbiter.yml` (or `ls .github/workflows/ | grep -i arbiter`)
+   in the worktree first. Missing → this repo has no arbiter gate; skip the entire
+   review loop below, note "no reviews on this repo" in the report, and go straight to
+   `lane-done.sh`. This check is a plain, instant `Bash`/`Read` call — never spend a
+   `Monitor`-wrapped `devin-review.sh gate` round finding this out; that burns up to
+   ~9 min discovering what a file-existence check answers in milliseconds (PR #1518,
+   ai-employees — no `arbiter.yml` in that repo, caught only after a gate round had
+   already been armed).
 
 1. **Request + wait — ONE tool call per round.** After the PR opens, and after EVERY
    subsequent push of fixes:
