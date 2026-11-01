@@ -311,24 +311,22 @@ on findings: `wilson-runtime-owner-review` (`src/server/agents/WilsonV3/runtime/
 and `override-devin-gate` releases none of them.
 
 **Henry (`gitpancake`) is on the `wilson-runtime-owner-review` roster, and the lane's `gh`
-runs as him** (`gh api user --jq .login` → `gitpancake`). So that gate is self-released,
-ONLY once the head is final — Arbiter `success`, every finding judged — because any later
-push re-raises it and a label granted on an earlier commit is a stale override the gate
-rejects (`override was for an earlier commit — remove and re-apply`):
+runs as him** (`gh api user --jq .login` → `gitpancake`). That gate is never a human
+blocker for a lane and never goes in a pause message as "awaiting @gitpancake". It is
+released by the lane, mechanically: `devin-review.sh gate` does it itself the moment the
+arbiter settles `success` on the head sha (remove + re-add `wilson-runtime-owner-override`,
+then wait for the status to flip; exit 7 if it does not). A red
+`wilson-runtime-owner-review` while the arbiter is still blocked is simply pending — fix
+the arbiter's findings first, because any later push re-raises the gate and a label granted
+on an earlier commit is a stale override it rejects (`override was for an earlier commit —
+remove and re-apply`). To release a head that is already final without a full gate round:
 
 ```bash
-gh pr edit <PR> --remove-label wilson-runtime-owner-override 2>/dev/null
-gh pr edit <PR> --add-label wilson-runtime-owner-override
-gh api repos/{owner}/{repo}/commits/<head-sha>/status \
-  --jq '.statuses[] | select(.context=="wilson-runtime-owner-review") | .state + " " + .description'
+~/.claude/scripts/devin-review.sh release-runtime-gate "https://github.com/{owner}/{repo}/pull/<PR>"
 ```
 
-Expect `success override granted by @gitpancake` within ~1 min (the gate fires on the
-`labeled` event). Then re-trigger the arbiter: the arbiter ignores label events, so append
-one line to the PR body — `wilson-runtime-owner-override granted on <sha7>` — with
-`gh pr edit --body-file` (a body edit re-evaluates it), and run `devin-review.sh gate` once
-more. Remove-then-add is the whole recipe; never approve the PR as a release (the lane's
-author is the PR author, and GitHub refuses self-approval).
+Never approve the PR as a release (the lane's author is the PR author, and GitHub refuses
+self-approval).
 
 `prompt-owner-review` and `wallet-owner-review` stay human-held (their rosters live in the
 repo's gate workflows under `.github/workflows/` and `gates/`): report which one is red and

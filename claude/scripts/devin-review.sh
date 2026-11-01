@@ -15,11 +15,21 @@
 #                                                   arbiter verdict, print summary JSON + findings,
 #                                                   alert the cockpit (lane tab bell + macOS
 #                                                   notification) on anything but success, and exit:
-#                                                     0 = arbiter success on head sha
+#                                                     0 = arbiter success on head sha, and the
+#                                                         wilson-runtime-owner-review status (if the
+#                                                         PR carries one) is success too — on arbiter
+#                                                         success the gate self-releases it when the
+#                                                         gh login is on the gate's roster, by
+#                                                         remove+add of wilson-runtime-owner-override
 #                                                     4 = timed out still pending/running/unsettled
 #                                                     5 = arbiter failure/error
 #                                                     6 = arbiter needs-human verdict on head sha
 #                                                         (the label is sticky and is never the signal)
+#                                                     7 = arbiter success but the runtime owner gate
+#                                                         did not release (login off roster, or the
+#                                                         gate workflow did not react within 120s)
+#   devin-review.sh release-runtime-gate <pr-url>  -> just the runtime-owner self-release step, for
+#                                                   a head that is already final
 #
 # "Settled" — the reason gate exists: the arbiter posts a verdict on every push BEFORE any
 # reviewer has read the sha, then re-runs after each reviewer round with a 180s settle.
@@ -209,7 +219,10 @@ devin_gate() {
         settled="true"
         emit_summary
         print_findings "$head_sha" | tee_lane_findings
-        [[ "$arb_state" == "success" ]] && return 0
+        if [[ "$arb_state" == "success" ]]; then
+          release_runtime_owner_gate "$head_sha" || return 7
+          return 0
+        fi
         local arb_desc
         arb_desc=$(printf '%s' "$arb_line" | cut -f3- | cut -d'·' -f1)
         alert_lane "arbiter ${arb_state}: ${arb_desc}"
@@ -233,6 +246,49 @@ devin_gate() {
   alert_lane "gate unsettled after $attempts x ${interval}s (arbiter ${arb_state:-none}, reviewer output ${reviewer_at:-none})"
   echo "devin-review.sh: gate timed out after $attempts x ${interval}s (devin: ${devin_st:-none}, arbiter: ${arb_state:-none} at ${arb_at:-none}, newest reviewer output: ${reviewer_at:-none}) — call gate once more; still unsettled → lane-pause.sh review" >&2
   return 4
+}
+
+runtimeGateContext="wilson-runtime-owner-review"
+runtimeGateOverrideLabel="wilson-runtime-owner-override"
+
+runtime_gate_roster() {
+  local gateFile
+  gateFile=$(git rev-parse --show-toplevel 2>/dev/null)/gates/wilsonRuntimeOwner/wilsonRuntimeOwnerGate.mjs
+  [[ -f "$gateFile" ]] && grep -oE 'ownerLogins: \[[^]]*\]' "$gateFile" | grep -oE '"[^"]+"' | tr -d '"' && return 0
+  echo gitpancake
+}
+
+runtime_gate_state() {
+  gh api "repos/$owner/$repo/commits/$1/status" \
+    --jq ".statuses[] | select(.context==\"$runtimeGateContext\") | .state + \"\\t\" + .description" | head -n1
+}
+
+release_runtime_owner_gate() {
+  local sha=$1 line state me
+  line=$(runtime_gate_state "$sha")
+  [[ -z "$line" ]] && return 0
+  state=$(printf '%s' "$line" | cut -f1)
+  [[ "$state" == "success" ]] && return 0
+  me=$(gh api user --jq .login)
+  if ! runtime_gate_roster | grep -qix "$me"; then
+    echo "devin-review.sh: $runtimeGateContext is $state and @$me is not on its roster — a listed owner must approve or label" >&2
+    return 1
+  fi
+  echo "devin-review.sh: $runtimeGateContext is $state on ${sha:0:7}; @$me is on the roster — applying $runtimeGateOverrideLabel" >&2
+  gh pr edit "$pr_url" --remove-label "$runtimeGateOverrideLabel" >/dev/null 2>&1 || true
+  gh pr edit "$pr_url" --add-label "$runtimeGateOverrideLabel" >/dev/null
+  local i
+  for (( i = 1; i <= 12; i++ )); do
+    sleep 10
+    line=$(runtime_gate_state "$sha")
+    state=$(printf '%s' "$line" | cut -f1)
+    if [[ "$state" == "success" ]]; then
+      echo "devin-review.sh: $runtimeGateContext released on ${sha:0:7} — $(printf '%s' "$line" | cut -f2-)" >&2
+      return 0
+    fi
+  done
+  echo "devin-review.sh: $runtimeGateContext still $state 120s after labeling ${sha:0:7} — check the wilson-runtime-owner-gate workflow run, then lane-pause.sh review" >&2
+  return 1
 }
 
 tee_lane_findings() {
@@ -267,8 +323,9 @@ case "$action" in
   wait)     devin_wait "${3:-10}" "${4:-90}" ;;
   findings) pr_parse; print_findings "$(gh pr view "$pr_url" --json headRefOid --jq '.headRefOid')" ;;
   gate)     devin_gate "${3:-8}" "${4:-60}" ;;
+  release-runtime-gate) pr_parse; release_runtime_owner_gate "$(gh pr view "$pr_url" --json headRefOid --jq '.headRefOid')" ;;
   *)
-    echo "usage: devin-review.sh trigger|status|wait|findings|gate <pr-url> [attempts] [interval]" >&2
+    echo "usage: devin-review.sh trigger|status|wait|findings|gate|release-runtime-gate <pr-url> [attempts] [interval]" >&2
     exit 2
     ;;
 esac
