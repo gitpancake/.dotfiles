@@ -298,6 +298,18 @@ yet, so make one fire.
      --jq '.statuses[] | select(.context=="arbiter")'
    ```
 
+   **`needs-holland` is a conversation, not a wait.** The arbiter's verdict carries "The
+   question for Holland:". Holland March (`@holland-march-cartage`) takes the case within
+   ~10 minutes and posts his review and his question to the author in Slack
+   `#eng-pull-requests`, one thread per PR, which a lane cannot read. So the lane answers the
+   arbiter's question itself, at once, as a PR comment that starts with
+   `@holland-march-cartage`: the decision, the evidence (file:line, test names, run ids),
+   and what trade-off it accepts. Holland's GitHub webhook opens or continues the case on
+   that mention and he closes it as `unblock` from the PR. A pause message for a Holland
+   hold names the question and links the lane's answer, never "awaiting Holland". On
+   2026-11-01 three PRs sat six hours because each lane paused on "awaiting Holland" while
+   his question sat unread in Slack.
+
 Chuck is RETIRED (2026-08-04): never tag `@chuck-noland-cartage`, never poll for a
 `chuck-noland[bot]` comment.
 
