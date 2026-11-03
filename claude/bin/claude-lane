@@ -17,6 +17,10 @@
 #      what auto-backgrounds it, and the backgrounded pipe is the tail-hang
 #      recipe (lane-protocol.md:30). Checks fit in 10min; past that the
 #      command fails loud instead of backgrounding silently.
+#   5. --settings '{"ultracode":true}' — ultracode on for every lane. The
+#      settings key is session-scoped and interactive toggles never persist
+#      it, so the launcher is the only place that makes it the default.
+#      WT_ULTRACODE=0 opts a lane out.
 #
 # Set as $WT_CLAUDE in zshenv so `wt` picks it up.
 
@@ -28,6 +32,11 @@ export PATH="$HOME/.claude/lane-bin:$PATH"
 export CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
 export BASH_DEFAULT_TIMEOUT_MS=600000
 
+ultracode_settings=()
+if [[ "${WT_ULTRACODE:-1}" != "0" ]]; then
+  ultracode_settings=(--settings '{"ultracode":true}')
+fi
+
 # NOTE: --mcp-config is variadic (`<configs...>`) — any positional that follows
 # gets eaten as another MCP config path. Keep it BEFORE a non-variadic flag
 # (--model) so commander stops the variadic before "$@".
@@ -36,4 +45,5 @@ exec claude \
   --strict-mcp-config \
   --mcp-config "$HOME/.claude/mcp.lane.json" \
   --model "${WT_MODEL:-sonnet}" \
+  ${ultracode_settings[@]+"${ultracode_settings[@]}"} \
   "$@"
