@@ -28,6 +28,10 @@
 #                                                     7 = arbiter success but the runtime owner gate
 #                                                         did not release (login off roster, or the
 #                                                         gate workflow did not react within 120s)
+#                                                     8 = arbiter needs-holland verdict on head sha
+#                                                         (answer Holland on the PR, then lane-pause.sh holland)
+#                                                     9 = arbiter success but prompt-owner-review is
+#                                                         awaiting an owner (lane-pause.sh prompt-owner)
 #   devin-review.sh release-runtime-gate <pr-url>  -> just the runtime-owner self-release step, for
 #                                                   a head that is already final
 #
@@ -154,27 +158,15 @@ lane_dir() {
   [[ "$dir" == */.claude/worktrees/* ]] && printf '%s' "$dir"
 }
 
-# Alert the cockpit that a verdict landed. Two channels, both independent of the
-# lane's agent-state paint (which repaints "busy" on the very next tool call):
-#   - a BEL written to the lane pane's tty raises tmux's own bell flag, which
-#     paints the tab in window-status-bell-style until the window is visited.
-#     A BEL to stdout never gets there — the Bash tool captures it.
-#   - a macOS notification carrying the PR number and verdict.
+# Alert the cockpit that a verdict landed: a macOS notification carrying the PR
+# number and verdict. The lane's tab is NOT touched — the lane acts on the
+# verdict itself (fix pass or lane-pause), and the agent-state paint is the one
+# channel that colours tabs, so a working lane never shows the blocked red.
 alert_lane() {
-  local verdict=$1 dir label="" win="" tty=""
+  local verdict=$1 dir label=""
   dir=$(lane_dir) || true
   [[ -n "$dir" && -f "$dir/.claude/tmux-window" ]] && label=$(head -n1 "$dir/.claude/tmux-window")
   osascript -e "display notification \"PR #$number: $verdict\" with title \"Lane ${label:-$(basename "${dir:-$PWD}")}\" sound name \"Pop\"" >/dev/null 2>&1 || true
-  if [[ -n "$label" ]]; then
-    win=$(tmux list-windows -a -F '#{window_id} #{window_name}' 2>/dev/null \
-      | awk -v l="$label" '$2 == l { print $1; exit }')
-  fi
-  if [[ -z "$win" && -n "${TMUX_PANE:-}" ]]; then
-    win=$(tmux display-message -t "$TMUX_PANE" -p '#{window_id}' 2>/dev/null || true)
-  fi
-  [[ -z "$win" ]] && return 0
-  tty=$(tmux list-panes -t "$win" -F '#{pane_tty}' 2>/dev/null | head -n1)
-  [[ -n "$tty" && -w "$tty" ]] && printf '\a' > "$tty"
   return 0
 }
 
@@ -221,14 +213,19 @@ devin_gate() {
         print_findings "$head_sha" | tee_lane_findings
         if [[ "$arb_state" == "success" ]]; then
           release_runtime_owner_gate "$head_sha" || return 7
+          prompt_owner_held "$head_sha" && return 9
           return 0
         fi
         local arb_desc
         arb_desc=$(printf '%s' "$arb_line" | cut -f3- | cut -d'·' -f1)
         alert_lane "arbiter ${arb_state}: ${arb_desc}"
-        case "$arb_desc" in needs-human*)
-          echo "devin-review.sh: arbiter needs-human on $head_sha — address every finding above, push, gate once more, then report" >&2
-          return 6 ;;
+        case "$arb_desc" in
+          needs-human*)
+            echo "devin-review.sh: arbiter needs-human on $head_sha — address every finding above, push, gate once more, then lane-pause.sh human" >&2
+            return 6 ;;
+          needs-holland*)
+            echo "devin-review.sh: arbiter needs-holland on $head_sha — address every finding above, answer Holland's question as a PR comment, push, gate once more, then lane-pause.sh holland" >&2
+            return 8 ;;
         esac
         echo "devin-review.sh: arbiter ${arb_state} on $head_sha — address every finding above, push, gate once more" >&2
         return 5
@@ -261,6 +258,23 @@ runtime_gate_roster() {
 runtime_gate_state() {
   gh api "repos/$owner/$repo/commits/$1/status" \
     --jq ".statuses[] | select(.context==\"$runtimeGateContext\") | .state + \"\\t\" + .description" | head -n1
+}
+
+promptOwnerContext="prompt-owner-review"
+# True when the prompt-owner gate holds the head for an owner (description
+# "awaiting ..."); a "revise" failure is the lane's own to fix and is not a hold.
+prompt_owner_held() {
+  local line state desc
+  line=$(gh api "repos/$owner/$repo/commits/$1/status" \
+    --jq "[.statuses[] | select(.context == \"$promptOwnerContext\")][0] | select(. != null) | \"\\(.state)\\t\\(.description)\"" 2>/dev/null || true)
+  [[ -n "$line" ]] || return 1
+  state=$(printf '%s' "$line" | cut -f1)
+  desc=$(printf '%s' "$line" | cut -f2-)
+  [[ "$state" == "failure" ]] || return 1
+  case "$desc" in awaiting*) ;; *) return 1 ;; esac
+  echo "devin-review.sh: $promptOwnerContext is $desc on ${1:0:7} — lane-pause.sh prompt-owner" >&2
+  alert_lane "$promptOwnerContext: $desc"
+  return 0
 }
 
 release_runtime_owner_gate() {
