@@ -175,7 +175,8 @@ fixed.
    `wt` into the repo's `.git/hooks`) runs those guards itself and refuses the push
    when one is red, printing the failed guards. A refused push is a guard failure to
    fix and commit, never a reason to retry, set `WT_SKIP_GUARDS`, or push from
-   elsewhere; the hook takes ~90s and queues behind a sibling lane's run. In
+   elsewhere; the hook takes ~5s (it skips `credless-test-hermetic`, a hang detector
+   CI still runs). In
    cartage-agent that is `bun run gates/prChecks/runGuards.ts` (every `check:*` guard —
    boolean-naming, prettier, ring violations, pr-body-claims, migration rules — each falls
    back to the merge-base with `origin/main` when its `*_BASE_SHA` env is unset), then
