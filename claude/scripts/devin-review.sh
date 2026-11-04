@@ -32,6 +32,13 @@
 #                                                         (answer Holland on the PR, then lane-pause.sh holland)
 #                                                     9 = arbiter success but prompt-owner-review is
 #                                                         awaiting an owner (lane-pause.sh prompt-owner)
+#                                                    10 = arbiter settled but CI is red on head sha:
+#                                                         a GitHub Actions check-run concluded
+#                                                         failure/timed_out (pr-checks, guards, ...).
+#                                                         The failed jobs + their error annotations
+#                                                         print on stderr; fix, push, gate once more.
+#                                                         The gate never exits 0 while pr-checks is
+#                                                         still queued or running.
 #   devin-review.sh release-runtime-gate <pr-url>  -> just the runtime-owner self-release step, for
 #                                                   a head that is already final
 #
@@ -170,6 +177,38 @@ alert_lane() {
   return 0
 }
 
+ciCheckRun="pr-checks"
+ciRedConclusions='failure|timed_out'
+
+# status \t conclusion of the pr-checks check-run on a sha; empty when the repo has none.
+ci_state() {
+  gh api "repos/$owner/$repo/commits/$1/check-runs?per_page=100" \
+    --jq "[.check_runs[] | select(.name == \"$ciCheckRun\")] | sort_by(.started_at) | last | select(. != null) | \"\\(.status)\\t\\(.conclusion // \"\")\"" \
+    2>/dev/null || true
+}
+
+# id \t name of every GitHub Actions check-run on a sha that concluded red. The id is
+# also the Actions job id, whose log carries the ##[error] lines (annotations cap at
+# 10 per job and fill with bun-test diff noise before the guard summary lands; the raw
+# logs endpoint is refused by gh api for its escape sequences, so gh run view reads it).
+ci_failed_runs() {
+  gh api "repos/$owner/$repo/commits/$1/check-runs?per_page=100" \
+    --jq ".check_runs[] | select(.app.slug == \"github-actions\" and (.conclusion // \"\" | test(\"^($ciRedConclusions)\$\"))) | \"\\(.id)\\t\\(.name)\"" \
+    2>/dev/null || true
+}
+
+print_ci_failures() {
+  local sha=$1 id name
+  printf '\n### CI failures on %s\n' "${sha:0:8}"
+  while IFS=$'\t' read -r id name; do
+    [[ -n "$id" ]] || continue
+    printf -- '- **%s**\n' "$name"
+    gh run view --job "$id" -R "$owner/$repo" --log-failed 2>/dev/null \
+      | grep -aoE '##\[error\].*' | sed 's/^##\[error\]//' | grep -E '[A-Za-z]{3}' | grep -v 'Process completed with exit code' \
+      | sort -u | head -n 10 | sed 's/^/  /' || true
+  done < <(ci_failed_runs "$sha")
+}
+
 devin_gate() {
   local attempts=${1:-8} interval=${2:-60}
   pr_parse
@@ -186,7 +225,7 @@ devin_gate() {
     devin_trigger >/dev/null || true
   fi
 
-  local i devin_st="" arb_line="" arb_state="" arb_at="" reviewer_at="" prev_arb_at="" settled="false"
+  local i devin_st="" arb_line="" arb_state="" arb_at="" reviewer_at="" prev_arb_at="" settled="false" ci_line="" ci_status="" ci_conclusion=""
   for (( i = 1; i <= attempts; i++ )); do
     resp=$(devin_status)
     devin_st=$(json_field "$resp" '.status | strings')
@@ -197,20 +236,30 @@ devin_gate() {
     arb_at=$(printf '%s' "$arb_line" | cut -f2)
     reviewer_at=$(reviewer_latest "$head_sha")
     labels=$(gh pr view "$pr_url" --json labels --jq '[.labels[].name] | join(",")')
+    ci_line=$(ci_state "$head_sha")
+    ci_status=$(printf '%s' "$ci_line" | cut -f1)
+    ci_conclusion=$(printf '%s' "$ci_line" | cut -f2)
 
-    local arb_terminal=false devin_terminal=false arb_fresh=false arb_stable=false
+    local arb_terminal=false devin_terminal=false arb_fresh=false arb_stable=false ci_terminal=false ci_red=false
     case "$arb_state" in success|failure|error) arb_terminal=true ;; esac
     case "$devin_st" in completed|errored|cancelled|"") devin_terminal=true ;; esac
+    case "$ci_status" in completed|"") ci_terminal=true ;; esac
+    [[ -n "$(ci_failed_runs "$head_sha")" ]] && ci_red=true
     [[ -n "$arb_at" && "$arb_at" > "$reviewer_at" ]] && arb_fresh=true
     [[ -n "$arb_at" && "$arb_at" == "$prev_arb_at" ]] && arb_stable=true
-    printf 'gate %d/%d: arbiter=%s@%s reviewer=%s devin=%s fresh=%s stable=%s\n' \
-      "$i" "$attempts" "${arb_state:-none}" "${arb_at:-none}" "${reviewer_at:-none}" "${devin_st:-none}" "$arb_fresh" "$arb_stable" >&2
+    printf 'gate %d/%d: arbiter=%s@%s reviewer=%s devin=%s fresh=%s stable=%s ci=%s/%s red=%s\n' \
+      "$i" "$attempts" "${arb_state:-none}" "${arb_at:-none}" "${reviewer_at:-none}" "${devin_st:-none}" "$arb_fresh" "$arb_stable" "${ci_status:-none}" "${ci_conclusion:-none}" "$ci_red" >&2
 
-    if $arb_terminal && $devin_terminal && $arb_fresh; then
+    if $arb_terminal && $devin_terminal && $arb_fresh && $ci_terminal; then
       if $arb_stable; then
         settled="true"
         emit_summary
-        print_findings "$head_sha" | tee_lane_findings
+        { print_findings "$head_sha"; $ci_red && print_ci_failures "$head_sha"; } | tee_lane_findings
+        if $ci_red; then
+          alert_lane "CI red on ${head_sha:0:7} (arbiter ${arb_state})"
+          echo "devin-review.sh: CI red on $head_sha — fix every CI failure above (and every arbiter finding), run bun run gates/prChecks/runGuards.ts locally, push, gate once more. Never lane-done.sh on a red sha." >&2
+          return 10
+        fi
         if [[ "$arb_state" == "success" ]]; then
           release_runtime_owner_gate "$head_sha" || return 7
           prompt_owner_held "$head_sha" && return 9
@@ -241,7 +290,7 @@ devin_gate() {
   emit_summary
   print_findings "$head_sha" | tee_lane_findings
   alert_lane "gate unsettled after $attempts x ${interval}s (arbiter ${arb_state:-none}, reviewer output ${reviewer_at:-none})"
-  echo "devin-review.sh: gate timed out after $attempts x ${interval}s (devin: ${devin_st:-none}, arbiter: ${arb_state:-none} at ${arb_at:-none}, newest reviewer output: ${reviewer_at:-none}) — call gate once more; still unsettled → lane-pause.sh review" >&2
+  echo "devin-review.sh: gate timed out after $attempts x ${interval}s (devin: ${devin_st:-none}, arbiter: ${arb_state:-none} at ${arb_at:-none}, newest reviewer output: ${reviewer_at:-none}, ci: ${ci_status:-none}/${ci_conclusion:-none}) — call gate once more; still unsettled → lane-pause.sh review" >&2
   return 4
 }
 
@@ -326,9 +375,12 @@ emit_summary() {
     --arg reviewer_latest_at "${reviewer_at:-}" \
     --arg settled "${settled:-false}" \
     --arg labels "$labels" \
+    --arg ci_status "${ci_status:-}" \
+    --arg ci_conclusion "${ci_conclusion:-}" \
     '{head_sha: $head_sha, devin_status: $devin_status, arbiter_state: $arbiter_state,
       arbiter_at: $arbiter_at, arbiter_description: $arbiter_description,
-      reviewer_latest_at: $reviewer_latest_at, settled: ($settled == "true"), labels: $labels}'
+      reviewer_latest_at: $reviewer_latest_at, settled: ($settled == "true"), labels: $labels,
+      ci_status: $ci_status, ci_conclusion: $ci_conclusion}'
 }
 
 case "$action" in

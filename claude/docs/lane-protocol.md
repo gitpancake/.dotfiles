@@ -46,6 +46,31 @@ A rebase or merge of main, conflicts resolved or not, needs NO local re-verify b
 push — push immediately with `--force-with-lease` (plain `git push` after a merge); CI's
 `pr-checks` runs the same type-check on every push.
 
+A lane's HEAD is its own branch, never `main`. The `main` ref is shared with the cockpit
+and every sibling worktree: `git checkout main` in a lane parks it here, blocks checkout
+everywhere else, and makes the next commit a commit on main (users-flip, 2026-11-04, did
+this to rerun a backfill against "PR1's merged state"). The `lane-main-guard` hook denies
+`git checkout|switch main` in a lane. Need main's content? `git show origin/main:<path>`,
+`git diff origin/main -- <path>`, or `git worktree add <scratch> --detach origin/main`.
+
+## Dependencies are shared, read-only
+
+`wt` links each lane's `node_modules` to the cockpit checkout's (`deps: linked -> …` on
+spawn). One tree serves every lane, so a lane that changes it changes it for all of them.
+Never run `bun install`, `bun add`, `bun remove`, `node-gyp`, a native-module rebuild, or
+`rm -rf node_modules/<pkg>` from a lane, and never `cd` into the cockpit checkout to do it
+there. A dependency change is a commit to `package.json` + `bun.lock` on your branch; the
+cockpit installs it, once, when that merges.
+
+A native module that crashes on load is not sibling contention and is not yours to rebuild.
+On 2026-11-04 one lane reinstalled `re2` and another rebuilt it with `node-gyp`; the
+source-built `re2.node` segfaulted Bun 1.3.9 and 1.3.13 on load and took down the prod
+backfill dry-run and two unrelated lanes until the cockpit removed it. `re2` is an untrusted
+optional peer (not in `trustedDependencies`), so a clean install never builds it and
+`email-reply-parser` / `superstatic` fall back to JS regex when `require("re2")` throws.
+Stop, say `native module crash: <module>` in your summary, and let the cockpit fix the
+shared tree.
+
 ## Payload discipline
 
 Context exhaustion — not difficulty — is why lanes hand off, and each handoff costs a full
@@ -74,7 +99,7 @@ Esc in the lane pane ends every in-flight subagent at once, and a subagent that 
 worktree with no summary. Run `git status` + `git diff --stat`, read what landed, and
 continue from there — never re-dispatch the same work blind, and never `TaskStop` your own
 id. `Agent terminated early due to an API error … session limit / weekly limit` is a 429:
-`lane-pause.sh review 'rate limited until <reset time>'` and stop; retrying burns the
+`lane-pause.sh external 'rate limited until <reset time>'` and stop; retrying burns the
 budget the limit exists to protect. A `NOTE: this agent stopped at its 200-turn limit`
 result is PARTIAL — the task was too big for one agent; split it, do not resume it.
 
@@ -254,9 +279,19 @@ yet, so make one fire.
    IS step 2's input; nothing else needs fetching. `devin-review.sh findings <PR-url>`
    re-prints it without waiting. Exit 0 = arbiter `success`; 4 = unsettled/pending
    after the window (call `gate` once more, then `lane-pause.sh review` per stop
-   condition 3); 5 = arbiter block; 6 = arbiter needs-human (address findings EXACTLY
-   as for 5, push, gate once more, THEN report — see step 3). Exit 5 and 6 both mean
-   step 2 runs; the only exit that skips step 2 is 0. `devin-review.sh status|trigger|
+   condition 3); 5 = arbiter block; 6 = arbiter needs-human and 8 = arbiter
+   needs-holland (address findings EXACTLY as for 5, push, gate once more, THEN pause
+   on the hold — see step 3); 9 = arbiter success but `prompt-owner-review` is
+   awaiting an owner (`lane-pause.sh prompt-owner 'PR #<N> awaiting <owners>'`);
+   10 = CI is red on the head sha — a GitHub Actions check-run (`pr-checks`, `guards`,
+   `PG Migration Check`, …) concluded failure, whatever the arbiter said. The printout
+   ends with a `### CI failures` section carrying each failed job's `##[error]` lines
+   (e.g. `2 guard(s) failed: boolean-naming, prettier`). Fix those AND every arbiter
+   finding in the same push, run `bun run gates/prChecks/runGuards.ts` locally first,
+   then gate once more. `gate` never exits 0 while `pr-checks` is queued or running,
+   and the arbiter never reads CI, so arbiter `success` on a red sha is normal and is
+   not done (PR #10460: arbiter success 21:56, guards red 21:58, lane-done 22:03).
+   Exits 5, 6, 8 and 10 all mean step 2 runs; the only exits that skip step 2 are 0 and 9. `devin-review.sh status|trigger|
    wait`, `sleep N &&` polls, and loops over `commits/<sha>/status` are DENIED in lanes
    by `~/.claude/hooks/review-gate-guard.sh` — a denial means use `gate`, not a retry.
    The script handles auth internally — never source `.env.local` or handle the API key
@@ -276,7 +311,7 @@ yet, so make one fire.
    the invalid ones in `## Local notes` with their evidence. A design change is not the
    lane's call: `lane-pause.sh` with `WAITING:input:<the choice>` and stop. Commit, run
    one self-review gate pass on the unpushed fix (§Pre-ship self-review), push, back to
-   1. A needs-human verdict does NOT skip this step: the human gate withholds the merge,
+   1. A needs-human or needs-holland verdict does NOT skip this step: the hold withholds the merge,
    it never withholds the judging and the fix pass. On PR #8431 the lane reported
    needs-human and stopped with five Greptile P1/P2 comments and four arbiter notes
    unread — that is the failure mode this sentence exists to prevent.
@@ -305,8 +340,11 @@ yet, so make one fire.
    arbiter's question itself, at once, as a PR comment that starts with
    `@holland-march-cartage`: the decision, the evidence (file:line, test names, run ids),
    and what trade-off it accepts. Holland's GitHub webhook opens or continues the case on
-   that mention and he closes it as `unblock` from the PR. A pause message for a Holland
-   hold names the question and links the lane's answer, never "awaiting Holland". On
+   that mention and he closes it as `unblock` from the PR. Then
+   `lane-pause.sh holland 'PR #<N>: <the question> — answered at <comment url>'`: the tab
+   blinks purple and the cockpit's hold watcher (`lane-holds.sh`) marks the lane done when
+   Holland unblocks, or red when he posts findings. The detail names the question and
+   links the answer, never "awaiting Holland", and a lane never keeps gating a hold. On
    2026-11-01 three PRs sat six hours because each lane paused on "awaiting Holland" while
    his question sat unread in Slack.
 
@@ -347,22 +385,30 @@ the labeler's login against its roster, so a non-owner add is a no-op (`last app
 
 ## Stop conditions
 
-Finish with `~/.claude/scripts/lane-done.sh` as the FINAL tool call (writes `DONE`, flashes
-the lane's tmux window green). A lane stops ONLY on:
+Every stop ends in exactly ONE of three final tool calls: `~/.claude/scripts/lane-done.sh`
+(writes `DONE`, flashes the tab green), `~/.claude/scripts/lane-pause.sh <code> '<detail>'`
+(codes in `~/.claude/agent-state-vocab.md`), or `~/.claude/scripts/lane-handoff.sh <doc>`.
+A turn that ends with none of them shows on the cockpit as `stopped without a pause code`,
+red, and counts as a breach. A lane stops ONLY on:
 
 1. Every finding from all present reviewers on the final sha judged, every valid blocking
-   one fixed — plus Arbiter `success` on that sha — plus `wilson-runtime-owner-review`
-   self-released on that sha when the PR touches runtime paths — + `lane-done.sh` run.
-2. Genuine blocker: ambiguity not in the brief, repeated test failure on the same root
-   cause, missing credential, a reviewer finding that is a design change
-   (`WAITING:input`), or two post-ship fix rounds without arbiter `success`
-   (`lane-pause.sh review`, never a third round).
-3. Arbiter `needs-human` on the final sha AFTER one full fix pass (every Greptile/Devin/
-   arbiter finding fixed or rejected with evidence in `## Local notes`) — or no reviewer output
-   ~15 min after a trigger round → `lane-pause.sh review 'PR #<N> review pending'`, stop
-   without claiming done. A needs-human verdict with unread reviewer comments is never
-   a stop.
-4. Ctx nudge with a full slice still remaining → handoff (below).
+   one fixed — plus Arbiter `success` on that sha — plus every CI check-run on that sha
+   green (`gate` exit 0 asserts both; `lane-done.sh` refuses a red head) — plus
+   `wilson-runtime-owner-review` self-released on that sha when the PR touches runtime
+   paths — + `lane-done.sh` run.
+2. Genuine blocker: ambiguity not in the brief (`ambiguity`), repeated test failure on the
+   same root cause (`test-loop`), missing credential (`creds`), a reviewer finding that is
+   a design change (`input`), or two post-ship fix rounds without arbiter `success`
+   (`review`, never a third round).
+3. A hold on the final sha AFTER one full fix pass (every Greptile/Devin/arbiter finding
+   fixed or rejected with evidence in `## Local notes`): `needs-human` → `human`,
+   `needs-holland` → `holland` (after the answer comment), `prompt-owner-review`
+   awaiting an owner → `prompt-owner`. The tab blinks purple; the cockpit's hold watcher
+   marks the lane done when the person releases it. A hold verdict with unread reviewer
+   comments is never a stop.
+4. No reviewer output ~15 min after a trigger round, or the gate still unsettled after a
+   second call → `lane-pause.sh review 'PR #<N> review pending'`, without claiming done.
+5. Ctx nudge with a full slice still remaining → handoff (below).
 
 ## Ctx nudge + handoff
 
