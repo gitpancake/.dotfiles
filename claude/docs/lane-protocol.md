@@ -170,7 +170,12 @@ diff since the last reviewed sha. Anything still open after round 3 is recorded,
 fixed.
 
 0. **Mechanical gates (before any reviewer, and again before every push).** Run the same
-   deterministic checks CI runs, foreground, and fix every red before round 1 starts. In
+   deterministic checks CI runs, foreground, and fix every red before round 1 starts.
+   Since 2026-11-04 a `pre-push` git hook (`~/.wt-lanes/hooks/pre-push`, installed by
+   `wt` into the repo's `.git/hooks`) runs those guards itself and refuses the push
+   when one is red, printing the failed guards. A refused push is a guard failure to
+   fix and commit, never a reason to retry, set `WT_SKIP_GUARDS`, or push from
+   elsewhere; the hook takes ~90s and queues behind a sibling lane's run. In
    cartage-agent that is `bun run gates/prChecks/runGuards.ts` (every `check:*` guard —
    boolean-naming, prettier, ring violations, pr-body-claims, migration rules — each falls
    back to the merge-base with `origin/main` when its `*_BASE_SHA` env is unset), then
