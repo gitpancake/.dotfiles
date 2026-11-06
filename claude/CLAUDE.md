@@ -119,7 +119,7 @@ Tool calls re-read full context. Loops compound.
 Cost driver = context size × agentic-loop length, NOT user turns (turn cap retired 2026-06-09 — fired once in 14d while lanes ran 300+ assistant msgs per turn, invisible to it).
 
 - **Cockpit**: watch the statusline ctx bar. >70% ctx or >50 tool calls → `/handoff` + `/clear` at the next task boundary. `clear-handoff.sh` (SessionEnd reason=clear) captures state on any `/clear` ≥5 turns / ≥100k ctx — mechanical net; a deliberate `/handoff` beats it.
-- **Lane**: ctx nudges at 260K/320K/380K; on-nudge rules (finish-vs-handoff, `lane-handoff.sh` contract) live in `~/.claude/docs/lane-protocol.md`. Never compact in a lane.
+- **Lane**: ctx nudges at the tiers in `~/.claude/lane.config` (higher once a PR is open); on-nudge rules (finish-vs-handoff, `lane-handoff.sh` contract) live in `~/.claude/docs/lane-protocol.md`. Never compact in a lane.
 
 ## Briefs & PRDs
 

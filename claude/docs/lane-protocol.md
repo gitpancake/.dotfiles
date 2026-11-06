@@ -438,15 +438,16 @@ red, and counts as a breach. A lane stops ONLY on:
 
 ## Ctx nudge + handoff
 
-`lane-ctx-nudge.sh` (PostToolUse, non-blocking) injects a reminder at 260K/320K/380K ctx
-(400K window) while the branch has no open PR. Once a PR is open the tiers move to
-340K (finish in place) and 375K (hand off now): 303 of 476 handoffs (7 days to
-2026-11-06) were written after the PR was open, and each one cost a respawn that re-read
+`lane-ctx-nudge.sh` (PostToolUse, non-blocking) injects reminders at the context tiers in
+`~/.claude/lane.config`; your kickoff prompt states the current numbers. There is one set
+of tiers before the PR is open and a higher set after it (finish in place, then hand
+off): 303 of 476 handoffs (7 days to 2026-11-06) were written after the PR was open, and
+each one cost a respawn that re-read
 ~98K of baseline context to finish a gate round. On nudge:
 
 - **PR open, no slice left** (gate rounds, finding fixes, manual-test subagent, rebase)
   → finish it in this session + `lane-done.sh` or a pause code. Hand off only at the
-  375K nudge.
+  last post-PR nudge.
 - **Review-only remainder** (one status poll + one feedback pass) → finish it +
   `lane-done.sh`. A review-only remainder NEVER justifies a handoff.
 - **Handing off with a PR open** → the short post-PR form of `/handoff` (PR URL,
