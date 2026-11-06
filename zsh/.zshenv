@@ -22,7 +22,7 @@ export WT_NO_WATCH=1
 # Cache_read on lanes (long heads-down coding, 200-500 turns) dominates cost;
 # sonnet cache_read is 5x cheaper ($0.30/M vs $1.50/M). Override per-lane with
 # `WT_MODEL=opus wt ...` when a lane genuinely needs Opus-grade reasoning.
-export WT_MODEL=claude-sonnet-5
+export WT_MODEL=claude-sonnet-5-5
 
 # Three lanes at once (global CLAUDE.md §Pace). wt's own default is 10, a
 # memory backstop; this is the attention cap. Override per spawn: WT_MAX_LANES=N wt …
@@ -43,7 +43,7 @@ export WT_CLAUDE="$HOME/.local/bin/claude-lane"
 # is inlined so it survives into the tmux window (tmux new-window doesn't
 # inherit the spawning shell's env). `WT_MODEL=opus wt ...` per lane when
 # reasoning-heavy.
-export TIX_PICKUP_AGENTS="$HOME/.claude/tickets=WT_MODEL=claude-sonnet-5 ${WT_CLAUDE}"
+export TIX_PICKUP_AGENTS="$HOME/.claude/tickets=WT_MODEL=claude-sonnet-5-5 ${WT_CLAUDE}"
 
 # Machine-local secrets and env overrides. Lives outside the dotfiles repo so it's
 # never tracked. Optional — absent on fresh machines until you populate it.

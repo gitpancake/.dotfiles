@@ -52,7 +52,37 @@ ctx=$(tail -c 524288 "$transcriptPath" | sed '1d' \
 [[ -z "$ctx" || ! "$ctx" =~ ^[0-9]+$ ]] && exit 0
 (( ctx < 260000 )) && exit 0
 
+# Post-PR tiers: 303 of 476 handoffs (7d to 2026-11-06) came after the PR was
+# open, each a respawn that re-read ~98K of baseline to finish one gate round.
+# The PR lookup is cached per session for 10 min; only reached past 260K.
+prCacheFile="${logDir}/session-${sessionId}.pr-open"
+if [[ ! -f "$prCacheFile" || -n "$(find "$prCacheFile" -mmin +10 2>/dev/null)" ]]; then
+  prState=$(cd "$cwd" && gh pr view --json state -q .state 2>/dev/null || true)
+  [[ "$prState" == "OPEN" ]] && echo 1 >"$prCacheFile" || echo 0 >"$prCacheFile"
+fi
+isPrOpen=false
+[[ "$(cat "$prCacheFile" 2>/dev/null)" == "1" ]] && isPrOpen=true
+
 ctxK=$((ctx / 1000))
+if $isPrOpen; then
+  (( ctx < 340000 )) && exit 0
+  if (( ctx >= 375000 )); then
+    tier="pr375-$((ctx / 15000))"
+    visible="🔴 LANE CTX ${ctxK}K (PR open) — hand off now: short post-PR /handoff + lane-handoff.sh."
+    directive="Lane context is ${ctxK}K tokens with the PR already open. Commit anything safe, run /handoff in its short post-PR form (PR URL, unpushed commits, open findings, what is left, gotchas — no re-verification checklist), then ~/.claude/scripts/lane-handoff.sh <handoff-doc-path> as your FINAL tool call and stop. Do not compact."
+  else
+    tier="pr340"
+    visible="🟡 LANE CTX ${ctxK}K (PR open) — finish the review loop in this session; hand off only at 375K."
+    directive="Lane context is ${ctxK}K tokens and the PR is open. Do NOT hand off: finish the remaining gate rounds, finding fixes, manual-test subagent dispatch and rebase in this session, then lane-done.sh or a pause code. Keep payloads small: findings and logs to a file then grep, screenshots only inside the manual-test subagent. The hook tells you at 375K if a handoff becomes necessary."
+  fi
+  shouldFireOnce "$tier" "$warnedFile" || exit 0
+  jq -nc --arg m "$visible" --arg c "$directive" '{
+    systemMessage: $m,
+    hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: $c }
+  }'
+  exit 0
+fi
+
 if (( ctx >= 380000 )); then
   tier="tier380-$((ctx / 60000))"
   visible="🔴 LANE CTX ${ctxK}K — quality degrades past this point. Commit + /handoff + lane-handoff.sh + stop."

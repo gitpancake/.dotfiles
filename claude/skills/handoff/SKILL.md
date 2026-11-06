@@ -27,6 +27,13 @@ Override the window with `HANDOFF_RETENTION_DAYS` (default 14).
 This directory is durable and survives `/clear` — the companion `/resume` command reads
 the most recent handoff (or one matched by description) to pick the thread back up.
 
+**Post-PR form.** When the work has an open PR and no implementation slice is left, the
+doc is at most 40 lines with exactly these sections: `## PR` (URL, branch, worktree, head
+sha, unpushed commits), `## Open findings` (each with file:line and the fix you intend,
+or "none — run the gate"), `## Left` (numbered next actions), `## Gotchas`. Leave out what
+was done and any re-verification checklist: the commits, the PR body and the gate hold
+that. The resumed session acts on `## Left` straight away.
+
 Suggest the skills to be used, if any, by the next session.
 
 Do not duplicate content already captured in other artifacts (PRDs, plans, ADRs, issues, commits, diffs). Reference them by path or URL instead.

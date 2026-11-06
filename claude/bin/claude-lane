@@ -17,10 +17,15 @@
 #      what auto-backgrounds it, and the backgrounded pipe is the tail-hang
 #      recipe (lane-protocol.md:30). Checks fit in 10min; past that the
 #      command fails loud instead of backgrounding silently.
-#   5. --settings '{"ultracode":true}' — ultracode on for every lane. The
-#      settings key is session-scoped and interactive toggles never persist
-#      it, so the launcher is the only place that makes it the default.
-#      WT_ULTRACODE=0 opts a lane out.
+#   5. --settings from ~/.dotfiles/claude/lane-settings.json — hides skills,
+#      commands and plugins a lane never uses (customer, social, cockpit-only
+#      lane spawners), and bundled skills are off. A lane starts at ~98K of
+#      context before its first action, and the listing is part of that.
+#   6. Ultracode OFF unless WT_ULTRACODE=1: its workflow reminder licensed
+#      fork fan-outs and its xhigh thinking was ~35% of lane context growth
+#      (lane-protocol.md §Subagents).
+#   7. --no-chrome — browser work is the repo's Playwright; uploads are
+#      `gh pr edit --attach`. Lanes had been reaching for Claude in Chrome.
 #
 # Set as $WT_CLAUDE in zshenv so `wt` picks it up.
 
@@ -32,10 +37,11 @@ export PATH="$HOME/.claude/lane-bin:$PATH"
 export CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
 export BASH_DEFAULT_TIMEOUT_MS=600000
 
-ultracode_settings=()
-if [[ "${WT_ULTRACODE:-1}" != "0" ]]; then
-  ultracode_settings=(--settings '{"ultracode":true}')
-fi
+export CLAUDE_CODE_DISABLE_BUNDLED_SKILLS=1
+
+laneSettings=$(jq -c --argjson isUltracode "$([[ "${WT_ULTRACODE:-0}" == "1" ]] && echo true || echo false)" \
+  'if $isUltracode then . + {ultracode: true} else . end' \
+  "$HOME/.dotfiles/claude/lane-settings.json")
 
 # NOTE: --mcp-config is variadic (`<configs...>`) — any positional that follows
 # gets eaten as another MCP config path. Keep it BEFORE a non-variadic flag
@@ -45,5 +51,6 @@ exec claude \
   --strict-mcp-config \
   --mcp-config "$HOME/.claude/mcp.lane.json" \
   --model "${WT_MODEL:-sonnet}" \
-  ${ultracode_settings[@]+"${ultracode_settings[@]}"} \
+  --no-chrome \
+  --settings "$laneSettings" \
   "$@"

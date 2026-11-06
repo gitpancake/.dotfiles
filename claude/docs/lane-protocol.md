@@ -112,8 +112,30 @@ reach pauses the lane (`WAITING:input`, below) BEFORE `/ship`, and everything el
 PR #9137 (ENGH-1881) shipped with "both steps need a human"; told to do them itself, the
 lane had the VM up, the token minted and a whitelist test number found in four minutes —
 the capability was never missing, only the decision. PR #8415 (ENGH-1392) cleared the
-arbiter's manual-testing gate with no human in the loop. The full procedure is the repo's
-`docs/testing/playwright.md`; the shape:
+arbiter's manual-testing gate with no human in the loop.
+
+**Run the whole manual test in ONE subagent, never inline.** Screenshots read back
+with `Read` cost 150K–290K characters each, and manual-test work was the open item in
+317 of 476 handoffs (7 days to 2026-11-06), so doing it inline is what pushes a lane past
+its context budget after the PR is open. Dispatch one `general-purpose` Agent with a
+written prompt that carries the PR URL, the worktree path, the brief's Proof → Manual
+Tests steps, the org and user ids, and an absolute screenshot folder
+(`<your scratchpad>/manual-test`). It runs the repo's `/manual-test` end to end: it hosts
+the VM, drives Playwright, reads every PNG back, writes the Manual testing steps section
+and uploads the PNGs into the PR body with `gh pr edit --body-file … --attach …`, then
+confirms with `node scripts/hooks/manualTestEvidenceHook.mjs --pr <N>`. It returns at
+most 15 lines: the VM name, each step marked pass or fail with one line of what was seen,
+`isMissing`, and the count of `user-attachments` URLs in the body. The lane never `Read`s
+a screenshot itself. The screenshots and steps always end up in the PR body; the subagent
+only moves the work out of the lane's context. A failed step is the lane's to fix: fix,
+push, and dispatch the subagent again for the steps that failed.
+
+**Browser = the repo's Playwright, always.** Never Claude in Chrome (`mcp__claude-in-chrome__*`):
+`claude-lane` launches with `--no-chrome`, and uploads go through `gh pr edit --attach`.
+`gh` older than 2.99.0 → `brew upgrade gh`, then retry; still failing → `lane-pause.sh
+creds 'gh --attach unavailable'`.
+
+The full procedure is the repo's `docs/testing/playwright.md`; what the subagent does:
 
 1. Push, then `/host-dev` from the worktree → per-branch VM at
    `https://dev-env-<slug>.ngrok.app` that auto-pulls the branch. ~10 min the first time;
@@ -135,9 +157,7 @@ arbiter's manual-testing gate with no human in the loop. The full procedure is t
    blob link into the repo, never an image in the PR diff — the arbiter blocks all
    three, and a lane that pushed one cannot recover (PR #9118 ended in a self-override
    that paged a maintainer). Next to each screenshot, paste the outcome as text a reader
-   can check: the API response, the dev Postgres row, the rendered message. Without a
-   `gh` that has `--attach` (≥ 2.99.0), the pasted outcome is the evidence, the PNGs are
-   handed to a session or person who can upload them, and the PR is not marked ready.
+   can check: the API response, the dev Postgres row, the rendered message.
 5. `gh pr edit --body-file` → the arbiter re-runs on `edited`; poll with one
    `devin-review.sh gate` call.
 
@@ -419,10 +439,20 @@ red, and counts as a breach. A lane stops ONLY on:
 ## Ctx nudge + handoff
 
 `lane-ctx-nudge.sh` (PostToolUse, non-blocking) injects a reminder at 260K/320K/380K ctx
-(400K window). On nudge:
+(400K window) while the branch has no open PR. Once a PR is open the tiers move to
+340K (finish in place) and 375K (hand off now): 303 of 476 handoffs (7 days to
+2026-11-06) were written after the PR was open, and each one cost a respawn that re-read
+~98K of baseline context to finish a gate round. On nudge:
 
+- **PR open, no slice left** (gate rounds, finding fixes, manual-test subagent, rebase)
+  → finish it in this session + `lane-done.sh` or a pause code. Hand off only at the
+  375K nudge.
 - **Review-only remainder** (one status poll + one feedback pass) → finish it +
   `lane-done.sh`. A review-only remainder NEVER justifies a handoff.
+- **Handing off with a PR open** → the short post-PR form of `/handoff` (PR URL,
+  unpushed commits, open findings, what is left, gotchas). The resumed session trusts it
+  and does not re-run type-check, tests or AC greps before its next action; the pre-push
+  hook and CI verify the next push.
 - **Full slice remaining** → wrap + commit, `/handoff`, then
   `~/.claude/scripts/lane-handoff.sh <doc>` as the FINAL tool call — wt-lanes' lane-run.sh
   respawns a fresh session that `/resume`s the doc and continues the brief, incl. any
