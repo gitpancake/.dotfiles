@@ -16,35 +16,16 @@
 # pass untouched.
 
 set -u
+source "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/_guard.sh"
 
-input=$(cat)
+check_lane_main() {
+  guard_is_bash || return 0
+  $GUARD_IS_LANE || return 0
 
-[[ "$(jq -r '.tool_name // empty' <<<"$input")" == "Bash" ]] || exit 0
-
-cmd=$(jq -r '.tool_input.command // empty' <<<"$input")
-[[ -z "$cmd" ]] && exit 0
-
-cwd=$(jq -r '.cwd // empty' <<<"$input")
-[[ -z "$cwd" ]] && cwd=$PWD
-isLane=false
-[[ "$cwd" == */.claude/worktrees/* || -n "${WT_TYPE:-}" ]] && isLane=true
-$isLane || exit 0
-
-deny() {
-  jq -n --arg r "$1" '{
-    hookSpecificOutput: {
-      hookEventName: "PreToolUse",
-      permissionDecision: "deny",
-      permissionDecisionReason: $r
-    }
-  }'
-  exit 0
+  local checkoutToMain='git([[:space:]]+-C[[:space:]]+[^[:space:]]+)?[[:space:]]+(checkout|switch)([[:space:]]+(-q|--quiet|-f|--force|--detach|-d))*[[:space:]]+main([[:space:]]|$|[;&|)])'
+  if grep -Eq "$checkoutToMain" <<<"$GUARD_CMD"; then
+    guard_deny 'NOTHING in this command ran. A lane never checks out `main`: the ref is shared with the cockpit and every other worktree, so parking it here blocks `git checkout main` everywhere else and turns your next commit into a commit on main. Stay on your lane branch. Need main'"'"'s content? Read it without moving HEAD: `git show origin/main:<path>`, `git diff origin/main -- <path>`, or `git worktree add <scratch-dir> --detach origin/main` and run there. Need main merged in? `git fetch origin && git rebase origin/main` (or `git merge origin/main`) on your branch. (lane-protocol.md)'
+  fi
 }
 
-checkoutToMain='git([[:space:]]+-C[[:space:]]+[^[:space:]]+)?[[:space:]]+(checkout|switch)([[:space:]]+(-q|--quiet|-f|--force|--detach|-d))*[[:space:]]+main([[:space:]]|$|[;&|)])'
-
-if grep -Eq "$checkoutToMain" <<<"$cmd"; then
-  deny 'NOTHING in this command ran. A lane never checks out `main`: the ref is shared with the cockpit and every other worktree, so parking it here blocks `git checkout main` everywhere else and turns your next commit into a commit on main. Stay on your lane branch. Need main'"'"'s content? Read it without moving HEAD: `git show origin/main:<path>`, `git diff origin/main -- <path>`, or `git worktree add <scratch-dir> --detach origin/main` and run there. Need main merged in? `git fetch origin && git rebase origin/main` (or `git merge origin/main`) on your branch. (lane-protocol.md)'
-fi
-
-exit 0
+[[ "${BASH_SOURCE[0]}" == "$0" ]] && guard_main check_lane_main

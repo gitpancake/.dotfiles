@@ -20,58 +20,41 @@
 # literal non-pooler Neon host (a direct connection owns its own backend).
 
 set -u
+source "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/_guard.sh"
 
-input=$(cat)
+check_pg_set() {
+  guard_is_bash || return 0
+  local cmd=$GUARD_CMD
+  grep -Eq '(^|[[:space:];&|(])(psql|pgcli)([[:space:]]|$)' <<<"$cmd" || return 0
 
-[[ "$(jq -r '.tool_name // empty' <<<"$input")" == "Bash" ]] || exit 0
+  local reason="Session-level SET is denied through psql (ENGH-1725, RCA 2026-09-22: a SET default_transaction_read_only=on on the pooled URL leaked to the live app's backends via PgBouncer transaction pooling and failed 339 prod writes). Use plain SELECTs. A read-only role is read-only at the role level and needs no SET. If a setting is truly required, wrap it as SET LOCAL inside an explicit BEGIN/COMMIT."
 
-cmd=$(jq -r '.tool_input.command // empty' <<<"$input")
-[[ -z "$cmd" ]] && exit 0
+  if grep -Eq '@ep-[a-z0-9-]+\.(c-[0-9]+\.)?[a-z0-9-]+\.aws\.neon\.tech' <<<"$cmd" \
+    && ! grep -Eq '@ep-[a-z0-9-]+-pooler\.' <<<"$cmd"; then
+    return 0
+  fi
 
-grep -Eq '(^|[[:space:];&|(])(psql|pgcli)([[:space:]]|$)' <<<"$cmd" || exit 0
+  local sessionSet='(^|[;"'"'"'(]|-c)[[:space:]]*set[[:space:]]+(session[[:space:]]+)?[A-Za-z_][A-Za-z0-9_.]*[[:space:]]*(=|to[[:space:]])'
+  local alterSet='(^|[^A-Za-z0-9_])alter[[:space:]]+(role|user|database)[[:space:]]+.*[[:space:]]set[[:space:]]'
+  local setConfigSession='set_config[[:space:]]*\(.*,[[:space:]]*false[[:space:]]*\)'
 
-deny() {
-  jq -n --arg r "$1" '{
-    hookSpecificOutput: {
-      hookEventName: "PreToolUse",
-      permissionDecision: "deny",
-      permissionDecisionReason: $r
-    }
-  }'
-  exit 0
+  local text="$cmd" token path
+  for token in $cmd; do
+    case "$token" in
+      *.sql) ;;
+      *) continue ;;
+    esac
+    path="$token"
+    [[ "$path" != /* ]] && path="$GUARD_CWD/$path"
+    [[ -f "$path" ]] && text+=$'\n'"$(cat "$path")"
+  done
+
+  if grep -Eiq "$sessionSet" <<<"$text" || grep -Eiq "$alterSet" <<<"$text" || grep -Eiq "$setConfigSession" <<<"$text"; then
+    guard_deny "$reason"
+  fi
+  if grep -Eq '(^|[[:space:];&(])PGOPTIONS=' <<<"$cmd"; then
+    guard_deny "$reason"
+  fi
 }
 
-reason="Session-level SET is denied through psql (ENGH-1725, RCA 2026-09-22: a SET default_transaction_read_only=on on the pooled URL leaked to the live app's backends via PgBouncer transaction pooling and failed 339 prod writes). Use plain SELECTs. A read-only role is read-only at the role level and needs no SET. If a setting is truly required, wrap it as SET LOCAL inside an explicit BEGIN/COMMIT."
-
-if grep -Eq '@ep-[a-z0-9-]+\.(c-[0-9]+\.)?[a-z0-9-]+\.aws\.neon\.tech' <<<"$cmd" \
-   && ! grep -Eq '@ep-[a-z0-9-]+-pooler\.' <<<"$cmd"; then
-  exit 0
-fi
-
-sessionSet='(^|[;"'"'"'(]|-c)[[:space:]]*set[[:space:]]+(session[[:space:]]+)?[A-Za-z_][A-Za-z0-9_.]*[[:space:]]*(=|to[[:space:]])'
-alterSet='(^|[^A-Za-z0-9_])alter[[:space:]]+(role|user|database)[[:space:]]+.*[[:space:]]set[[:space:]]'
-setConfigSession='set_config[[:space:]]*\(.*,[[:space:]]*false[[:space:]]*\)'
-
-text="$cmd"
-
-cwd=$(jq -r '.cwd // empty' <<<"$input")
-[[ -z "$cwd" ]] && cwd=$PWD
-for token in $cmd; do
-  case "$token" in
-    *.sql) ;;
-    *) continue ;;
-  esac
-  path="$token"
-  [[ "$path" != /* ]] && path="$cwd/$path"
-  [[ -f "$path" ]] && text+=$'\n'"$(cat "$path")"
-done
-
-if grep -Eiq "$sessionSet" <<<"$text" || grep -Eiq "$alterSet" <<<"$text" || grep -Eiq "$setConfigSession" <<<"$text"; then
-  deny "$reason"
-fi
-
-if grep -Eq '(^|[[:space:];&(])PGOPTIONS=' <<<"$cmd"; then
-  deny "$reason"
-fi
-
-exit 0
+[[ "${BASH_SOURCE[0]}" == "$0" ]] && guard_main check_pg_set

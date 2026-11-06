@@ -21,57 +21,34 @@
 # Block via exit 2 → stderr is surfaced back to Claude as the correction.
 
 set -u
+source "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/_guard.sh"
 
-input=$(cat)
+check_worktree_write() {
+  case "$GUARD_TOOL" in
+    Edit|Write|NotebookEdit|MultiEdit) ;;
+    *) return 0 ;;
+  esac
+  [[ -z "$GUARD_FILE_PATH" ]] && return 0
 
-toolName=$(jq -r '.tool_name // empty' <<<"$input")
-case "$toolName" in
-  Edit|Write|NotebookEdit|MultiEdit) ;;
-  *) exit 0 ;;
-esac
+  local gitDir commonDir mainRoot wtRoot abs
+  gitDir=$(git -C "$GUARD_CWD" rev-parse --absolute-git-dir 2>/dev/null) || return 0
+  commonDir=$(git -C "$GUARD_CWD" rev-parse --git-common-dir 2>/dev/null) || return 0
+  [[ "$commonDir" != /* ]] && commonDir="$GUARD_CWD/$commonDir"
+  commonDir=$(cd "$commonDir" 2>/dev/null && pwd -P) || return 0
+  local isLinkedWorktree=false
+  [[ "$gitDir" != "$commonDir" ]] && isLinkedWorktree=true
+  $isLinkedWorktree || return 0
 
-target=$(jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' <<<"$input")
-[[ -z "$target" ]] && exit 0
+  mainRoot=$(dirname "$commonDir")
+  wtRoot=$(git -C "$GUARD_CWD" rev-parse --show-toplevel 2>/dev/null) || return 0
+  abs=$(python3 -c 'import os,sys; t,c=sys.argv[1:3]; print(os.path.realpath(t if os.path.isabs(t) else os.path.join(c,t)))' \
+    "$GUARD_FILE_PATH" "$GUARD_CWD") || return 0
 
-cwd=$(jq -r '.cwd // empty' <<<"$input")
-[[ -z "$cwd" ]] && cwd=$PWD
+  isUnder() { case "$1/" in "$2"/*) return 0 ;; *) return 1 ;; esac; }
+  isUnder "$abs" "$wtRoot" && return 0
+  isUnder "$abs" "$mainRoot" || return 0
 
-# Linked-worktree check. In a linked worktree git-dir is <main>/.git/worktrees/<lane>
-# while git-common-dir is <main>/.git — they differ. In the main checkout (or a
-# bare/standalone repo) they're equal → not a lane, nothing to guard.
-gitDir=$(git -C "$cwd" rev-parse --absolute-git-dir 2>/dev/null) || exit 0
-commonDir=$(git -C "$cwd" rev-parse --git-common-dir 2>/dev/null) || exit 0
-case "$commonDir" in
-  /*) ;;                                   # already absolute
-  *)  commonDir="$cwd/$commonDir" ;;       # relative form → anchor to cwd
-esac
-commonDir=$(cd "$commonDir" 2>/dev/null && pwd -P) || exit 0
-[[ "$gitDir" == "$commonDir" ]] && exit 0  # not a linked worktree
-
-# main_root = parent of the common .git ; wt_root = this lane's top level.
-mainRoot=$(dirname "$commonDir")
-wtRoot=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || exit 0
-
-# Canonicalize the target without requiring it to exist (Write creates files).
-abs=$(python3 - "$target" "$cwd" <<'PY'
-import os, sys
-target, cwd = sys.argv[1], sys.argv[2]
-if not os.path.isabs(target):
-    target = os.path.join(cwd, target)
-print(os.path.realpath(target))
-PY
-) || exit 0
-
-# Trailing-slash prefixes so /repo doesn't match /repo-foo.
-under() { case "$1/" in "$2"/*) return 0 ;; *) return 1 ;; esac; }
-
-# Inside the lane → fine. Outside the main checkout entirely → fine (tickets,
-# /tmp, home dotfiles). Only the in-main-but-out-of-lane band is the leak.
-under "$abs" "$wtRoot" && exit 0
-under "$abs" "$mainRoot" || exit 0
-
-cat >&2 <<EOF
-🚧 WORKTREE WRITE LEAK BLOCKED — this write escapes your lane.
+  guard_block "🚧 WORKTREE WRITE LEAK BLOCKED — this write escapes your lane.
 
   target : ${abs}
   lane   : ${wtRoot}
@@ -80,9 +57,8 @@ cat >&2 <<EOF
 You are in a wt worktree but the path points into the main checkout (or another
 lane). Writing here pollutes main's working tree while your branch looks clean —
 the exact cwd→main leak. Re-target the SAME relative path under your lane:
-
   ${wtRoot}/<relative/path>
+Build paths from \$PWD / the worktree root, never the main repo's absolute path."
+}
 
-Build paths from \$PWD / the worktree root, never the main repo's absolute path.
-EOF
-exit 2
+[[ "${BASH_SOURCE[0]}" == "$0" ]] && guard_main check_worktree_write

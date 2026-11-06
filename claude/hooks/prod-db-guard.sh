@@ -24,75 +24,51 @@
 #   - vercel env pull                   (puts prod write creds back on disk)
 
 set -u
+source "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/_guard.sh"
 
-input=$(cat)
+check_prod_db() {
+  guard_is_bash || return 0
+  local cmd=$GUARD_CMD
 
-[[ "$(jq -r '.tool_name // empty' <<<"$input")" == "Bash" ]] || exit 0
+  case "$cmd" in
+    *FIREBASE_PRIVATE_KEY*|*FIREBASE_CLIENT_EMAIL*|*credential.cert*)
+      guard_ask "🔐 Gate 1 (prod-firestore skill): this uses prod service-account WRITE credentials, not read-only ADC. Approve per-use only — approval never carries over." ;;
+  esac
 
-cmd=$(jq -r '.tool_input.command // empty' <<<"$input")
-[[ -z "$cmd" ]] && exit 0
+  case "$cmd" in
+    *"vercel env pull"*)
+      guard_ask "🔐 This writes prod credentials back to disk. The local prod env files were deleted 2026-08-08 on purpose (prod-firestore SKILL.md:45-48). Confirm you want them back." ;;
+  esac
 
-ask() {
-  jq -n --arg r "$1" '{
-    hookSpecificOutput: {
-      hookEventName: "PreToolUse",
-      permissionDecision: "ask",
-      permissionDecisionReason: $r
-    }
-  }'
-  exit 0
+  case "$cmd" in
+    *"gcloud firestore import"*|*"gcloud firestore export"*)
+      guard_ask "🔥 gcloud firestore import/export against production. Import overwrites every document whose ID exists in the export (docs/security/runbooks/firestore-restore.md:36). Confirm containment is in place." ;;
+  esac
+
+  case "$cmd" in
+    *agent-database-production*) ;;
+    *) return 0 ;;
+  esac
+
+  # `.add(` is scoped to a collection ref: bare, it fires on every Set.add in a read-only script.
+  local writePattern='\.set\(|\.update\(|\.delete\(|\.create\(|collection\([^)]*\)\.add\(|runTransaction|bulkWriter|batch\(\)|\.commit\(\)|recursiveDelete'
+  local token path
+  for token in $cmd; do
+    case "$token" in
+      *.ts|*.js|*.mjs|*.cjs) ;;
+      *) continue ;;
+    esac
+    path="$token"
+    [[ "$path" != /* ]] && path="$GUARD_CWD/$path"
+    [[ -f "$path" ]] || continue
+    if grep -Eq "$writePattern" "$path" 2>/dev/null; then
+      guard_ask "🔥 Gate 2 (prod-firestore skill): ${token} contains write calls and targets agent-database-production. State the collection, the documents, the exact field changes, and how to reverse it before approving."
+    fi
+  done
+
+  if grep -Eq "$writePattern" <<<"$cmd"; then
+    guard_ask "🔥 Gate 2 (prod-firestore skill): inline write call against agent-database-production. State the collection, the documents, the exact field changes, and how to reverse it before approving."
+  fi
 }
 
-# --- Unconditional triggers -------------------------------------------------
-
-case "$cmd" in
-  *FIREBASE_PRIVATE_KEY*|*FIREBASE_CLIENT_EMAIL*|*credential.cert*)
-    ask "🔐 Gate 1 (prod-firestore skill): this uses prod service-account WRITE credentials, not read-only ADC. Approve per-use only — approval never carries over." ;;
-esac
-
-case "$cmd" in
-  *"vercel env pull"*)
-    ask "🔐 This writes prod credentials back to disk. The local prod env files were deleted 2026-08-08 on purpose (prod-firestore SKILL.md:45-48). Confirm you want them back." ;;
-esac
-
-case "$cmd" in
-  *"gcloud firestore import"*|*"gcloud firestore export"*)
-    ask "🔥 gcloud firestore import/export against production. Import overwrites every document whose ID exists in the export (docs/security/runbooks/firestore-restore.md:36). Confirm containment is in place." ;;
-esac
-
-# --- Prod-project commands: ask only if the script writes -------------------
-
-case "$cmd" in
-  *agent-database-production*) ;;
-  *) exit 0 ;;
-esac
-
-# Bare `\.add\(` would fire on every `someSet.add(...)` in a read-only script,
-# so it is scoped to a Firestore collection ref. Everything else here is
-# write-only vocabulary in practice.
-writePattern='\.set\(|\.update\(|\.delete\(|\.create\(|collection\([^)]*\)\.add\(|runTransaction|bulkWriter|batch\(\)|\.commit\(\)|recursiveDelete'
-
-# The command names the script; the writes are inside it. Resolve every
-# file-ish token against cwd and scan it.
-cwd=$(jq -r '.cwd // empty' <<<"$input")
-[[ -z "$cwd" ]] && cwd=$PWD
-
-for token in $cmd; do
-  case "$token" in
-    *.ts|*.js|*.mjs|*.cjs) ;;
-    *) continue ;;
-  esac
-  path="$token"
-  [[ "$path" != /* ]] && path="$cwd/$path"
-  [[ -f "$path" ]] || continue
-  if grep -Eq "$writePattern" "$path" 2>/dev/null; then
-    ask "🔥 Gate 2 (prod-firestore skill): ${token} contains write calls and targets agent-database-production. State the collection, the documents, the exact field changes, and how to reverse it before approving."
-  fi
-done
-
-# Inline writes (bun -e '...', node -e '...', heredoc) never touch a file.
-if grep -Eq "$writePattern" <<<"$cmd"; then
-  ask "🔥 Gate 2 (prod-firestore skill): inline write call against agent-database-production. State the collection, the documents, the exact field changes, and how to reverse it before approving."
-fi
-
-exit 0
+[[ "${BASH_SOURCE[0]}" == "$0" ]] && guard_main check_prod_db
