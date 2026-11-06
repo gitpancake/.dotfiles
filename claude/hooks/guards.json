@@ -1,0 +1,10 @@
+{
+  "guards": [
+    { "name": "worktree-write", "file": "worktree-write-guard.sh", "check": "check_worktree_write", "scope": "all", "isEnabled": true },
+    { "name": "pg-set", "file": "pg-set-guard.sh", "check": "check_pg_set", "scope": "all", "isEnabled": true },
+    { "name": "tail-pipe", "file": "tail-pipe-guard.sh", "check": "check_tail_pipe", "scope": "all", "isEnabled": true },
+    { "name": "review-gate", "file": "review-gate-guard.sh", "check": "check_review_gate", "scope": "lane", "isEnabled": true },
+    { "name": "lane-main", "file": "lane-main-guard.sh", "check": "check_lane_main", "scope": "lane", "isEnabled": true },
+    { "name": "prod-db", "file": "prod-db-guard.sh", "check": "check_prod_db", "scope": "all", "isEnabled": true }
+  ]
+}

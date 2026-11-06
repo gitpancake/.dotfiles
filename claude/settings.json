@@ -87,27 +87,7 @@
           },
           {
             "type": "command",
-            "command": "bash ~/.claude/hooks/worktree-write-guard.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/prod-db-guard.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/pg-set-guard.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/tail-pipe-guard.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/review-gate-guard.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/lane-main-guard.sh"
+            "command": "bash ~/.claude/hooks/hook-dispatch.sh"
           }
         ]
       }
