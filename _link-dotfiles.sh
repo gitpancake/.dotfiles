@@ -13,6 +13,12 @@ ln -sf "$DOTFILES_DIR/zsh/robbyrussell-bar.zsh-theme" ~/.oh-my-zsh/custom/themes
 mkdir -p ~/.claude ~/.claude/hooks ~/.claude/commands ~/.claude/agents ~/.claude/skills ~/.claude/scripts ~/.claude/handoffs ~/.claude/logs
 ln -sf "$DOTFILES_DIR/claude/statusline-command.sh" ~/.claude/statusline-command.sh
 ln -sf "$DOTFILES_DIR/claude/transcript-costs.sh" ~/.claude/transcript-costs.sh
+# Claude Code rewrites settings.json in place (/model, /config), which turns the
+# link back into a regular file. Absorb that file before re-linking so the live
+# settings win instead of being overwritten by the older dotfiles copy.
+if [[ -f ~/.claude/settings.json && ! -L ~/.claude/settings.json ]]; then
+  cp ~/.claude/settings.json "$DOTFILES_DIR/claude/settings.json"
+fi
 ln -sf "$DOTFILES_DIR/claude/settings.json" ~/.claude/settings.json
 ln -sf "$DOTFILES_DIR/claude/CLAUDE.md" ~/.claude/CLAUDE.md
 ln -sf "$DOTFILES_DIR/claude/worktree-protocol.md" ~/.claude/worktree-protocol.md

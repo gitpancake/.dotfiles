@@ -7,60 +7,7 @@
   },
   "permissions": {
     "allow": [
-      "Bash(bun test:*)",
-      "Bash(bun type-check)",
-      "Bash(bun run type-check)",
-      "Bash(git fetch:*)",
-      "Bash(git status:*)",
-      "Bash(git log:*)",
-      "Bash(git diff:*)",
-      "Bash(git show:*)",
-      "Bash(git branch:*)",
-      "Bash(git worktree list:*)",
-      "Bash(gh pr view:*)",
-      "Bash(gh pr list:*)",
-      "Bash(gh pr diff:*)",
-      "Bash(gh pr checks:*)",
-      "Bash(gh run view:*)",
-      "Bash(gh run list:*)",
-      "Bash(npx prettier:*)",
-      "Bash(tmux list-windows:*)",
-      "Bash(tmux list-sessions:*)",
-      "Bash(tmux capture-pane:*)",
-      "Bash(tmux new-window:*)",
-      "Bash(tmux rename-window:*)",
-      "Bash(tmux send-keys:*)",
-      "Bash(wt:*)",
-      "Bash(mdfind:*)",
-      "Bash(mkdir:*)",
-      "Bash(grep:*)",
-      "Bash(rg:*)",
-      "Bash(ls:*)",
-      "Bash(cat:*)",
-      "Bash(head:*)",
-      "Bash(tail:*)",
-      "Bash(wc:*)",
-      "Bash(find:*)",
-      "Bash(jq:*)",
-      "Bash(ps:*)",
-      "Bash(which:*)",
-      "Bash(pwd)",
-      "Bash(sed -n:*)",
-      "Bash(sort:*)",
-      "Bash(uniq:*)",
-      "Bash(awk:*)",
-      "Bash(~/.dotfiles/scripts/granola.py:*)",
-      "Bash(~/.dotfiles/scripts/pocket.py:*)",
-      "Bash(~/.dotfiles/scripts/linear-ticket.py:*)",
-      "Bash(~/.dotfiles/scripts/linear-gql.py:*)",
-      "Bash(~/.dotfiles/scripts/linear-brief.sh:*)",
-      "Bash(~/.dotfiles/scripts/axiom.py:*)",
-      "Bash(~/.dotfiles/scripts/langsmith.py:*)",
-      "Bash(~/.claude/skills/wilson-memories/read_memories.py:*)",
-      "Bash(~/.claude/scripts/devin-review.sh:*)",
-      "Bash(~/.claude/scripts/lane-paint.sh:*)",
-      "Bash(~/.claude/scripts/lane-revive.sh:*)",
-      "Bash(~/.claude/scripts/lane-state-sweep.sh:*)"
+      "Bash"
     ],
     "deny": [
       "Bash(git push --force:*)",
@@ -70,21 +17,14 @@
       "Bash(git reset --hard:*)",
       "Bash(bun run src/server/scripts/deleteDocsByOrgId*)"
     ],
-    "ask": [
-      "Bash(gh pr merge:*)"
-    ],
     "defaultMode": "auto"
   },
-  "model": "fable",
+  "model": "opus",
   "hooks": {
     "Notification": [
       {
         "matcher": "",
         "hooks": [
-          {
-            "type": "command",
-            "command": "bash ~/.claude/hooks/tmux-bell.sh"
-          },
           {
             "type": "command",
             "command": "bash ~/.claude/hooks/agent-state-waiting.sh"
@@ -155,7 +95,19 @@
           },
           {
             "type": "command",
+            "command": "bash ~/.claude/hooks/pg-set-guard.sh"
+          },
+          {
+            "type": "command",
             "command": "bash ~/.claude/hooks/tail-pipe-guard.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/review-gate-guard.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash ~/.claude/hooks/lane-main-guard.sh"
           }
         ]
       }
@@ -182,13 +134,20 @@
   "enabledPlugins": {
     "context7@claude-plugins-official": true,
     "typescript-lsp@claude-plugins-official": true,
-    "slack@claude-plugins-official": true
+    "slack@claude-plugins-official": true,
+    "pagelove-dev@pagelove": true
   },
   "extraKnownMarketplaces": {
     "notion-plugin-marketplace": {
       "source": {
         "source": "github",
         "repo": "makenotion/claude-code-notion-plugin"
+      }
+    },
+    "pagelove": {
+      "source": {
+        "source": "github",
+        "repo": "pagelove/pagelove-marketplace"
       }
     }
   },
