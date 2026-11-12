@@ -109,7 +109,7 @@ Reference: `~/.claude/docs/design-principles.md`. Cite by tag (`POSD §X` / `PP 
 Tool calls re-read full context. Loops compound.
 
 - Batch: one LLM call → plan, script applies. Never same tool 20+ times.
-- Opus cockpit default. Lanes run Sonnet (`WT_MODEL=sonnet`, set by wt-lanes; `WT_MODEL=opus wt …` per lane when reasoning-heavy). Haiku only bulk mechanical (20+ identical edits).
+- Opus cockpit default. Lanes run Sonnet (`WT_MODEL=claude-sonnet-5-5` from `.zshenv`; `WT_MODEL=opus wt …` per lane when reasoning-heavy — wt puts it on the agent command, so verify with the session jsonl's `"model"`, not `ps`). Haiku only bulk mechanical (20+ identical edits).
 - `Read` files >500 lines: use `offset`/`limit`. Never full-read a big file to find one symbol — grep first, then targeted read. Same for log dumps, JSON fixtures, transcripts.
 - After an `Edit`, never full-re-read the file — the edit result is already in context. Verify via the edited range only (`offset`/`limit`). Applies hardest to TDD loops: test file does NOT need a fresh Read per red-green cycle.
 - Subagent dispatch: compute shared setup once (tokens, env, IDs) and inline the *values* into the prompt — sibling agents must never re-derive. Anything poll-shaped = ONE bounded `until`/`for`+`sleep` Bash loop (or Monitor), never N repeated calls.

@@ -21,7 +21,8 @@ export WT_NO_WATCH=1
 # Default lane model: sonnet. Cockpit/planning stay opus via global settings.json.
 # Cache_read on lanes (long heads-down coding, 200-500 turns) dominates cost;
 # sonnet cache_read is 5x cheaper ($0.30/M vs $1.50/M). Override per-lane with
-# `WT_MODEL=opus wt ...` when a lane genuinely needs Opus-grade reasoning.
+# `WT_MODEL=opus wt ...`: wt copies the value onto the agent command, because
+# this export runs again in the lane's own `zsh -c` and would otherwise win.
 export WT_MODEL=claude-sonnet-5-5
 
 # Three lanes at once (global CLAUDE.md §Pace). wt's own default is 10, a
@@ -41,8 +42,7 @@ export WT_CLAUDE="$HOME/.local/bin/claude-lane"
 # default (one-shot pi). Claude-home tickets (~/.claude/tickets) route to the
 # lane Claude launcher on Sonnet — same default as plain `wt`. WT_MODEL=sonnet
 # is inlined so it survives into the tmux window (tmux new-window doesn't
-# inherit the spawning shell's env). `WT_MODEL=opus wt ...` per lane when
-# reasoning-heavy.
+# inherit the spawning shell's env).
 export TIX_PICKUP_AGENTS="$HOME/.claude/tickets=WT_MODEL=claude-sonnet-5-5 ${WT_CLAUDE}"
 
 # Machine-local secrets and env overrides. Lives outside the dotfiles repo so it's

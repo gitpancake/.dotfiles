@@ -45,7 +45,7 @@ What `wt` produces:
 - branch `<type>/<slug>` off current HEAD
 - per-lane port stamped in `.env.local.port` (3099 + lane index)
 - `.claude/agent-state` seeded to `IDLE` (visible to `tmux/agent-board.sh`)
-- new tmux window running `claude --dangerously-skip-permissions --model opus` (override with `WT_CLAUDE=…` or `WT_MODEL=…`)
+- new tmux window running `claude-lane` with `--model $WT_MODEL` appended by wt (override with `WT_CLAUDE=…` or `WT_MODEL=…`)
 
 `wt` resolves its arg against `$TICKETS_DIR` (default `~/.claude/tickets`; zsh `chpwd` hook scopes it to `~/.claude/tickets/<project>/` inside a repo) as a filename slug or a `linear:` breadcrumb. That tree is a **materialization cache**, not a tracker: Linear is the source of truth, and `scripts/linear-brief.sh <ID>` writes a Linear issue's description into the cache so `wt`/`/pickup` can spawn from it. No ticket in Linear → `/scope` it first.
 
